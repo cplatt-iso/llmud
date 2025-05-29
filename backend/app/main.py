@@ -8,6 +8,7 @@ from .db import base_class # To access Base for create_all
 from .crud import crud_room # For init_first_room_if_not_exists
 from .core.config import settings # Import settings for project name, etc.
 from .crud.crud_room import seed_initial_world
+from .crud.crud_item import seed_initial_items 
 
 # This line creates tables if they don't exist.
 # IMPORTANT: In a production app, you'd use Alembic migrations for schema management,
@@ -25,8 +26,10 @@ fake_player_state = {
 def on_startup():
     db: Session = next(get_db())
     try:
-        print("Running startup event: Seeding initial world with UUIDs...")
-        seed_initial_world(db) # Call the new seeding function
+        print("Running startup event: Seeding initial world...")
+        seed_initial_world(db)
+        print("Running startup event: Seeding initial items...") # <<< ADDED
+        seed_initial_items(db) # <<< ADDED
         print("Startup event finished.")
     finally:
         db.close()

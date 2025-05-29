@@ -179,6 +179,24 @@
             display: block;
             /* Ensures it takes its own line if appendToOutput's newline logic is tricky */
         }
+        /* --- NEW CSS Classes for Inventory --- */
+        .inv-slot-name { /* For [Slot Name] */
+            color: #00ffff; /* Cyan */
+            font-weight: bold;
+        }
+        .inv-backpack-number { /* For   1.   */
+            color: #ffff00; /* Yellow */
+        }
+        .inv-item-name { /* For the item's actual name */
+            color: #00ff00; /* Default bright green, but you could vary this by item type/rarity later */
+        }
+        .inv-item-qty { /* For (Qty: N) */
+            color: #aaaaaa; /* Dimmer grey */
+        }
+        .inv-section-header { /* For --- Equipped --- and --- Backpack --- */
+            color: #f0f0f0; /* Brighter white/light grey */
+            font-weight: bold;
+        }
     </style>
 </head>
 

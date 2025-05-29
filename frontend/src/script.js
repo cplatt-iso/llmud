@@ -490,21 +490,18 @@ async function handleCommandResponse(responseData, originalCommand) {
     }
 
     if (room_data) {
-        const isLookCommand = originalCommand.toLowerCase().trim().startsWith("look");
+        const commandForLookCheck = originalCommand.toLowerCase().trim(); // Get the cleaned command
+        // MODIFIED: Check for "look" OR "l" (or other aliases you might add for look)
+        const isLookTypeCommand = commandForLookCheck.startsWith("look") || commandForLookCheck === "l"; 
         
-        // If it's a "look" command, OR if the room ID has changed, then display the room.
-        if (isLookCommand || (window.displayedRoomId !== room_data.id)) {
+        // If it's a look-type command, OR if the room ID has changed, then display the room.
+        if (isLookTypeCommand || (window.displayedRoomId !== room_data.id)) {
             updateGameDisplay(room_data); // Appends room name & desc
         }
         
-        // Always update exits and the client's record of the current room ID
         updateExitsDisplay(room_data);
         window.displayedRoomId = room_data.id; 
-    } else if (!message_to_player) {
-        // Command resulted in no message and no room data (should be rare for our current commands)
-        // Could append a generic "Ok." or do nothing if room state unchanged.
-        // For now, do nothing. A command like "shout" might do this.
-    }
+    } 
 }
 
 // --- FULL REWRITE: handleLogout ---

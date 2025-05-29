@@ -3,3 +3,6 @@
 from .room import Room
 from .player import Player
 from .character import Character
+from .item import Item
+from .character_inventory_item import CharacterInventoryItem
+from .room_item_instance import RoomItemInstance

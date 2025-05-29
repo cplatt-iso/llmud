@@ -5,3 +5,12 @@ from .room import RoomBase, RoomCreate, RoomUpdate, RoomInDB
 from .player import PlayerBase, PlayerCreate, PlayerUpdate, Player, PlayerInDB
 from .character import CharacterBase, CharacterCreate, CharacterUpdate, Character, CharacterInDB
 from .command import CommandRequest, CommandResponse
+from .item import (  # <<< ADDED
+    ItemBase, ItemCreate, ItemUpdate, Item, ItemInDB,
+    CharacterInventoryItemBase, CharacterInventoryItemCreate, CharacterInventoryItemUpdate,
+    CharacterInventoryItem, CharacterInventoryDisplay, EquipRequest
+)
+from .room_item import ( # <<< ADDED
+    RoomItemInstanceBase, RoomItemInstanceCreate, RoomItemInstanceUpdate,
+    RoomItemInstance, RoomItemsView
+)

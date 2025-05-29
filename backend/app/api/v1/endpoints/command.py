@@ -1,111 +1,113 @@
-from fastapi import APIRouter, Depends, HTTPException, Body, status
+# backend/app/api/v1/endpoints/command.py
+from fastapi import APIRouter, Depends, Body
 from sqlalchemy.orm import Session
-import uuid
-# from pydantic import BaseModel # No longer needed here if CommandRequest is in schemas
-from typing import Optional # Dict not needed for payload type
+from typing import Dict, Callable, Awaitable # For typing the registry
 
-from .... import schemas # schemas.CommandRequest, schemas.CommandResponse
-from ....db.session import get_db
-from ....crud import crud_room, crud_character
-from ....api.dependencies import get_current_active_character # <<< CHANGED
-from .... import models
+from app import schemas, models, crud # app.
+from app.db.session import get_db
+from app.api.dependencies import get_current_active_character # app.api.dependencies
+from app.commands.command_args import CommandContext # app.commands.command_args
+
+# Import handler modules
+from app.commands import movement_parser
+from app.commands import inventory_parser
+from app.commands import social_parser
+from app.commands import debug_parser
+from app.commands import meta_parser
 
 router = APIRouter()
 
-# class CommandRequestWithCharacter(BaseModel): # <<< REMOVED
-#     command: str
-#     character_id: uuid.UUID
+# Define the type for our handler functions
+CommandHandler = Callable[[CommandContext], Awaitable[schemas.CommandResponse]] # If handlers are async
+# Or if synchronous: CommandHandler = Callable[[CommandContext], schemas.CommandResponse]
+# Let's assume handlers can be async for future flexibility, even if current ones are not.
 
-@router.post("", response_model=schemas.CommandResponse) # <<< CHANGED response_model
+COMMAND_REGISTRY: Dict[str, CommandHandler] = {
+    # Movement and Perception
+    "look": movement_parser.handle_look,
+    "l": movement_parser.handle_look,
+    "north": movement_parser.handle_move,
+    "n": movement_parser.handle_move,
+    "south": movement_parser.handle_move,
+    "s": movement_parser.handle_move,
+    "east": movement_parser.handle_move,
+    "e": movement_parser.handle_move,
+    "west": movement_parser.handle_move,
+    "w": movement_parser.handle_move,
+    "up": movement_parser.handle_move,
+    "u": movement_parser.handle_move,
+    "down": movement_parser.handle_move,
+    "d": movement_parser.handle_move,
+    "go": movement_parser.handle_move, # "go north" will be handled by move knowing original command
+
+    # Inventory Management
+    "inventory": inventory_parser.handle_inventory,
+    "i": inventory_parser.handle_inventory,
+    "equip": inventory_parser.handle_equip,
+    "eq": inventory_parser.handle_equip,
+    "unequip": inventory_parser.handle_unequip,
+    "uneq": inventory_parser.handle_unequip,
+    "drop": inventory_parser.handle_drop,
+    "get": inventory_parser.handle_get,
+    "take": inventory_parser.handle_get,
+
+    # Social
+    "fart": social_parser.handle_fart,
+
+    # Debug
+    "giveme": debug_parser.handle_giveme,
+
+    # Meta
+    "help": meta_parser.handle_help,
+    "?": meta_parser.handle_help,
+}
+
+@router.post("", response_model=schemas.CommandResponse)
 async def process_command_for_character(
-    payload: schemas.CommandRequest = Body(...), # <<< CHANGED payload type
+    payload: schemas.CommandRequest = Body(...),
     db: Session = Depends(get_db),
-    acting_character_orm: models.Character = Depends(get_current_active_character) # <<< CHANGED dependency
+    active_character: models.Character = Depends(get_current_active_character)
 ):
-    command_text = payload.command.lower().strip()
-    message_to_player: Optional[str] = None
-
-    # Character validation and ownership is now handled by get_current_active_character.
-    
-    current_room_orm = crud_room.get_room_by_id(db, room_id=acting_character_orm.current_room_id)
-    
-    if current_room_orm is None:
-        print(f"CRITICAL DATA ERROR: Character '{acting_character_orm.name}' (ID: {acting_character_orm.id}) "
-              f"has current_room_id '{acting_character_orm.current_room_id}' which was not found in rooms table.")
-        return schemas.CommandResponse( # <<< CHANGED response
-            room_data=None, 
-            message_to_player=f"Character '{acting_character_orm.name}' is in an invalid room. Please contact an administrator."
-        )
-
-    # --- Process "look" command ---
-    if command_text == "look" or command_text.startswith("look "): # Basic look
-        # message_to_player = "You look around." # Optional message
-        # The room_data itself will provide the description.
+    original_command_text = payload.command.strip()
+    if not original_command_text: # Handle empty command
+        # Optionally, treat empty command as "look" or return a specific message
+        # For now, let's mimic "look" if empty, or you can raise an error/return help.
+        # Let's make it an unknown command to be explicit.
         return schemas.CommandResponse(
-            room_data=schemas.RoomInDB.from_orm(current_room_orm),
-            message_to_player=message_to_player # Can be None
+            message_to_player="Please type a command. Type 'help' for options."
+            # room_data will be None by default in CommandResponse if not set
         )
 
-    # --- Process Movement Command ---
-    moved = False
-    target_room_orm: Optional[models.Room] = None 
-    
-    current_exits = current_room_orm.exits if current_room_orm.exits is not None else {}
-    possible_directions = ["north", "south", "east", "west", "up", "down"]
-    cleaned_command = command_text.split(" ")[-1] 
-    direction_map = {"n": "north", "s": "south", "e": "east", "w": "west", "u": "up", "d": "down"}
-    target_direction = direction_map.get(cleaned_command, cleaned_command)
+    command_parts = original_command_text.split()
+    command_verb = command_parts[0].lower()
+    args = command_parts[1:] # List of arguments after the verb
 
-    is_movement_attempt = target_direction in possible_directions
-
-    if is_movement_attempt:
-        if target_direction in current_exits:
-            next_room_uuid_str = current_exits.get(target_direction)
-            if next_room_uuid_str:
-                try:
-                    target_room_uuid = uuid.UUID(hex=next_room_uuid_str)
-                    potential_target_room_orm = crud_room.get_room_by_id(db, room_id=target_room_uuid)
-                    if potential_target_room_orm:
-                        target_room_orm = potential_target_room_orm
-                        moved = True
-                    else:
-                        message_to_player = "The path ahead seems to vanish into thin air."
-                        print(f"ERROR: Target room UUID '{target_room_uuid}' (for direction '{target_direction}') not found from room '{current_room_orm.name}'.")
-                except ValueError:
-                    message_to_player = "The exit in that direction appears to be corrupted."
-                    print(f"ERROR: Invalid UUID string '{next_room_uuid_str}' in exit data for room '{current_room_orm.name}'.")
-            else: # Should not happen if key exists (e.g. "north": null)
-                message_to_player = "The way in that direction is unclear."
-                print(f"Exit '{target_direction}' exists but has no target UUID in room '{current_room_orm.name}'.")
-        else: # It was a movement attempt (e.g., "north") but no such exit
-            message_to_player = "You can't go that way."
-    else: # Not "look" and not a recognized movement keyword/direction
-        message_to_player = f"I don't understand the command: '{command_text}'."
-
-
-    if moved and target_room_orm:
-        updated_character_orm = crud_character.update_character_room(
-            db, 
-            character_id=acting_character_orm.id, 
-            new_room_id=target_room_orm.id  
+    current_room_orm = crud.crud_room.get_room_by_id(db, room_id=active_character.current_room_id)
+    if not current_room_orm:
+        # This should ideally be caught by active_character dependency if it also checks room validity
+        return schemas.CommandResponse(
+            message_to_player="CRITICAL ERROR: Your character is in a void. Contact an admin."
         )
-        if updated_character_orm:
-            print(f"Character '{updated_character_orm.name}' moved to '{target_room_orm.name}'.")
-            # For successful move, message_to_player can be None; new room data implies success.
-            # Or, could set: message_to_player = f"You move {target_direction}."
-            return schemas.CommandResponse(
-                room_data=schemas.RoomInDB.from_orm(target_room_orm),
-                message_to_player=None 
-            )
-        else:
-            # This is a server-side error during update.
-            print(f"ERROR: Failed to update character room for char_id '{acting_character_orm.id}'.")
-            message_to_player = "You try to move, but an unseen force holds you in place."
-            # Fall through to return current room with this message
-    
-    # If no move happened (moved is False), or a move attempt failed validation, or DB update failed.
-    # message_to_player should be set if it wasn't a successful move.
-    return schemas.CommandResponse(
-        room_data=schemas.RoomInDB.from_orm(current_room_orm),
-        message_to_player=message_to_player
+    current_room_schema = schemas.RoomInDB.from_orm(current_room_orm)
+
+    context = CommandContext(
+        db=db,
+        active_character=active_character,
+        current_room_orm=current_room_orm,
+        current_room_schema=current_room_schema,
+        original_command=original_command_text,
+        command_verb=command_verb,
+        args=args
     )
+
+    handler = COMMAND_REGISTRY.get(command_verb)
+
+    if handler:
+        # If handlers are async, use await. If not, remove await.
+        # For now, assume they are async as per CommandHandler type hint.
+        return await handler(context)
+    else:
+        return schemas.CommandResponse(
+            room_data=current_room_schema, # Provide current room context
+            message_to_player=f"I don't understand the command: '{original_command_text}'. Type 'help' or '?' for available commands."
+        )
