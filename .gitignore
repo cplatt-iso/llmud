@@ -1,0 +1,163 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib60/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+# Usually these files are written by a script, but they might be committed by
+# mistake.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# PEP 582; __pypackages__ directory
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/ # <-- IMPORTANT FOR YOU, YOU FORGETFUL GIT
+ENV/
+env.bak/
+venv.bak/
+
+# Docker stuff
+.dockerignore
+docker-compose.override.yml # Often used for local dev overrides
+
+# Database
+# Example for SQLite:
+# *.sqlite3
+# *.sqlite3-journal
+# Example for other DBs if you store dumps locally (don't commit actual DB files)
+# *.dump
+# *.sql
+# *.bak
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.Spotlight-V100
+.Trashes
+
+# Temporary files
+*.tmp
+*~
+*.swp
+*.swo
+
+# IDEs / Editors
+.idea/            # IntelliJ / PyCharm
+.vscode/          # VS Code (but you might want to commit .vscode/settings.json or launch.json if team-shared)
+                  # If you want to commit some .vscode files, be more specific:
+                  # .vscode/*
+                  # !.vscode/settings.json
+                  # !.vscode/launch.json
+                  # !.vscode/extensions.json
+*.sublime-project
+*.sublime-workspace
+nbproject/        # NetBeans
+*.nbproject/      # NetBeans
+
+# Miscellaneous
+*.env.*
+secrets.yml
+credentials.json
+# Add any other sensitive files or local configuration files here
+
+# Your specific Nginx Proxy Manager data (if it ended up in the project dir, which it shouldn't)
+# ./data/ # From your NPM docker-compose example
+# ./letsencrypt/ # From your NPM docker-compose example
+# ^ These should NOT be in your MUD project repo. They belong with your NPM setup.
+
+# Specific to your project structure if you have log dirs etc.
+# logs/
+# *.log

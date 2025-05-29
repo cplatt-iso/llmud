@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard] # Includes standard dependencies for uvicorn
+pydantic
+pydantic-settings   
+sqlalchemy
+psycopg2-binary
+alembic
+passlib[bcrypt]
+bcrypt
+python-jose[cryptography]
+python-multipart

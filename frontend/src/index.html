@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Unholy MUD of Tron & Allen1</title>
+    <style>
+        body {
+            background-color: #000;
+            color: #00ff00;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            display: flex;
+            /* For centering the container */
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .header-text {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .header-text h1 {
+            margin: 0 0 5px 0;
+            font-size: 1.8em;
+        }
+
+        .header-text p {
+            margin: 0;
+            font-size: 0.9em;
+            color: #00cc00;
+        }
+
+        .mud-container {
+            width: 100%;
+            max-width: 900px;
+            /* Or your preferred max width */
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #005500;
+            /* Border around the whole MUD interface */
+        }
+
+        .terminal-output {
+            flex-grow: 1;
+            /* Takes up available vertical space */
+            height: 75vh;
+            /* Start with a good height, flex-grow will adjust */
+            overflow-y: scroll;
+            background-color: #030303;
+            padding: 10px;
+            box-sizing: border-box;
+            white-space: pre-wrap;
+            line-height: 1.4;
+            border-bottom: 1px solid #005500;
+            /* Separator to exits bar */
+        }
+
+        .exits-bar {
+            /* New bar for exits */
+            background-color: #050505;
+            padding: 5px 10px;
+            color: #00ffff;
+            /* Cyan for exits */
+            font-size: 0.9em;
+            border-bottom: 1px solid #005500;
+            /* Separator to input line */
+            min-height: 1.5em;
+            /* Ensure it has some height even if empty */
+            white-space: nowrap;
+            overflow-x: auto;
+            /* In case exits are very long */
+        }
+
+        .terminal-input-line {
+            display: flex;
+            align-items: center;
+            background-color: #030303;
+            padding: 8px 10px;
+        }
+
+        #prompt-text {
+            margin-right: 8px;
+            color: #00dd00;
+            /* Bright green for prompt */
+        }
+
+        .terminal-output::-webkit-scrollbar {
+            width: 10px;
+            /* Width of the vertical scrollbar */
+            height: 10px;
+            /* Height of the horizontal scrollbar (if any) */
+        }
+
+        .terminal-output::-webkit-scrollbar-track {
+            background: #080808;
+            /* Dark background for the track (very dark grey) */
+            /* border-radius: 5px; */
+            /* Optional: rounded corners for the track */
+        }
+
+        .terminal-output::-webkit-scrollbar-thumb {
+            background-color: #005500;
+            /* Dark green for the scrollbar thumb */
+            border-radius: 5px;
+            /* Rounded corners for the thumb */
+            border: 2px solid #030303;
+            /* Creates a small border around the thumb, using the output bg color for seamlessness */
+        }
+
+        .terminal-output::-webkit-scrollbar-thumb:hover {
+            background-color: #007700;
+            /* Slightly lighter green on hover */
+        }
+
+        .terminal-output::-webkit-scrollbar-corner {
+            background: #030303;
+            /* Background of the corner where vertical and horizontal scrollbars meet */
+        }
+
+        .terminal-input {
+            scrollbar-width: thin;
+            /* Options: 'auto', 'thin', 'none' */
+            scrollbar-color: #005500 #080808;
+            /* thumb color, track color */
+            flex-grow: 1;
+            background-color: transparent;
+            border: none;
+            color: #00ff00;
+            font-family: inherit;
+            font-size: 1em;
+            outline: none;
+            padding: 0;
+        }
+
+        /* Styling for character lists in terminal output */
+        .char-list-item {
+            margin-left: 20px;
+        }
+
+        .char-list-item .char-index {
+            color: #ffff00;
+            /* Yellow for index */
+        }
+
+        .char-list-item .char-name {
+            color: #00ff00;
+        }
+
+        .char-list-item .char-class {
+            color: #00aaaa;
+            /* Teal for class */
+        }
+
+        /* Styling for room name in terminal output */
+        .room-name-header {
+            color: #ffff00;
+            font-weight: bold;
+            margin-top: 1em;
+            margin-bottom: 0.5em;
+        }
+
+        .error-message-inline {
+            color: #ff4444;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header-text">
+        <h1>Legend of the Solar Dragon's Tradewar<br>2002 Barrels of Food Fight<br>Over a Usurped Pit of Devastation (Alpha)</h1>
+        <p>(UMGTWOTRDBSR_EUPFDX_TPSC for short, obviously)</p>
+    </div>
+
+    <div class="mud-container">
+        <!-- Main output for telnet login, char select, game log -->
+        <div id="output" class="terminal-output"></div>
+
+        <!-- Exits bar - will be updated by JS -->
+        <div id="exits-display" class="exits-bar">Exits: (None)</div>
+
+        <!-- Command input line -->
+        <div id="input-prompt-line" class="terminal-input-line">
+            <span id="prompt-text">> </span>
+            <input type="text" id="commandInput" class="terminal-input" autofocus>
+        </div>
+    </div>
+
+    <!-- We no longer need separate HTML sections for char select/create.
+         JS will handle these flows within the #output div. -->
+
+    <script src="script.js"></script>
+</body>
+
+</html>

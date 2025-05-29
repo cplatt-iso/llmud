@@ -1,0 +1,51 @@
+networks:
+  npm_web: # The network your NPM and MUD services use
+    external: true # Or define it here if this is the main compose file for it
+
+services:
+  db: # Our new PostgreSQL service
+    image: postgres:15-alpine # Using version 15, Alpine for a smaller image
+    container_name: mud_postgres_db
+    restart: unless-stopped
+    volumes:
+      - mud_db_data:/var/lib/postgresql/data # Persist database data
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-muduser} # Use .env file or defaults
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mudpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-muddatabase}
+    networks:
+      - npm_web # So the backend can reach it
+    # You don't typically need to expose ports to the host unless you want to connect directly
+    # with a DB tool from your host machine. If so, uncomment and adjust:
+    ports:
+      - "5433:5432"
+
+  backend:
+    build: ./backend
+    container_name: mud_backend_service
+    restart: unless-stopped
+    # No host ports needed if NPM is handling external access via npm_web
+    volumes:
+      - ./backend/app:/app/app
+    networks:
+      - npm_web
+    depends_on: # Make sure DB starts before backend (doesn't guarantee DB is ready, though)
+      - db
+    environment: # Pass database connection details to the backend
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-muduser}:${POSTGRES_PASSWORD:-mudpassword}@mud_postgres_db:5432/${POSTGRES_DB:-muddatabase}"
+      # The hostname 'mud_postgres_db' here refers to the container name of our PostgreSQL container.
+      # Docker's internal DNS on the 'npm_web' network will resolve 'mud_postgres_db' to the PostgreSQL container's IP.
+
+  frontend:
+    build: ./frontend
+    container_name: mud_frontend_service
+    restart: unless-stopped
+    volumes:
+      - ./frontend/src:/usr/share/nginx/html
+    networks:
+      - npm_web
+    depends_on:
+      - backend
+
+volumes: # Define the named volume for database persistence
+  mud_db_data:
