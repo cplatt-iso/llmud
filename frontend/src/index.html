@@ -169,12 +169,23 @@
             color: #ff4444;
             font-style: italic;
         }
+
+        .game-message {
+            /* <<< ADDED CLASS */
+            color: #cccccc;
+            /* Light grey for general game messages */
+            /* For example, "You can't go that way." or "You look around." */
+            /* You might want different colors for different types of messages later. */
+            display: block;
+            /* Ensures it takes its own line if appendToOutput's newline logic is tricky */
+        }
     </style>
 </head>
 
 <body>
     <div class="header-text">
-        <h1>Legend of the Solar Dragon's Tradewar<br>2002 Barrels of Food Fight<br>Over a Usurped Pit of Devastation (Alpha)</h1>
+        <h1>Legend of the Solar Dragon's Tradewar<br>2002 Barrels of Food Fight<br>Over a Usurped Pit of Devastation
+            (Alpha)</h1>
         <p>(UMGTWOTRDBSR_EUPFDX_TPSC for short, obviously)</p>
     </div>
 

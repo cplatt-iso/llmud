@@ -1,0 +1,1530 @@
+--- SCRIPT START --- Creating bundle: project_context_bundle.txt ---
+Timestamp: Thu May 29 03:38:32 PM UTC 2025
+
+--- START OF FILE backend/app/api/v1/endpoints/character.py ---
+# backend/app/api/v1/endpoints/character.py
+from fastapi import APIRouter, Depends, HTTPException, status, Body # Added Body
+from sqlalchemy.orm import Session
+import uuid
+from typing import Any, List
+
+from .... import schemas, crud, models # Import models for type hint
+from ....db.session import get_db
+from ....crud.crud_room import get_room_by_coords # To find the starting room
+from ....api.dependencies import get_current_player # <<< IMPORT AUTH DEPENDENCY
+
+router = APIRouter()
+
+# CharacterCreateRequest no longer needs player_id from client
+# We'll use schemas.CharacterCreate directly as the payload,
+# which contains 'name' and 'class_name'.
+# class CharacterCreateRequest(schemas.CharacterCreate):
+#     player_id: uuid.UUID # REMOVE THIS
+
+@router.post("/create", response_model=schemas.Character, status_code=status.HTTP_201_CREATED)
+def create_new_character_for_current_player( # Renamed for clarity
+    *,
+    db: Session = Depends(get_db),
+    character_payload: schemas.CharacterCreate = Body(...), # Payload is now just name/class
+    current_player: models.Player = Depends(get_current_player) # <<< GET AUTHENTICATED PLAYER
+) -> Any:
+    """
+    Create a new character for the currently authenticated player.
+    Places the character in the starting room (0,0,0).
+    """
+    # 1. Player ID is now current_player.id from the token. No need to validate it separately.
+    
+    # 2. Check if character name is already taken (globally for now, or per player later)
+    existing_character = crud.crud_character.get_character_by_name(db, name=character_payload.name)
+    if existing_character:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"A character with the name '{character_payload.name}' already exists."
+        )
+    
+    # 3. Find the starting room (e.g., Genesis Room at 0,0,0)
+    start_room_orm = crud.crud_room.get_room_by_coords(db, x=0, y=0, z=0)
+    if not start_room_orm:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Starting room not found. Cannot create character. Server misconfiguration."
+        )
+    
+    # 4. Create the character, passing current_player.id
+    character = crud.crud_character.create_character(
+        db, 
+        character_in=character_payload, # This is schemas.CharacterCreate instance
+        player_id=current_player.id,    # Use ID from authenticated player
+        initial_room_id=start_room_orm.id
+    )
+    
+    print(f"Character '{character.name}' created for player '{current_player.username}', starting in room '{start_room_orm.name}'.")
+    return character
+
+# Endpoint to get characters for the CURRENTLY AUTHENTICATED player
+@router.get("/mine", response_model=List[schemas.Character]) # Changed path, uses auth
+def read_characters_for_current_player( # Renamed for clarity
+    db: Session = Depends(get_db),
+    current_player: models.Player = Depends(get_current_player) # <<< GET AUTHENTICATED PLAYER
+):
+    """
+    Retrieve all characters for the currently authenticated player.
+    """
+    characters = crud.crud_character.get_characters_by_player(db, player_id=current_player.id)
+    return characters
+
+# Keep the old /by_player/{player_id} if you want an admin-like endpoint,
+# but ensure it has proper authorization (e.g., only for superusers).
+# For now, let's assume we replace it with "/mine". If you need both, ensure distinct logic.
+# For example, to remove or comment out the old one:
+# # @router.get("/by_player/{player_id}", response_model=List[schemas.Character])
+# # def read_characters_for_player( ... old implementation ... ): ...
+--- END OF FILE backend/app/api/v1/endpoints/character.py ---
+
+--- START OF FILE backend/app/api/v1/endpoints/command.py ---
+from fastapi import APIRouter, Depends, HTTPException, Body, status
+from sqlalchemy.orm import Session
+import uuid
+from pydantic import BaseModel
+from typing import Optional, Dict # Import Dict
+
+from .... import schemas
+from ....db.session import get_db
+from ....crud import crud_room, crud_character
+from ....api.dependencies import get_current_player
+from .... import models
+
+router = APIRouter()
+
+class CommandRequestWithCharacter(BaseModel):
+    command: str
+    character_id: uuid.UUID
+
+@router.post("", response_model=schemas.RoomInDB)
+async def process_command_for_character(
+    payload: CommandRequestWithCharacter = Body(...),
+    db: Session = Depends(get_db),
+    current_player: models.Player = Depends(get_current_player)
+):
+    command_text = payload.command.lower().strip()
+    
+    # --- 1. Validate Character and Ownership ---
+    acting_character_orm = crud_character.get_character(db, character_id=payload.character_id)
+    
+    if acting_character_orm is None: 
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"Character with ID {payload.character_id} not found."
+        )
+
+    # Assuming models.Player.id is Mapped[uuid.UUID] and models.Character.player_id is Mapped[uuid.UUID]
+    # Pylance should understand these are UUIDs when accessed.
+    if acting_character_orm.player_id != current_player.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operation not permitted: This character does not belong to you."
+        )
+
+    # --- 2. Get Character's Current Room ---
+    # Assuming models.Character.current_room_id is Mapped[uuid.UUID]
+    current_room_orm = crud_room.get_room_by_id(db, room_id=acting_character_orm.current_room_id)
+    
+    if current_room_orm is None:
+        print(f"CRITICAL DATA ERROR: Character '{acting_character_orm.name}' (ID: {acting_character_orm.id}) "
+              f"has current_room_id '{acting_character_orm.current_room_id}' which was not found in rooms table.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(f"Character '{acting_character_orm.name}' is in an invalid room. ")
+        )
+
+    # --- 3. Process Movement Command ---
+    moved = False
+    next_room_uuid_str: Optional[str] = None 
+    target_room_uuid: Optional[uuid.UUID] = None 
+
+    current_exits: Dict[str, str] = current_room_orm.exits if current_room_orm.exits is not None else {}
+
+    # Simplified exit checking logic
+    possible_directions = ["north", "south", "east", "west", "up", "down"]
+    cleaned_command = command_text.split(" ")[-1] # Takes "go north" -> "north", or "n" -> "n"
+
+    # Map short commands to full direction names if necessary, or ensure your exits dict uses short names
+    direction_map = {"n": "north", "s": "south", "e": "east", "w": "west", "u": "up", "d": "down"}
+    target_direction = direction_map.get(cleaned_command, cleaned_command) # Convert "n" to "north" etc.
+
+    if target_direction in current_exits:
+        next_room_uuid_str = current_exits.get(target_direction)
+        if next_room_uuid_str: # Ensure a value was actually retrieved
+            moved = True
+        else:
+            print(f"Exit '{target_direction}' found but has no target UUID in room '{current_room_orm.name}'.")
+    else:
+        print(f"Command '{command_text}' (parsed as direction '{target_direction}') for char '{acting_character_orm.name}' is not a valid exit from room '{current_room_orm.name}'.")
+
+
+    if moved and next_room_uuid_str:
+        try:
+            target_room_uuid = uuid.UUID(hex=next_room_uuid_str)
+        except ValueError:
+            print(f"ERROR: Invalid UUID string '{next_room_uuid_str}' in exit data for room '{current_room_orm.name}'.")
+            moved = False 
+        
+        if moved and target_room_uuid: 
+            target_room_orm = crud_room.get_room_by_id(db, room_id=target_room_uuid)
+            if target_room_orm:
+                # Pylance should understand .id on ORM instances (if Mapped) returns the scalar type
+                updated_character_orm = crud_character.update_character_room(
+                    db, 
+                    character_id=acting_character_orm.id, 
+                    new_room_id=target_room_orm.id  
+                )
+                if updated_character_orm:
+                    print(f"Character '{updated_character_orm.name}' moved to '{target_room_orm.name}'.")
+                    return schemas.RoomInDB.from_orm(target_room_orm)
+                else:
+                    print(f"ERROR: Failed to update character room for char_id '{acting_character_orm.id}'.")
+            else:
+                print(f"ERROR: Target room UUID '{target_room_uuid}' not found.")
+    
+    return schemas.RoomInDB.from_orm(current_room_orm)
+--- END OF FILE backend/app/api/v1/endpoints/command.py ---
+
+--- START OF FILE backend/app/api/dependencies.py ---
+# backend/app/api/dependencies.py
+from typing import Optional
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer # Handles extracting token from "Authorization: Bearer <token>"
+from jose import JWTError, jwt
+from sqlalchemy.orm import Session
+import uuid # For converting subject string back to UUID
+
+from app.core.config import settings
+from app import models, schemas, crud # models.Player, schemas.Player (for return type)
+from app.db.session import get_db # To get DB session
+
+# This tells FastAPI that token URL is /api/v1/users/login
+# It's used by Swagger UI to know how to get a token for testing protected endpoints.
+# The path should match your actual login endpoint path *relative to the app root*.
+# Our login is /api/v1/users/login.
+# If your main app includes v1_api_router with prefix /api/v1,
+# and user_router is included in v1_api_router with prefix /users,
+# and login endpoint is /login, then the full path is /api/v1/users/login.
+reusable_oauth2 = OAuth2PasswordBearer(
+    tokenUrl=f"{settings.API_V1_STR}/users/login" #  e.g. "/api/v1/users/login"
+)
+
+ALGORITHM = settings.ALGORITHM
+SECRET_KEY = settings.SECRET_KEY
+
+async def get_current_player(
+    db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)
+) -> models.Player:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username_or_player_id: Optional[str] = payload.get("sub") # We stored player_id as "sub"
+        if username_or_player_id is None:
+            raise credentials_exception
+        
+        # Assuming "sub" contains the player_id as a UUID string
+        try:
+            player_uuid = uuid.UUID(username_or_player_id)
+        except ValueError:
+            print(f"Error: Subject '{username_or_player_id}' in token is not a valid UUID.")
+            raise credentials_exception
+            
+        # token_data = schemas.TokenPayload(id=username_or_player_id) # If you have a TokenPayload schema
+    except JWTError as e:
+        print(f"JWTError during token decode: {e}") # Log the error
+        raise credentials_exception
+    
+    player = crud.crud_player.get_player(db, player_id=player_uuid) # Fetch player by UUID
+    if player is None:
+        raise credentials_exception
+    return player
+
+# Optional: A dependency for current active superuser (not needed yet)
+# def get_current_active_superuser(current_user: models.User = Depends(get_current_user)):
+#     if not crud.user.is_superuser(current_user):
+#         raise HTTPException(status_code=403_FORBIDDEN, detail="The user doesn't have enough privileges")
+#     return current_user
+--- END OF FILE backend/app/api/dependencies.py ---
+
+--- START OF FILE backend/app/schemas/__init__.py ---
+# File: backend/app/schemas/__init__.py
+
+# Make the Pydantic models from room.py available directly under the schemas package
+from .room import RoomBase, RoomCreate, RoomUpdate, RoomInDB
+from .player import PlayerBase, PlayerCreate, PlayerUpdate, Player, PlayerInDB
+from .character import CharacterBase, CharacterCreate, CharacterUpdate, Character, CharacterInDB
+--- END OF FILE backend/app/schemas/__init__.py ---
+
+--- START OF FILE backend/app/schemas/room.py ---
+# backend/app/schemas/room.py
+from pydantic import BaseModel, Field, field_validator # field_validator for Pydantic v2
+import uuid # Import uuid
+from typing import Dict, Optional, Any
+
+class RoomBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    x: int
+    y: int
+    z: int
+    # Exits: keys are directions (str), values are target room UUIDs (str)
+    exits: Optional[Dict[str, str]] = Field(default_factory=dict) 
+
+class RoomCreate(RoomBase):
+    # id can optionally be provided if you want to set it explicitly,
+    # otherwise the DB model's default=uuid.uuid4 will handle it.
+    id: Optional[uuid.UUID] = None 
+    # name, description, x, y, z, exits are inherited
+    pass
+
+class RoomUpdate(BaseModel): # Not heavily used yet, but good to keep consistent
+    name: Optional[str] = None
+    description: Optional[str] = None
+    x: Optional[int] = None
+    y: Optional[int] = None
+    z: Optional[int] = None
+    exits: Optional[Dict[str, str]] = None
+
+class RoomInDB(RoomBase): # This schema is used for reading rooms from DB
+    id: uuid.UUID # ID from DB will definitely be a UUID
+
+    class Config:
+        from_attributes = True # For Pydantic v2 ORM mode
+
+--- END OF FILE backend/app/schemas/room.py ---
+
+--- START OF FILE backend/app/schemas/player.py ---
+# backend/app/schemas/player.py
+from typing import Optional
+import uuid
+from pydantic import BaseModel, Field, EmailStr # EmailStr if you add email later
+
+class PlayerBase(BaseModel):
+    username: Optional[str] = Field(None, min_length=3, max_length=100)
+    # email: Optional[EmailStr] = None # Example for later
+
+class PlayerCreate(PlayerBase):
+    username: str = Field(..., min_length=3, max_length=100) # type: ignore[override] # Make username required
+    password: str = Field(..., min_length=8) # Plain password for creation
+
+class PlayerUpdate(PlayerBase): # Not used yet, but for completeness
+    username: Optional[str] = None
+    password: Optional[str] = None # For password change functionality
+
+class PlayerInDBBase(PlayerBase):
+    id: uuid.UUID
+    # hashed_password should not be in schemas returned to client
+
+    class Config:
+        from_attributes = True
+
+class Player(PlayerInDBBase): # Schema for returning player info (without password)
+    pass
+
+class PlayerInDB(PlayerInDBBase): # More complete internal representation if needed
+    hashed_password: str
+--- END OF FILE backend/app/schemas/player.py ---
+
+--- START OF FILE backend/app/schemas/character.py ---
+# backend/app/schemas/character.py
+import uuid
+from pydantic import BaseModel, Field
+from typing import Optional
+
+# Shared properties
+class CharacterBase(BaseModel):
+    name: str = Field(..., min_length=3, max_length=50, pattern="^[a-zA-Z0-9_]+$") # Alphanumeric + underscore
+    class_name: Optional[str] = Field("Adventurer", max_length=50) # Default class
+
+# Properties to receive on character creation
+class CharacterCreate(CharacterBase):
+    # We'll need player_id to associate with a player account.
+    # For now, the API endpoint will get this, not necessarily from client for this simple version.
+    # Client just sends name and class_name.
+    pass
+    # player_id: uuid.UUID # This would be set by the backend service
+    # initial_room_id: uuid.UUID # This would also be set by the backend service
+
+# Properties to receive on character update (not used yet)
+class CharacterUpdate(BaseModel):
+    name: Optional[str] = None
+    class_name: Optional[str] = None
+    current_room_id: Optional[uuid.UUID] = None # For movement
+
+# Properties shared by models stored in DB
+class CharacterInDBBase(CharacterBase):
+    id: uuid.UUID
+    player_id: uuid.UUID
+    current_room_id: uuid.UUID
+
+    class Config:
+        from_attributes = True
+
+# Properties to return to client
+class Character(CharacterInDBBase):
+    pass # For now, same as CharacterInDBBase
+
+# Properties stored in DB (if different, e.g. including more internal fields)
+class CharacterInDB(CharacterInDBBase):
+    pass
+--- END OF FILE backend/app/schemas/character.py ---
+
+--- START OF FILE backend/app/crud/crud_character.py ---
+# backend/app/crud/crud_character.py
+from sqlalchemy.orm import Session
+import uuid
+from typing import Optional, List
+
+from .. import models, schemas # models.Character, schemas.CharacterCreate etc.
+
+def get_character(db: Session, character_id: uuid.UUID) -> Optional[models.Character]:
+    return db.query(models.Character).filter(models.Character.id == character_id).first()
+
+def get_character_by_name(db: Session, name: str) -> Optional[models.Character]:
+    return db.query(models.Character).filter(models.Character.name == name).first()
+
+def get_characters_by_player(db: Session, player_id: uuid.UUID, skip: int = 0, limit: int = 100) -> List[models.Character]:
+    return db.query(models.Character).filter(models.Character.player_id == player_id).offset(skip).limit(limit).all()
+
+def create_character(
+    db: Session, *, 
+    character_in: schemas.CharacterCreate, 
+    player_id: uuid.UUID, 
+    initial_room_id: uuid.UUID
+) -> models.Character:
+    """
+    Create a new character.
+    'player_id' and 'initial_room_id' are provided by the service layer, not directly from client request model.
+    """
+    # Create a dictionary from the Pydantic model
+    db_character_data = character_in.model_dump()
+    
+    db_character = models.Character(
+        **db_character_data, 
+        player_id=player_id, 
+        current_room_id=initial_room_id
+    )
+    
+    db.add(db_character)
+    db.commit()
+    db.refresh(db_character)
+    return db_character
+
+def update_character_room(db: Session, character_id: uuid.UUID, new_room_id: uuid.UUID) -> Optional[models.Character]:
+    """
+    Updates the character's current room.
+    """
+    db_character = get_character(db, character_id=character_id)
+    if db_character:
+        # Use SQLAlchemy's update mechanism to modify the current_room_id
+        db.query(models.Character).filter(models.Character.id == character_id).update(
+            {models.Character.current_room_id: new_room_id}
+        )
+        db.commit()
+        db.refresh(db_character)
+        return db_character
+    return None
+--- END OF FILE backend/app/crud/crud_character.py ---
+
+--- START OF FILE backend/app/crud/crud_player.py ---
+# backend/app/crud/crud_player.py
+from sqlalchemy.orm import Session
+import uuid # Ensure uuid is imported
+from typing import Optional
+
+from .. import models, schemas # models.Player, schemas.PlayerCreate etc.
+from ..core.security import get_password_hash # Our password hashing utility
+
+def get_player(db: Session, player_id: uuid.UUID) -> Optional[models.Player]:
+    return db.query(models.Player).filter(models.Player.id == player_id).first()
+
+def get_player_by_username(db: Session, username: str) -> Optional[models.Player]:
+    return db.query(models.Player).filter(models.Player.username == username).first()
+
+def create_player(db: Session, *, player_in: schemas.PlayerCreate) -> models.Player:
+    hashed_password = get_password_hash(player_in.password)
+    # Create a dictionary for the DB model, excluding the plain password
+    db_player_data = player_in.model_dump(exclude={'password'})
+    db_player = models.Player(**db_player_data, hashed_password=hashed_password)
+    
+    db.add(db_player)
+    db.commit()
+    db.refresh(db_player)
+    return db_player
+--- END OF FILE backend/app/crud/crud_player.py ---
+
+--- START OF FILE backend/app/crud/crud_room.py ---
+# backend/app/crud/crud_room.py
+from sqlalchemy.orm import Session
+import uuid # Import uuid
+from typing import Optional, Dict, List
+from .. import models, schemas
+
+def get_room_by_id(db: Session, room_id: uuid.UUID) -> Optional[models.Room]: # room_id is now uuid.UUID
+    """
+    Retrieve a room from the database by its ID (which is a UUID).
+    """
+    return db.query(models.Room).filter(models.Room.id == room_id).first()
+
+def get_room_by_coords(db: Session, *, x: int, y: int, z: int) -> Optional[models.Room]:
+    return db.query(models.Room).filter(
+        models.Room.x == x,
+        models.Room.y == y,
+        models.Room.z == z
+    ).first()
+
+def create_room(db: Session, *, room_in: schemas.RoomCreate) -> models.Room:
+    """
+    Create a new room in the database.
+    Takes a Pydantic schema RoomCreate as input.
+    If room_in.id is None (typical), a new UUID will be generated by the model's default.
+    If room_in.id is provided, that UUID will be used.
+    Returns the created SQLAlchemy ORM model instance.
+    """
+    db_room_data = room_in.model_dump(exclude_unset=True) # Exclude unset to allow DB defaults like UUID
+    
+    # If an ID (UUID) is provided in room_in, use it. Otherwise, DB default uuid.uuid4() kicks in.
+    # The model_dump already includes 'id' if it was set in room_in.
+    
+    db_room = models.Room(**db_room_data)
+    db.add(db_room)
+    db.commit()
+    db.refresh(db_room)
+    return db_room
+
+# We'll need a robust way to update room exits as well, or a general update_room
+def update_room(db: Session, *, db_room: models.Room, room_in: schemas.RoomUpdate) -> models.Room:
+    """
+    General purpose room update.
+    """
+    update_data = room_in.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_room, field, value)
+    db.add(db_room)
+    db.commit()
+    db.refresh(db_room)
+    return db_room
+
+# --- World Seeding Logic ---
+# This will be called from main.py's startup event
+# We'll define 3 rooms: Genesis (0,0,0), Chilly North (0,1,0), Overlook East (1,1,0)
+
+# Store known UUIDs for linking (these will be generated once)
+# In a real app, these might be constants or looked up if seeding is idempotent.
+# For simplicity, we'll generate them if rooms don't exist.
+# This global dict is a temporary hack for seeding to pass UUIDs between room creations.
+_SEED_ROOM_UUIDS: Dict[str, uuid.UUID] = {}
+
+def seed_initial_world(db: Session):
+    print("Attempting to seed initial world with UUIDs...")
+
+    room_definitions = [
+        {
+            "coords": {"x": 0, "y": 0, "z": 0},
+            "name_tag": "genesis_room", # Internal tag for _SEED_ROOM_UUIDS
+            "data": schemas.RoomCreate(
+                name="The UUID Genesis of Despair",
+                description="This void is now uniquely identified. The walls whisper of primary keys and existential uniqueness.",
+                x=0, y=0, z=0,
+                exits={} # Will be populated after all rooms are created/UUIDs known
+            )
+        },
+        {
+            "coords": {"x": 0, "y": 1, "z": 0}, # North of Genesis
+            "name_tag": "chilly_north_room",
+            "data": schemas.RoomCreate(
+                name="The Chilly UUID Corridor",
+                description="A uniquely cold passage. The air hums with the vibration of countless GUIDs.",
+                x=0, y=1, z=0,
+                exits={}
+            )
+        },
+        {
+            "coords": {"x": 1, "y": 1, "z": 0}, # East of Chilly North
+            "name_tag": "overlook_east_room",
+            "data": schemas.RoomCreate(
+                name="The Overlook of Minor UUID Disappointment",
+                description="From this vantage point, you can see a sea of globally unique identifiers, none of them particularly exciting.",
+                x=1, y=1, z=0,
+                exits={}
+            )
+        }
+    ]
+
+    created_rooms_this_run = False
+    for room_def in room_definitions:
+        coords = room_def["coords"]
+        name_tag = room_def["name_tag"]
+        
+        existing_room = get_room_by_coords(db, **coords)
+        if not existing_room:
+            print(f"Creating room '{room_def['data'].name}' at {coords}...")
+            # If ID is needed beforehand for linking (not in this simple exits model, but good to know):
+            # room_def['data'].id = uuid.uuid4() # Pre-assign UUID if needed
+            # _SEED_ROOM_UUIDS[name_tag] = room_def['data'].id
+            
+            created_room_orm = create_room(db, room_in=room_def["data"])
+            _SEED_ROOM_UUIDS[name_tag] = created_room_orm.id # type: ignore[assignment] # Store the generated UUID
+            print(f"  Created '{created_room_orm.name}' with UUID: {_SEED_ROOM_UUIDS[name_tag]}")
+            created_rooms_this_run = True
+        else:
+            print(f"Room '{existing_room.name}' at {coords} already exists with UUID: {existing_room.id}.")
+            _SEED_ROOM_UUIDS[name_tag] = existing_room.id # type: ignore[assignment] # Store existing UUID
+
+    # If any rooms were newly created OR if we want to ensure exits are always up-to-date on startup:
+    # Link rooms using their known/generated UUIDs
+    # For simplicity, we'll re-fetch and update exits even if rooms existed.
+    # This makes the seeding idempotent for exits too.
+
+    print("Linking room exits with UUIDs...")
+    # Genesis Room (0,0,0) exits
+    if "genesis_room" in _SEED_ROOM_UUIDS and "chilly_north_room" in _SEED_ROOM_UUIDS:
+        genesis_room_orm = get_room_by_id(db, room_id=_SEED_ROOM_UUIDS["genesis_room"])
+        if genesis_room_orm:
+            new_exits = {"north": str(_SEED_ROOM_UUIDS["chilly_north_room"])}
+            if genesis_room_orm.exits != new_exits: # type: ignore[operator] # Only update if changed
+                print(f"  Updating Genesis room exits to: {new_exits}")
+                genesis_room_orm.exits = new_exits # type: ignore[assignment]
+                db.add(genesis_room_orm) # Let SQLAlchemy track the change
+
+    # Chilly North Room (0,1,0) exits
+    if "chilly_north_room" in _SEED_ROOM_UUIDS and "genesis_room" in _SEED_ROOM_UUIDS and "overlook_east_room" in _SEED_ROOM_UUIDS:
+        chilly_room_orm = get_room_by_id(db, room_id=_SEED_ROOM_UUIDS["chilly_north_room"])
+        if chilly_room_orm:
+            new_exits = {
+                "south": str(_SEED_ROOM_UUIDS["genesis_room"]),
+                "east": str(_SEED_ROOM_UUIDS["overlook_east_room"])
+            }
+            if chilly_room_orm.exits != new_exits: # type: ignore[operator]
+                print(f"  Updating Chilly North room exits to: {new_exits}")
+                chilly_room_orm.exits = new_exits # type: ignore[assignment]
+                db.add(chilly_room_orm)
+
+    # Overlook East Room (1,1,0) exits
+    if "overlook_east_room" in _SEED_ROOM_UUIDS and "chilly_north_room" in _SEED_ROOM_UUIDS:
+        overlook_room_orm = get_room_by_id(db, room_id=_SEED_ROOM_UUIDS["overlook_east_room"])
+        if overlook_room_orm:
+            new_exits = {"west": str(_SEED_ROOM_UUIDS["chilly_north_room"])}
+            if overlook_room_orm.exits != new_exits: # type: ignore[operator]
+                print(f"  Updating Overlook East room exits to: {new_exits}")
+                overlook_room_orm.exits = new_exits # type: ignore[assignment]
+                db.add(overlook_room_orm)
+    
+    db.commit() # Commit all exit updates at once
+    print("World seeding and exit linking complete.")
+
+# Remove the old init_first_room_if_not_exists or ensure it's not called if you keep it.
+# The new seed_initial_world should be called from main.py startup.
+--- END OF FILE backend/app/crud/crud_room.py ---
+
+--- START OF FILE backend/app/models/player.py ---
+# backend/app/models/player.py
+import uuid
+from typing import Optional, List # List for future relationship typing
+
+from sqlalchemy import Column, String # Keep Column for __tablename__ etc.
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship # Import Mapped, mapped_column
+
+from ..db.base_class import Base
+
+class Player(Base):
+    __tablename__ = "players"
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    username: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # --- Relationships (Example for future) ---
+    # If a Player can have multiple Characters:
+    # characters: Mapped[List["Character"]] = relationship(back_populates="owner")
+    # Note: Use "Character" as a string if Character class is defined later or in another file to avoid circular imports.
+
+    def __repr__(self) -> str:
+        return f"<Player(id={self.id}, username='{self.username}')>"
+--- END OF FILE backend/app/models/player.py ---
+
+--- START OF FILE backend/app/models/character.py ---
+# backend/app/models/character.py
+import uuid
+from typing import Optional # For optional types
+
+from sqlalchemy import Column, String, ForeignKey # Keep Column for __tablename__ etc.
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship # Import Mapped, mapped_column
+
+from ..db.base_class import Base
+# If you need to type hint relationships to Player or Room and they are in other files:
+# from .player import Player # Example, adjust path if needed
+# from .room import Room   # Example, adjust path if needed
+
+class Character(Base):
+    __tablename__ = "characters"
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(100), index=True, nullable=False, unique=True)
+    class_name: Mapped[str] = mapped_column(String(50), nullable=False, default="Adventurer")
+
+    # Foreign Key to link to the Player (User account)
+    player_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("players.id"), nullable=False, index=True)
+    
+    # Foreign Key to link to the Character's current Room
+    current_room_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("rooms.id"), nullable=False, index=True)
+
+    # --- Relationships (Example with Mapped type hints) ---
+    # owner: Mapped["Player"] = relationship(back_populates="characters") 
+    # current_room: Mapped["Room"] = relationship()
+    # Using string "Player" and "Room" for forward references if classes are in different files or defined later.
+    # If they are imported, you can use Player and Room directly.
+
+    def __repr__(self) -> str:
+        # Accessing self.id, self.name, self.player_id should give the actual values here
+        return f"<Character(id={self.id}, name='{self.name}', player_id='{self.player_id}')>"
+--- END OF FILE backend/app/models/character.py ---
+
+--- START OF FILE backend/app/models/room.py ---
+# backend/app/models/room.py
+import uuid
+from typing import Optional, Dict # Import Dict and Optional
+
+from sqlalchemy import Column, Integer, String, Text, JSON # Keep Column for __tablename__ etc.
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.orm import Mapped, mapped_column # Import Mapped, mapped_column
+
+from ..db.base_class import Base
+
+class Room(Base):
+    __tablename__ = "rooms"
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    x: Mapped[int] = mapped_column(Integer, nullable=False)
+    y: Mapped[int] = mapped_column(Integer, nullable=False)
+    z: Mapped[int] = mapped_column(Integer, nullable=False)
+    exits: Mapped[Optional[Dict[str, str]]] = mapped_column(JSON, nullable=True, default=lambda: {}) # Type hint for exits
+
+    def __repr__(self) -> str:
+        return f"<Room(id={self.id}, name='{self.name}', x={self.x}, y={self.y}, z={self.z})>"
+--- END OF FILE backend/app/models/room.py ---
+
+--- START OF FILE backend/app/main.py ---
+# backend/app/main.py
+from fastapi import FastAPI, Depends
+from sqlalchemy.orm import Session
+
+from .api.v1.api_router import api_router as v1_api_router
+from .db.session import engine, get_db # Import engine and get_db
+from .db import base_class # To access Base for create_all
+from .crud import crud_room # For init_first_room_if_not_exists
+from .core.config import settings # Import settings for project name, etc.
+from .crud.crud_room import seed_initial_world
+
+# This line creates tables if they don't exist.
+# IMPORTANT: In a production app, you'd use Alembic migrations for schema management,
+# not create_all(). This is okay for initial development.
+# Comment this out once Alembic is fully managing your schema.
+base_class.Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title=settings.PROJECT_NAME)
+
+fake_player_state = {
+    "current_room_coords": {"x": 0, "y": 0, "z": 0} # Start in the Genesis room
+}
+
+@app.on_event("startup")
+def on_startup():
+    db: Session = next(get_db())
+    try:
+        print("Running startup event: Seeding initial world with UUIDs...")
+        seed_initial_world(db) # Call the new seeding function
+        print("Startup event finished.")
+    finally:
+        db.close()
+
+app.include_router(v1_api_router, prefix=settings.API_V1_STR) # Using API_V1_STR from settings
+
+@app.get("/")
+async def root():
+    return {"message": f"Welcome to {settings.PROJECT_NAME}. It's now SQL-powered, allegedly."}
+
+print("FastAPI app instance created. Database tables (should be) created by create_all().")
+print(f"Database URL being used by SQLAlchemy engine: {engine.url}")
+--- END OF FILE backend/app/main.py ---
+
+--- START OF FILE backend/app/core/config.py ---
+# backend/app/core/config.py
+import os
+from typing import Optional
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Check if we're likely running in an Alembic 'env.py' context BEFORE settings are needed for DB connection
+# This is a heuristic. Alembic sets 'alembic.version' in its context.
+# A simpler heuristic: if a specific env var for alembic is set.
+IS_ALEMBIC_ENV_PY_CONTEXT = os.getenv("ALEMBIC_ENV_PY_RUNNING") == "true"
+
+class Settings(BaseSettings):
+    PROJECT_NAME: str = "MUD Project - Backend"
+    API_V1_STR: str = "/api/v1"
+    
+    DATABASE_URL: Optional[str] = "postgresql://dummy_user:dummy_password@dummy_host:5432/dummy_db" if IS_ALEMBIC_ENV_PY_CONTEXT else None
+    SECRET_KEY: str = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7" # CHANGE THIS IN PRODUCTION!
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7 # Token expires in 7 days
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding='utf-8', extra='ignore')
+
+settings = Settings() 
+
+# After instantiation, if it was a dummy, ensure it's overridden if not in Alembic context
+# and the real env var is available. This is getting complex.
+if IS_ALEMBIC_ENV_PY_CONTEXT and settings.DATABASE_URL is not None and settings.DATABASE_URL.startswith("postgresql://dummy_user"):
+    print("INFO: Settings initialized with dummy DATABASE_URL for Alembic env.py import phase.")
+elif settings.DATABASE_URL is not None and not settings.DATABASE_URL.startswith("postgresql://dummy_user") and os.getenv("DATABASE_URL"):
+     # This would be the normal app run, where env var should override any default
+     pass
+elif not IS_ALEMBIC_ENV_PY_CONTEXT and not os.getenv("DATABASE_URL"):
+    # This will have already failed in Settings() if '...' was used and no env var
+    print("WARNING: DATABASE_URL not found in environment for normal app run!")
+--- END OF FILE backend/app/core/config.py ---
+
+--- START OF FILE backend/app/core/security.py ---
+# backend/app/core/security.py
+from datetime import datetime, timedelta, timezone # Use timezone-aware datetimes
+from typing import Optional, Any, Union
+from jose import JWTError, jwt # Import from jose
+from passlib.context import CryptContext
+
+from ..core.config import settings # Import our settings instance
+
+# Initialize CryptContext. We'll use bcrypt.
+# "auto" will use the first scheme (bcrypt) for hashing new passwords
+# and will also be able to verify passwords hashed with any scheme listed.
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+ALGORITHM = settings.ALGORITHM
+SECRET_KEY = settings.SECRET_KEY
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
+
+def create_access_token(subject: Union[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    
+    to_encode = {"exp": expire, "sub": str(subject)} # "sub" is the standard claim for subject (e.g., player_id)
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+--- END OF FILE backend/app/core/security.py ---
+
+--- START OF FILE frontend/src/script.js ---
+// --- START OF SCRIPT.JS ---
+const API_BASE_URL = 'https://llmud.trazen.org/api/v1';
+
+// --- Global State ---
+let currentAuthToken = null;
+let selectedCharacterId = null; // UUID of the character playing
+let currentPlayerId = null;     // UUID of the logged-in player (if your login returns it)
+let loginState = 'INIT'; 
+// INIT, PROMPT_USER, PROMPT_PASSWORD, 
+// REGISTER_PROMPT_USER, REGISTER_PROMPT_PASSWORD, 
+// CHAR_SELECT_PROMPT, CHAR_CREATE_PROMPT_NAME, CHAR_CREATE_PROMPT_CLASS,
+// IN_GAME
+let tempUsername = ''; 
+let tempPassword = ''; 
+let tempCharName = ''; 
+let availableCharacters = []; 
+
+// --- UI Elements (fetched in DOMContentLoaded) ---
+let outputDiv, commandInput, exitsDisplayDiv, promptTextSpan, inputPromptLineDiv; // Added inputPromptLineDiv
+
+// --- FULL REWRITE: showAppropriateView ---
+function showAppropriateView() {
+    // This function is now simpler as we primarily manage content within outputDiv
+    // and toggle visibility of the exits bar and the whole input line.
+    console.log("showAppropriateView called. Current loginState:", loginState);
+
+    if (!exitsDisplayDiv || !inputPromptLineDiv) {
+        console.error("Exits display or input prompt line div not initialized in showAppropriateView!");
+        return;
+    }
+
+    if (loginState === 'IN_GAME') {
+        exitsDisplayDiv.style.display = 'block'; // Or 'flex' if styled as such
+        inputPromptLineDiv.style.display = 'flex'; // Ensure command input is visible
+    } else if (loginState === 'CHAR_SELECT_PROMPT' || 
+               loginState === 'CHAR_CREATE_PROMPT_NAME' || 
+               loginState === 'CHAR_CREATE_PROMPT_CLASS' ||
+               loginState === 'PROMPT_USER' || 
+               loginState === 'PROMPT_PASSWORD' ||
+               loginState === 'REGISTER_PROMPT_USER' ||
+               loginState === 'REGISTER_PROMPT_PASSWORD' ||
+               loginState === 'INIT') {
+        exitsDisplayDiv.style.display = 'none'; // Hide exits bar
+        inputPromptLineDiv.style.display = 'flex'; // Command input is used for these states
+    } else {
+        // Default catch-all or for states where input might be disabled (e.g., during a fetch)
+        exitsDisplayDiv.style.display = 'none';
+        inputPromptLineDiv.style.display = 'flex'; // Or 'none' if input should be hidden
+    }
+}
+
+// --- FULL REWRITE: appendToOutput ---
+function appendToOutput(htmlContent, options = {}) {
+    const { isPrompt = false, noNewLineBefore = false, noNewLineAfter = false, styleClass = '' } = options;
+    if (!outputDiv) return;
+
+    let finalContent = '';
+
+    // Add newline before unless suppressed or it's a prompt continuing a line
+    if (!isPrompt && !noNewLineBefore && outputDiv.innerHTML !== '' && !outputDiv.innerHTML.endsWith('\n') && !outputDiv.innerHTML.endsWith('<br>')) {
+        finalContent += '\n';
+    }
+
+    if (isPrompt && outputDiv.innerHTML !== '' && !outputDiv.innerHTML.endsWith(' ') && !outputDiv.innerHTML.endsWith('\n') && !outputDiv.innerHTML.endsWith('<br>')) {
+        finalContent += ' '; // Space before prompt text if not starting a new line or after space
+    }
+    
+    if (styleClass) {
+        finalContent += `<span class="${styleClass}">${htmlContent}</span>`;
+    } else {
+        finalContent += htmlContent;
+    }
+    
+    outputDiv.innerHTML += finalContent;
+    
+    if (!isPrompt && !noNewLineAfter) {
+         outputDiv.innerHTML += '\n'; // Add newline after regular messages unless suppressed
+    }
+    outputDiv.scrollTop = outputDiv.scrollHeight;
+}
+
+// --- FULL REWRITE: clearOutput ---
+function clearOutput() { 
+    if (outputDiv) outputDiv.innerHTML = ''; 
+}
+
+// --- FULL REWRITE: setInputCommandPlaceholder ---
+function setInputCommandPlaceholder(text) { 
+    if (commandInput) commandInput.placeholder = text; 
+}
+
+// --- FULL REWRITE: setInputCommandType ---
+function setInputCommandType(type) { 
+    if (commandInput) commandInput.type = type; 
+}
+
+// --- FULL REWRITE: updateExitsDisplay ---
+function updateExitsDisplay(roomData) {
+    if (!exitsDisplayDiv) return;
+    
+    if (loginState === 'IN_GAME' && roomData && roomData.exits && Object.keys(roomData.exits).length > 0) {
+        exitsDisplayDiv.innerHTML = '<b>Exits:</b> ' + Object.keys(roomData.exits).map(d => d.toUpperCase()).join(' | ');
+    } else if (loginState === 'IN_GAME') { 
+        exitsDisplayDiv.innerHTML = 'Exits: (None)';
+    } else { 
+        exitsDisplayDiv.innerHTML = ''; // Clear if not in game (it should be hidden anyway by showAppropriateView)
+    }
+}
+
+// --- FULL REWRITE: startLoginProcess ---
+function startLoginProcess() {
+    loginState = 'PROMPT_USER';
+    currentAuthToken = null; 
+    selectedCharacterId = null; 
+    tempUsername = '';
+    availableCharacters = []; // Clear character cache
+    
+    showAppropriateView(); // Call this to set UI visibility based on new state
+    clearOutput();
+    
+    appendToOutput("Welcome to The Unholy MUD of Tron & Allen1.");
+    appendToOutput("Version 0.0.0.0.Alpha.Pre-Shitshow");
+    appendToOutput("-------------------------------------------------");
+    appendToOutput("Username (or type 'new' to register): ", {isPrompt: true});
+    
+    setInputCommandPlaceholder("Enter username or 'new'");
+    setInputCommandType('text');
+    if (commandInput) commandInput.focus();
+}
+
+// --- FULL REWRITE: promptForPassword ---
+async function promptForPassword() {
+    loginState = 'PROMPT_PASSWORD';
+    appendToOutput("Password: ", {isPrompt: true, noNewLineBefore: true});
+    setInputCommandPlaceholder("Enter password");
+    setInputCommandType('password');
+    if (commandInput) commandInput.focus();
+}
+
+// --- FULL REWRITE: promptForRegistrationUsername ---
+async function promptForRegistrationUsername() {
+    loginState = 'REGISTER_PROMPT_USER';
+    appendToOutput("Registering new user."); // This will get a newline from appendToOutput
+    appendToOutput("Desired username: ", {isPrompt: true});
+    setInputCommandPlaceholder("Enter desired username");
+    setInputCommandType('text');
+    if (commandInput) commandInput.focus();
+}
+
+// --- FULL REWRITE: promptForRegistrationPassword ---
+async function promptForRegistrationPassword() {
+    loginState = 'REGISTER_PROMPT_PASSWORD';
+    appendToOutput("Desired password (min 8 chars): ", {isPrompt: true, noNewLineBefore: true});
+    setInputCommandPlaceholder("Enter desired password");
+    setInputCommandType('password');
+    if (commandInput) commandInput.focus();
+}
+
+// --- FULL REWRITE: displayCharacterSelection ---
+async function displayCharacterSelection() {
+    loginState = 'CHAR_SELECT_PROMPT';
+    showAppropriateView(); // Ensure exits bar is hidden, input prompt line is visible
+
+    if (!currentAuthToken) { 
+        appendToOutput("Authentication error in character selection.", {styleClass: 'error-message-inline'});
+        handleLogout(); 
+        return; 
+    }
+
+    appendToOutput("\nFetching character list...");
+    try {
+        const response = await fetch(`${API_BASE_URL}/character/mine`, {
+            headers: {'Authorization': `Bearer ${currentAuthToken}`}
+        });
+        availableCharacters = await response.json();
+        if (!response.ok) {
+            throw new Error(availableCharacters.detail || "Failed to fetch characters.");
+        }
+
+        // Clear previous output if desired, or append. Let's clear for a clean char select screen.
+        // clearOutput(); // Or decide if you want to keep login messages. For now, keep them.
+        appendToOutput("\n--- Character Selection ---");
+        if (availableCharacters.length === 0) {
+            appendToOutput("No characters found.");
+        } else {
+            appendToOutput("Your characters:");
+            availableCharacters.forEach((char, index) => {
+                appendToOutput(`<span class="char-list-item"><span class="char-index">${index + 1}.</span> <span class="char-name">${char.name}</span> (<span class="char-class">${char.class_name}</span>)</span>`);
+            });
+        }
+        appendToOutput("Enter character number to play, or type 'new' to create one: ", {isPrompt: true});
+        setInputCommandPlaceholder("Enter #, or 'new'");
+        setInputCommandType('text');
+    } catch (err) {
+        appendToOutput(`Error fetching characters: ${err.message}`, {styleClass: 'error-message-inline'});
+        if (String(err.message).includes("401") || response && response.status === 401) { 
+            handleLogout(); 
+        } else { 
+            // Potentially go back to login or offer retry
+            startLoginProcess(); 
+        }
+    }
+    if (commandInput) commandInput.focus();
+}
+
+// --- FULL REWRITE: promptForNewCharacterName ---
+async function promptForNewCharacterName() {
+    loginState = 'CHAR_CREATE_PROMPT_NAME';
+    showAppropriateView(); // Ensure UI state is correct
+
+    // clearOutput(); // Optional: Clear for focused creation
+    appendToOutput("\n--- New Character Creation ---");
+    appendToOutput("Enter character name: ", {isPrompt: true});
+    setInputCommandPlaceholder("Character Name (3-50 chars)");
+    setInputCommandType('text');
+    if (commandInput) commandInput.focus();
+}
+
+// --- FULL REWRITE: promptForNewCharacterClass ---
+async function promptForNewCharacterClass() {
+    loginState = 'CHAR_CREATE_PROMPT_CLASS';
+    showAppropriateView();
+
+    appendToOutput(`Class for ${tempCharName} (e.g., Swindler, Warrior) [Adventurer]: `, {isPrompt: true, noNewLineBefore: true});
+    setInputCommandPlaceholder("Character Class (optional, default: Adventurer)");
+    setInputCommandType('text');
+    if (commandInput) commandInput.focus();
+}
+
+
+// --- FULL REWRITE: handleInputSubmission ---
+async function handleInputSubmission() {
+    if (!commandInput || !outputDiv) return;
+    const inputText = commandInput.value.trim();
+    
+    let echoText = inputText;
+    let echoOptions = { noNewLineBefore: true }; // Default to append on same line as prompt
+
+    if (loginState === 'PROMPT_PASSWORD' || loginState === 'REGISTER_PROMPT_PASSWORD') {
+        echoText = '*'.repeat(inputText.length || 8);
+    } else if (loginState === 'IN_GAME') {
+        echoText = `> ${inputText}`;
+        echoOptions = {}; // Game commands get their own line with a newline before
+    }
+    
+    if (inputText || loginState === 'PROMPT_PASSWORD' || loginState === 'REGISTER_PROMPT_PASSWORD') { // Echo even if password is empty for visual feedback
+        appendToOutput(echoText, echoOptions);
+    }
+    
+    commandInput.value = ''; // Clear input field
+
+    switch (loginState) {
+        case 'PROMPT_USER':
+            if (inputText.toLowerCase() === 'new') {
+                await promptForRegistrationUsername();
+            } else if (inputText) {
+                tempUsername = inputText;
+                await promptForPassword();
+            } else { // Empty username, re-prompt
+                appendToOutput("Username (or type 'new' to register): ", {isPrompt: true, noNewLineBefore: true});
+            }
+            break;
+        case 'PROMPT_PASSWORD':
+            const passwordAttempt = inputText; // inputText is the actual password here
+            setInputCommandType('text'); 
+            appendToOutput("\nAttempting login...");
+            try {
+                const response = await fetch(`${API_BASE_URL}/users/login`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: new URLSearchParams({ username: tempUsername, password: passwordAttempt })
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    appendToOutput(`Login failed: ${data.detail || 'Incorrect username or password.'}`, {styleClass: 'error-message-inline'});
+                    await promptForPassword();
+                } else {
+                    currentAuthToken = data.access_token;
+                    // If your login endpoint returns player_id:
+                    // currentPlayerId = data.player_id; 
+                    appendToOutput("Login successful!");
+                    await displayCharacterSelection();
+                }
+            } catch (err) {
+                appendToOutput(`Network error during login: ${err.message}`, {styleClass: 'error-message-inline'});
+                startLoginProcess();
+            }
+            break;
+        case 'REGISTER_PROMPT_USER':
+            if (inputText) {
+                tempUsername = inputText;
+                await promptForRegistrationPassword();
+            } else {
+                appendToOutput("Desired username: ", {isPrompt: true, noNewLineBefore: true});
+            }
+            break;
+        case 'REGISTER_PROMPT_PASSWORD':
+            tempPassword = inputText;
+            setInputCommandType('text');
+            appendToOutput("\nAttempting registration...");
+            try {
+                const response = await fetch(`${API_BASE_URL}/users/register`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ username: tempUsername, password: tempPassword })
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    appendToOutput(`Registration failed: ${data.detail || 'Error.'}`, {styleClass: 'error-message-inline'});
+                } else {
+                    appendToOutput("Registration successful! Please log in to continue.");
+                }
+            } catch (err) {
+                appendToOutput(`Network error during registration: ${err.message}`, {styleClass: 'error-message-inline'});
+            } finally {
+                startLoginProcess();
+            }
+            break;
+        case 'CHAR_SELECT_PROMPT':
+            if (inputText.toLowerCase() === 'new') {
+                await promptForNewCharacterName();
+            } else {
+                const charIndex = parseInt(inputText, 10) - 1;
+                if (availableCharacters && charIndex >= 0 && charIndex < availableCharacters.length) {
+                    await enterGameModeWithCharacter(availableCharacters[charIndex]);
+                } else {
+                    appendToOutput("Invalid selection.", {styleClass: 'error-message-inline'});
+                    appendToOutput("Enter character number or 'new': ", {isPrompt: true, noNewLineBefore: true});
+                }
+            }
+            break;
+        case 'CHAR_CREATE_PROMPT_NAME':
+            tempCharName = inputText;
+            if (!tempCharName || tempCharName.length < 3 || tempCharName.length > 50) { // Example validation
+                 appendToOutput("Invalid name (3-50 chars). Enter character name: ", {isPrompt: true, styleClass: 'error-message-inline', noNewLineBefore: true});
+                 break; 
+            }
+            await promptForNewCharacterClass();
+            break;
+        case 'CHAR_CREATE_PROMPT_CLASS':
+            const charClass = inputText || "Adventurer";
+            appendToOutput(`\nCreating character ${tempCharName} the ${charClass}...`);
+            if (!currentAuthToken) { handleLogout(); return; }
+            try {
+                const response = await fetch(`${API_BASE_URL}/character/create`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentAuthToken}`
+                    },
+                    body: JSON.stringify({ name: tempCharName, class_name: charClass })
+                });
+                const newChar = await response.json();
+                if (!response.ok) { throw new Error(newChar.detail || "Character creation failed."); }
+                appendToOutput(`Character '${newChar.name}' created!`);
+                await displayCharacterSelection();
+            } catch (err) {
+                appendToOutput(`Error creating character: ${err.message}`, {styleClass: 'error-message-inline'});
+                await displayCharacterSelection(); // Go back to char select on error
+            }
+            break;
+        case 'IN_GAME':
+            await sendGameCommand(inputText);
+            break;
+        default:
+            appendToOutput("System error: Unknown login state.", {styleClass: 'error-message-inline'});
+            startLoginProcess();
+    }
+    if (commandInput) commandInput.focus();
+}
+
+// --- FULL REWRITE: enterGameModeWithCharacter ---
+async function enterGameModeWithCharacter(character) {
+    selectedCharacterId = character.id;
+    loginState = 'IN_GAME';
+    
+    showAppropriateView(); // Ensure exits bar and input line are visible
+
+    clearOutput(); 
+    appendToOutput(`Playing as: ${character.name}, the ${character.class_name}`);
+    
+    setInputCommandPlaceholder("Type command...");
+    setInputCommandType('text');
+    if (commandInput) commandInput.focus();
+    
+    // Fetch and display the character's current room (this will also update exits)
+    await fetchAndDisplayRoomByUUID(character.current_room_id);
+}
+
+// --- FULL REWRITE: updateGameDisplay (now only appends to outputDiv, exits handled by updateExitsDisplay) ---
+function updateGameDisplay(roomData) {
+    if (!outputDiv) return;
+    appendToOutput(`\n--- ${roomData.name} ---`, {styleClass: 'room-name-header'});
+    appendToOutput(roomData.description || "It's eerily quiet.");
+    // Exits are handled by updateExitsDisplay, which is called by fetchAndDisplayRoomByUUID and sendGameCommand
+}
+
+// --- FULL REWRITE: fetchAndDisplayRoomByUUID ---
+async function fetchAndDisplayRoomByUUID(roomUUID) {
+    if (!currentAuthToken) { handleLogout(); return; }
+    if (!roomUUID) { 
+        appendToOutput("Error: Character's current room ID is missing.", {styleClass: 'error-message-inline'}); 
+        return; 
+    }
+    try {
+        const response = await fetch(`${API_BASE_URL}/room/by_uuid/${roomUUID}`, {
+            headers: { 'Authorization': `Bearer ${currentAuthToken}` }
+        });
+        const roomData = await response.json();
+        if (!response.ok) { throw new Error(roomData.detail || `Failed to fetch room ${roomUUID}`); }
+        
+        updateGameDisplay(roomData); // Append room name and desc to output
+        updateExitsDisplay(roomData); // Update the separate exits bar
+
+    } catch (err) {
+        appendToOutput(`Error fetching room: ${err.message}`, {styleClass: 'error-message-inline'});
+    }
+}
+
+// --- FULL REWRITE: sendGameCommand ---
+async function sendGameCommand(commandText) { 
+    if (!commandText) return;
+    if (!currentAuthToken || !selectedCharacterId) { handleLogout(); return; }
+
+    // Input echoing is now handled by handleInputSubmission for IN_GAME state.
+    // commandInput.value = ''; // Also handled by handleInputSubmission.
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/command`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${currentAuthToken}`
+            },
+            body: JSON.stringify({ command: commandText, character_id: selectedCharacterId })
+        });
+        const newRoomData = await response.json(); // Expects new room data if move, or current room data if no move/error
+        if (!response.ok) { 
+            // If backend returns an error for a failed command (e.g. "You can't go that way")
+            // it should still be a 200 OK with a message, or a specific 4xx.
+            // For now, assume error means network/server error, or unhandled backend exception.
+            throw new Error(newRoomData.detail || `Command failed with status ${response.status}`); 
+        }
+        
+        updateGameDisplay(newRoomData); // Display the new/current room
+        updateExitsDisplay(newRoomData); // Update exits based on the room returned
+
+    } catch (err) {
+        appendToOutput(`Error: ${err.message}`, {styleClass: 'error-message-inline'});
+    }
+    if (commandInput) commandInput.focus();
+}
+
+// --- FULL REWRITE: handleLogout ---
+function handleLogout() {
+    currentAuthToken = null; 
+    selectedCharacterId = null; 
+    tempUsername = '';
+    availableCharacters = [];
+    console.log("Logged out.");
+    startLoginProcess(); // This will clear output and show login prompts
+}
+
+// --- Initial Setup (DOMContentLoaded) ---
+document.addEventListener('DOMContentLoaded', () => {
+    // Assign all critical global UI element variables here
+    outputDiv = document.getElementById('output');
+    commandInput = document.getElementById('commandInput');
+    exitsDisplayDiv = document.getElementById('exits-display');
+    promptTextSpan = document.getElementById('prompt-text'); // For the "> " prompt
+    inputPromptLineDiv = document.getElementById('input-prompt-line');
+
+
+    if (!outputDiv || !commandInput || !exitsDisplayDiv || !promptTextSpan || !inputPromptLineDiv) {
+        console.error("CRITICAL: One or more core UI elements not found on DOMContentLoaded!");
+        document.body.innerHTML = "Error: Core UI elements missing. App cannot start. Check HTML IDs.";
+        return;
+    }
+    
+    startLoginProcess(); 
+    
+    commandInput.addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleInputSubmission();
+        }
+    });
+});
+// --- END OF SCRIPT.JS ---
+--- END OF FILE frontend/src/script.js ---
+
+--- START OF FILE frontend/src/index.html ---
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Unholy MUD of Tron & Allen1</title>
+    <style>
+        body {
+            background-color: #000;
+            color: #00ff00;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            display: flex;
+            /* For centering the container */
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .header-text {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .header-text h1 {
+            margin: 0 0 5px 0;
+            font-size: 1.8em;
+        }
+
+        .header-text p {
+            margin: 0;
+            font-size: 0.9em;
+            color: #00cc00;
+        }
+
+        .mud-container {
+            width: 100%;
+            max-width: 900px;
+            /* Or your preferred max width */
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #005500;
+            /* Border around the whole MUD interface */
+        }
+
+        .terminal-output {
+            flex-grow: 1;
+            /* Takes up available vertical space */
+            height: 75vh;
+            /* Start with a good height, flex-grow will adjust */
+            overflow-y: scroll;
+            background-color: #030303;
+            padding: 10px;
+            box-sizing: border-box;
+            white-space: pre-wrap;
+            line-height: 1.4;
+            border-bottom: 1px solid #005500;
+            /* Separator to exits bar */
+        }
+
+        .exits-bar {
+            /* New bar for exits */
+            background-color: #050505;
+            padding: 5px 10px;
+            color: #00ffff;
+            /* Cyan for exits */
+            font-size: 0.9em;
+            border-bottom: 1px solid #005500;
+            /* Separator to input line */
+            min-height: 1.5em;
+            /* Ensure it has some height even if empty */
+            white-space: nowrap;
+            overflow-x: auto;
+            /* In case exits are very long */
+        }
+
+        .terminal-input-line {
+            display: flex;
+            align-items: center;
+            background-color: #030303;
+            padding: 8px 10px;
+        }
+
+        #prompt-text {
+            margin-right: 8px;
+            color: #00dd00;
+            /* Bright green for prompt */
+        }
+
+        .terminal-output::-webkit-scrollbar {
+            width: 10px;
+            /* Width of the vertical scrollbar */
+            height: 10px;
+            /* Height of the horizontal scrollbar (if any) */
+        }
+
+        .terminal-output::-webkit-scrollbar-track {
+            background: #080808;
+            /* Dark background for the track (very dark grey) */
+            /* border-radius: 5px; */
+            /* Optional: rounded corners for the track */
+        }
+
+        .terminal-output::-webkit-scrollbar-thumb {
+            background-color: #005500;
+            /* Dark green for the scrollbar thumb */
+            border-radius: 5px;
+            /* Rounded corners for the thumb */
+            border: 2px solid #030303;
+            /* Creates a small border around the thumb, using the output bg color for seamlessness */
+        }
+
+        .terminal-output::-webkit-scrollbar-thumb:hover {
+            background-color: #007700;
+            /* Slightly lighter green on hover */
+        }
+
+        .terminal-output::-webkit-scrollbar-corner {
+            background: #030303;
+            /* Background of the corner where vertical and horizontal scrollbars meet */
+        }
+
+        .terminal-input {
+            scrollbar-width: thin;
+            /* Options: 'auto', 'thin', 'none' */
+            scrollbar-color: #005500 #080808;
+            /* thumb color, track color */
+            flex-grow: 1;
+            background-color: transparent;
+            border: none;
+            color: #00ff00;
+            font-family: inherit;
+            font-size: 1em;
+            outline: none;
+            padding: 0;
+        }
+
+        /* Styling for character lists in terminal output */
+        .char-list-item {
+            margin-left: 20px;
+        }
+
+        .char-list-item .char-index {
+            color: #ffff00;
+            /* Yellow for index */
+        }
+
+        .char-list-item .char-name {
+            color: #00ff00;
+        }
+
+        .char-list-item .char-class {
+            color: #00aaaa;
+            /* Teal for class */
+        }
+
+        /* Styling for room name in terminal output */
+        .room-name-header {
+            color: #ffff00;
+            font-weight: bold;
+            margin-top: 1em;
+            margin-bottom: 0.5em;
+        }
+
+        .error-message-inline {
+            color: #ff4444;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header-text">
+        <h1>Legend of the Solar Dragon's Tradewar<br>2002 Barrels of Food Fight<br>Over a Usurped Pit of Devastation (Alpha)</h1>
+        <p>(UMGTWOTRDBSR_EUPFDX_TPSC for short, obviously)</p>
+    </div>
+
+    <div class="mud-container">
+        <!-- Main output for telnet login, char select, game log -->
+        <div id="output" class="terminal-output"></div>
+
+        <!-- Exits bar - will be updated by JS -->
+        <div id="exits-display" class="exits-bar">Exits: (None)</div>
+
+        <!-- Command input line -->
+        <div id="input-prompt-line" class="terminal-input-line">
+            <span id="prompt-text">> </span>
+            <input type="text" id="commandInput" class="terminal-input" autofocus>
+        </div>
+    </div>
+
+    <!-- We no longer need separate HTML sections for char select/create.
+         JS will handle these flows within the #output div. -->
+
+    <script src="script.js"></script>
+</body>
+
+</html>
+--- END OF FILE frontend/src/index.html ---
+
+--- SCRIPT END --- Bundle complete: project_context_bundle.txt ---

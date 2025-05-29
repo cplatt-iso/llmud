@@ -1,105 +1,111 @@
 from fastapi import APIRouter, Depends, HTTPException, Body, status
 from sqlalchemy.orm import Session
 import uuid
-from pydantic import BaseModel
-from typing import Optional, Dict # Import Dict
+# from pydantic import BaseModel # No longer needed here if CommandRequest is in schemas
+from typing import Optional # Dict not needed for payload type
 
-from .... import schemas
+from .... import schemas # schemas.CommandRequest, schemas.CommandResponse
 from ....db.session import get_db
 from ....crud import crud_room, crud_character
-from ....api.dependencies import get_current_player
+from ....api.dependencies import get_current_active_character # <<< CHANGED
 from .... import models
 
 router = APIRouter()
 
-class CommandRequestWithCharacter(BaseModel):
-    command: str
-    character_id: uuid.UUID
+# class CommandRequestWithCharacter(BaseModel): # <<< REMOVED
+#     command: str
+#     character_id: uuid.UUID
 
-@router.post("", response_model=schemas.RoomInDB)
+@router.post("", response_model=schemas.CommandResponse) # <<< CHANGED response_model
 async def process_command_for_character(
-    payload: CommandRequestWithCharacter = Body(...),
+    payload: schemas.CommandRequest = Body(...), # <<< CHANGED payload type
     db: Session = Depends(get_db),
-    current_player: models.Player = Depends(get_current_player)
+    acting_character_orm: models.Character = Depends(get_current_active_character) # <<< CHANGED dependency
 ):
     command_text = payload.command.lower().strip()
-    
-    # --- 1. Validate Character and Ownership ---
-    acting_character_orm = crud_character.get_character(db, character_id=payload.character_id)
-    
-    if acting_character_orm is None: 
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail=f"Character with ID {payload.character_id} not found."
-        )
+    message_to_player: Optional[str] = None
 
-    # Assuming models.Player.id is Mapped[uuid.UUID] and models.Character.player_id is Mapped[uuid.UUID]
-    # Pylance should understand these are UUIDs when accessed.
-    if acting_character_orm.player_id != current_player.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Operation not permitted: This character does not belong to you."
-        )
-
-    # --- 2. Get Character's Current Room ---
-    # Assuming models.Character.current_room_id is Mapped[uuid.UUID]
+    # Character validation and ownership is now handled by get_current_active_character.
+    
     current_room_orm = crud_room.get_room_by_id(db, room_id=acting_character_orm.current_room_id)
     
     if current_room_orm is None:
         print(f"CRITICAL DATA ERROR: Character '{acting_character_orm.name}' (ID: {acting_character_orm.id}) "
               f"has current_room_id '{acting_character_orm.current_room_id}' which was not found in rooms table.")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=(f"Character '{acting_character_orm.name}' is in an invalid room. ")
+        return schemas.CommandResponse( # <<< CHANGED response
+            room_data=None, 
+            message_to_player=f"Character '{acting_character_orm.name}' is in an invalid room. Please contact an administrator."
         )
 
-    # --- 3. Process Movement Command ---
+    # --- Process "look" command ---
+    if command_text == "look" or command_text.startswith("look "): # Basic look
+        # message_to_player = "You look around." # Optional message
+        # The room_data itself will provide the description.
+        return schemas.CommandResponse(
+            room_data=schemas.RoomInDB.from_orm(current_room_orm),
+            message_to_player=message_to_player # Can be None
+        )
+
+    # --- Process Movement Command ---
     moved = False
-    next_room_uuid_str: Optional[str] = None 
-    target_room_uuid: Optional[uuid.UUID] = None 
-
-    current_exits: Dict[str, str] = current_room_orm.exits if current_room_orm.exits is not None else {}
-
-    # Simplified exit checking logic
-    possible_directions = ["north", "south", "east", "west", "up", "down"]
-    cleaned_command = command_text.split(" ")[-1] # Takes "go north" -> "north", or "n" -> "n"
-
-    # Map short commands to full direction names if necessary, or ensure your exits dict uses short names
-    direction_map = {"n": "north", "s": "south", "e": "east", "w": "west", "u": "up", "d": "down"}
-    target_direction = direction_map.get(cleaned_command, cleaned_command) # Convert "n" to "north" etc.
-
-    if target_direction in current_exits:
-        next_room_uuid_str = current_exits.get(target_direction)
-        if next_room_uuid_str: # Ensure a value was actually retrieved
-            moved = True
-        else:
-            print(f"Exit '{target_direction}' found but has no target UUID in room '{current_room_orm.name}'.")
-    else:
-        print(f"Command '{command_text}' (parsed as direction '{target_direction}') for char '{acting_character_orm.name}' is not a valid exit from room '{current_room_orm.name}'.")
-
-
-    if moved and next_room_uuid_str:
-        try:
-            target_room_uuid = uuid.UUID(hex=next_room_uuid_str)
-        except ValueError:
-            print(f"ERROR: Invalid UUID string '{next_room_uuid_str}' in exit data for room '{current_room_orm.name}'.")
-            moved = False 
-        
-        if moved and target_room_uuid: 
-            target_room_orm = crud_room.get_room_by_id(db, room_id=target_room_uuid)
-            if target_room_orm:
-                # Pylance should understand .id on ORM instances (if Mapped) returns the scalar type
-                updated_character_orm = crud_character.update_character_room(
-                    db, 
-                    character_id=acting_character_orm.id, 
-                    new_room_id=target_room_orm.id  
-                )
-                if updated_character_orm:
-                    print(f"Character '{updated_character_orm.name}' moved to '{target_room_orm.name}'.")
-                    return schemas.RoomInDB.from_orm(target_room_orm)
-                else:
-                    print(f"ERROR: Failed to update character room for char_id '{acting_character_orm.id}'.")
-            else:
-                print(f"ERROR: Target room UUID '{target_room_uuid}' not found.")
+    target_room_orm: Optional[models.Room] = None 
     
-    return schemas.RoomInDB.from_orm(current_room_orm)
+    current_exits = current_room_orm.exits if current_room_orm.exits is not None else {}
+    possible_directions = ["north", "south", "east", "west", "up", "down"]
+    cleaned_command = command_text.split(" ")[-1] 
+    direction_map = {"n": "north", "s": "south", "e": "east", "w": "west", "u": "up", "d": "down"}
+    target_direction = direction_map.get(cleaned_command, cleaned_command)
+
+    is_movement_attempt = target_direction in possible_directions
+
+    if is_movement_attempt:
+        if target_direction in current_exits:
+            next_room_uuid_str = current_exits.get(target_direction)
+            if next_room_uuid_str:
+                try:
+                    target_room_uuid = uuid.UUID(hex=next_room_uuid_str)
+                    potential_target_room_orm = crud_room.get_room_by_id(db, room_id=target_room_uuid)
+                    if potential_target_room_orm:
+                        target_room_orm = potential_target_room_orm
+                        moved = True
+                    else:
+                        message_to_player = "The path ahead seems to vanish into thin air."
+                        print(f"ERROR: Target room UUID '{target_room_uuid}' (for direction '{target_direction}') not found from room '{current_room_orm.name}'.")
+                except ValueError:
+                    message_to_player = "The exit in that direction appears to be corrupted."
+                    print(f"ERROR: Invalid UUID string '{next_room_uuid_str}' in exit data for room '{current_room_orm.name}'.")
+            else: # Should not happen if key exists (e.g. "north": null)
+                message_to_player = "The way in that direction is unclear."
+                print(f"Exit '{target_direction}' exists but has no target UUID in room '{current_room_orm.name}'.")
+        else: # It was a movement attempt (e.g., "north") but no such exit
+            message_to_player = "You can't go that way."
+    else: # Not "look" and not a recognized movement keyword/direction
+        message_to_player = f"I don't understand the command: '{command_text}'."
+
+
+    if moved and target_room_orm:
+        updated_character_orm = crud_character.update_character_room(
+            db, 
+            character_id=acting_character_orm.id, 
+            new_room_id=target_room_orm.id  
+        )
+        if updated_character_orm:
+            print(f"Character '{updated_character_orm.name}' moved to '{target_room_orm.name}'.")
+            # For successful move, message_to_player can be None; new room data implies success.
+            # Or, could set: message_to_player = f"You move {target_direction}."
+            return schemas.CommandResponse(
+                room_data=schemas.RoomInDB.from_orm(target_room_orm),
+                message_to_player=None 
+            )
+        else:
+            # This is a server-side error during update.
+            print(f"ERROR: Failed to update character room for char_id '{acting_character_orm.id}'.")
+            message_to_player = "You try to move, but an unseen force holds you in place."
+            # Fall through to return current room with this message
+    
+    # If no move happened (moved is False), or a move attempt failed validation, or DB update failed.
+    # message_to_player should be set if it wasn't a successful move.
+    return schemas.CommandResponse(
+        room_data=schemas.RoomInDB.from_orm(current_room_orm),
+        message_to_player=message_to_player
+    )

@@ -4,3 +4,4 @@
 from .room import RoomBase, RoomCreate, RoomUpdate, RoomInDB
 from .player import PlayerBase, PlayerCreate, PlayerUpdate, Player, PlayerInDB
 from .character import CharacterBase, CharacterCreate, CharacterUpdate, Character, CharacterInDB
+from .command import CommandRequest, CommandResponse
