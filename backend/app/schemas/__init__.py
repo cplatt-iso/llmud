@@ -14,3 +14,8 @@ from .room_item import ( # <<< ADDED
     RoomItemInstanceBase, RoomItemInstanceCreate, RoomItemInstanceUpdate,
     RoomItemInstance, RoomItemsView
 )
+from .mob import ( # <<< ADDED
+    MobTemplateBase, MobTemplateCreate, MobTemplateUpdate, MobTemplate,
+    RoomMobInstanceBase, RoomMobInstanceCreate, RoomMobInstanceUpdate,
+    RoomMobInstance, RoomMobsView
+)

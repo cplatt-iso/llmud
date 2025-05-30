@@ -1,0 +1,144 @@
+# backend/app/crud/crud_mob.py
+from sqlalchemy.orm import Session, joinedload
+import uuid
+from typing import Dict, List, Optional, Tuple
+
+from .. import models, schemas, crud
+
+# --- MobTemplate CRUD ---
+def get_mob_template(db: Session, mob_template_id: uuid.UUID) -> Optional[models.MobTemplate]:
+    return db.query(models.MobTemplate).filter(models.MobTemplate.id == mob_template_id).first()
+
+def get_mob_template_by_name(db: Session, name: str) -> Optional[models.MobTemplate]:
+    return db.query(models.MobTemplate).filter(models.MobTemplate.name == name).first()
+
+def get_mob_templates(db: Session, skip: int = 0, limit: int = 100) -> List[models.MobTemplate]:
+    return db.query(models.MobTemplate).offset(skip).limit(limit).all()
+
+def create_mob_template(db: Session, *, template_in: schemas.MobTemplateCreate) -> models.MobTemplate:
+    db_template = models.MobTemplate(**template_in.model_dump())
+    db.add(db_template)
+    db.commit()
+    db.refresh(db_template)
+    return db_template
+
+# --- RoomMobInstance CRUD ---
+def get_room_mob_instance(db: Session, room_mob_instance_id: uuid.UUID) -> Optional[models.RoomMobInstance]:
+    return db.query(models.RoomMobInstance).options(
+        joinedload(models.RoomMobInstance.mob_template) # Eager load template
+    ).filter(models.RoomMobInstance.id == room_mob_instance_id).first()
+
+def get_mobs_in_room(db: Session, room_id: uuid.UUID) -> List[models.RoomMobInstance]:
+    return db.query(models.RoomMobInstance).options(
+        joinedload(models.RoomMobInstance.mob_template)
+    ).filter(models.RoomMobInstance.room_id == room_id).all()
+
+def spawn_mob_in_room(
+    db: Session, *, 
+    room_id: uuid.UUID, 
+    mob_template_id: uuid.UUID,
+    instance_properties_override: Optional[Dict] = None
+) -> Optional[models.RoomMobInstance]:
+    template = get_mob_template(db, mob_template_id)
+    if not template:
+        print(f"Error: Mob template ID {mob_template_id} not found for spawning.")
+        return None
+    
+    room = db.query(models.Room).filter(models.Room.id == room_id).first()
+    if not room:
+        print(f"Error: Room ID {room_id} not found for spawning mob.")
+        return None
+
+    mob_instance = models.RoomMobInstance(
+        room_id=room_id,
+        mob_template_id=mob_template_id,
+        current_health=template.base_health, # Initialize health from template
+        instance_properties_override=instance_properties_override
+    )
+    db.add(mob_instance)
+    db.commit()
+    db.refresh(mob_instance)
+    # Manually load mob_template if not automatically loaded by refresh with relationship
+    # db.refresh(mob_instance, attribute_names=['mob_template']) # Or rely on lazy="joined"
+    return mob_instance
+
+def despawn_mob_from_room(db: Session, room_mob_instance_id: uuid.UUID) -> bool:
+    instance = get_room_mob_instance(db, room_mob_instance_id)
+    if instance:
+        db.delete(instance)
+        db.commit()
+        return True
+    return False
+
+def update_mob_instance_health(
+    db: Session, room_mob_instance_id: uuid.UUID, change_in_health: int
+) -> Optional[models.RoomMobInstance]:
+    instance = get_room_mob_instance(db, room_mob_instance_id)
+    if instance:
+        instance.current_health += change_in_health
+        # Basic health clamping, can be more sophisticated (e.g. death on <=0)
+        if instance.current_health < 0:
+            instance.current_health = 0 
+        # Max health check if applicable (e.g. instance.mob_template.base_health)
+        # if instance.current_health > instance.mob_template.base_health:
+        #     instance.current_health = instance.mob_template.base_health
+            
+        db.add(instance)
+        db.commit()
+        db.refresh(instance)
+        return instance
+    return None
+
+# --- Seeding Initial Mob Templates ---
+INITIAL_MOB_TEMPLATES = [
+    {
+        "name": "Giant Rat", "description": "A filthy rat, surprisingly large and aggressive.",
+        "mob_type": "beast", "base_health": 8, "base_attack": "1d4", "base_defense": 11,
+        "xp_value": 5, "properties": {"aggression": "aggressive_if_approached"}, "level": 1
+    },
+    {
+        "name": "Goblin Scout", "description": "A small, green-skinned humanoid with beady eyes and a rusty dagger.",
+        "mob_type": "humanoid", "base_health": 12, "base_attack": "1d6", "base_defense": 13,
+        "xp_value": 10, "properties": {"aggression": "aggressive_on_sight", "faction": "goblins"}, "level": 1
+    },
+]
+
+def seed_initial_mob_templates(db: Session):
+    print("Attempting to seed initial mob templates...")
+    seeded_count = 0
+    for template_data in INITIAL_MOB_TEMPLATES:
+        existing = get_mob_template_by_name(db, name=template_data["name"])
+        if not existing:
+            print(f"  Creating mob template: {template_data['name']}")
+            create_mob_template(db, template_in=schemas.MobTemplateCreate(**template_data))
+            seeded_count += 1
+        else:
+            print(f"  Mob template '{template_data['name']}' already exists.")
+    if seeded_count > 0:
+        print(f"Seeded {seeded_count} new mob templates.")
+    print("Mob template seeding complete.")
+
+# --- Spawning Mobs on Startup (Example) ---
+def seed_initial_mob_spawns(db: Session):
+    print("Attempting to seed initial mob spawns...")
+    # Example: Spawn a Giant Rat in the Genesis Room (0,0,0) if it's empty of rats
+    genesis_room = crud.crud_room.get_room_by_coords(db, x=0, y=0, z=0)
+    rat_template = get_mob_template_by_name(db, name="Giant Rat")
+
+    if genesis_room and rat_template:
+        # Check if a rat of this template already exists in this room to avoid over-spawning on every startup
+        # This is a simple check; a real system might have max counts per room or more complex spawn rules.
+        mobs_in_genesis = get_mobs_in_room(db, room_id=genesis_room.id)
+        rat_already_present = any(mob.mob_template_id == rat_template.id for mob in mobs_in_genesis)
+
+        if not rat_already_present:
+            print(f"  Spawning 'Giant Rat' in '{genesis_room.name}'...")
+            spawned_rat = spawn_mob_in_room(db, room_id=genesis_room.id, mob_template_id=rat_template.id)
+            if spawned_rat:
+                print(f"    Spawned {spawned_rat.mob_template.name} with ID {spawned_rat.id}")
+        else:
+            print(f"  'Giant Rat' (or similar) already present in '{genesis_room.name}'. Skipping spawn.")
+    else:
+        if not genesis_room: print("  Genesis room not found for mob spawning.")
+        if not rat_template: print("  Giant Rat template not found for mob spawning.")
+    print("Initial mob spawning process complete.")

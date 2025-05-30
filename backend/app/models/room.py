@@ -9,7 +9,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship # Added relations
 from ..db.base_class import Base
 
 if TYPE_CHECKING:
-    from .room_item_instance import RoomItemInstance # <<< ADDED
+    from .room_item_instance import RoomItemInstance 
+    from .room_mob_instance import RoomMobInstance
 
 class Room(Base):
     __tablename__ = "rooms"
@@ -27,6 +28,12 @@ class Room(Base):
         back_populates="room",
         cascade="all, delete-orphan", # If room is deleted, items on ground in it are also deleted.
         lazy="selectin" # Use selectin loading for items_on_ground when a Room is loaded
+    )
+
+    mobs_in_room: Mapped[List["RoomMobInstance"]] = relationship(
+        back_populates="room",
+        cascade="all, delete-orphan", # If room is deleted, mobs in it are also deleted.
+        lazy="selectin" 
     )
 
     def __repr__(self) -> str:

@@ -6,3 +6,4 @@ from . import crud_character
 from . import crud_item  # <<< ADDED
 from . import crud_character_inventory  # <<< ADDED
 from . import crud_room_item  # <<< ADDED
+from . import crud_mob

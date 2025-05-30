@@ -8,6 +8,7 @@ async def handle_help(context: CommandContext) -> schemas.CommandResponse:
         "  Movement: north (n), south (s), east (e), west (w), up (u), down (d), go <dir>.",
         "  look [target]                - Shows description of location, items on ground,",
         "                                 or an item in your inventory.",
+        "  attack (atk, kill) <target>  - Attack a creature in the room.",
         "  inventory (i)                - Shows your inventory (backpack items are numbered).",
         "  equip (eq) <item/num> [slot] - Equips an item (e.g. 'eq Dagger 1 main_hand').", 
         "  unequip (uneq) <item/slot>   - Unequips an item (e.g. 'uneq head').",

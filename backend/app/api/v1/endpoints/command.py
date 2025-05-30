@@ -14,6 +14,7 @@ from app.commands import inventory_parser
 from app.commands import social_parser
 from app.commands import debug_parser
 from app.commands import meta_parser
+# from app.commands import combat_parser 
 
 router = APIRouter()
 
@@ -51,11 +52,17 @@ COMMAND_REGISTRY: Dict[str, CommandHandler] = {
     "get": inventory_parser.handle_get,
     "take": inventory_parser.handle_get,
 
+    # Combat >>> moved to websockets
+    # "attack": combat_parser.handle_attack, 
+    # "atk": combat_parser.handle_attack,    
+    # "kill": combat_parser.handle_attack,    
+
     # Social
     "fart": social_parser.handle_fart,
 
     # Debug
     "giveme": debug_parser.handle_giveme,
+    "spawnmob": debug_parser.handle_spawnmob,
 
     # Meta
     "help": meta_parser.handle_help,
@@ -69,45 +76,35 @@ async def process_command_for_character(
     active_character: models.Character = Depends(get_current_active_character)
 ):
     original_command_text = payload.command.strip()
-    if not original_command_text: # Handle empty command
-        # Optionally, treat empty command as "look" or return a specific message
-        # For now, let's mimic "look" if empty, or you can raise an error/return help.
-        # Let's make it an unknown command to be explicit.
-        return schemas.CommandResponse(
-            message_to_player="Please type a command. Type 'help' for options."
-            # room_data will be None by default in CommandResponse if not set
-        )
+    if not original_command_text:
+        return schemas.CommandResponse(message_to_player="Please type a command.")
 
     command_parts = original_command_text.split()
     command_verb = command_parts[0].lower()
-    args = command_parts[1:] # List of arguments after the verb
+    args = command_parts[1:]
 
     current_room_orm = crud.crud_room.get_room_by_id(db, room_id=active_character.current_room_id)
     if not current_room_orm:
-        # This should ideally be caught by active_character dependency if it also checks room validity
-        return schemas.CommandResponse(
-            message_to_player="CRITICAL ERROR: Your character is in a void. Contact an admin."
-        )
+        return schemas.CommandResponse(message_to_player="CRITICAL ERROR: Character in void.")
     current_room_schema = schemas.RoomInDB.from_orm(current_room_orm)
 
     context = CommandContext(
-        db=db,
-        active_character=active_character,
-        current_room_orm=current_room_orm,
-        current_room_schema=current_room_schema,
-        original_command=original_command_text,
-        command_verb=command_verb,
-        args=args
+        db=db, active_character=active_character, current_room_orm=current_room_orm,
+        current_room_schema=current_room_schema, original_command=original_command_text,
+        command_verb=command_verb, args=args
     )
 
     handler = COMMAND_REGISTRY.get(command_verb)
-
     if handler:
-        # If handlers are async, use await. If not, remove await.
-        # For now, assume they are async as per CommandHandler type hint.
         return await handler(context)
     else:
+        # If command is an attack verb, suggest using game interface (implying WS)
+        if command_verb in ["attack", "atk", "kill", "kil", "ki", "k"]:
+             return schemas.CommandResponse(
+                room_data=current_room_schema,
+                message_to_player=f"Combat actions like '{command_verb}' are handled in real-time. (Use game interface)"
+            )
         return schemas.CommandResponse(
-            room_data=current_room_schema, # Provide current room context
-            message_to_player=f"I don't understand the command: '{original_command_text}'. Type 'help' or '?' for available commands."
+            room_data=current_room_schema,
+            message_to_player=f"I don't understand the command: '{original_command_text}'. Type 'help' or '?'."
         )

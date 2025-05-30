@@ -6,3 +6,5 @@ from .character import Character
 from .item import Item
 from .character_inventory_item import CharacterInventoryItem
 from .room_item_instance import RoomItemInstance
+from .mob_template import MobTemplate
+from .room_mob_instance import RoomMobInstance

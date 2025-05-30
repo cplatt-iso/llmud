@@ -1,21 +1,18 @@
 # backend/app/commands/utils.py
 import re
-from typing import List, Tuple, Dict
-import uuid # Ensure uuid is imported
+from typing import List, Optional, Tuple, Dict
+import uuid
+import random
 
-from app import models, schemas # app.
-from app.models.item import EQUIPMENT_SLOTS # app.models.item
+from app import models, schemas
+from app.models.item import EQUIPMENT_SLOTS
 
-# Helper to strip HTML for length calculation (very basic version)
-def get_visible_length(s: str) -> int:
+def get_visible_length(s: str) -> int: # ... content ...
     return len(re.sub(r'<[^>]+>', '', s))
 
-def format_room_items_for_player_message(
-    room_items: List[models.RoomItemInstance]
-) -> Tuple[str, Dict[int, uuid.UUID]]:
+def format_room_items_for_player_message(room_items: List[models.RoomItemInstance]) -> Tuple[str, Dict[int, uuid.UUID]]: # ... content ...
     lines = []
     item_map: Dict[int, uuid.UUID] = {}
-
     if room_items:
         lines.append("\nYou also see on the ground:")
         for idx, room_item_instance in enumerate(room_items):
@@ -28,13 +25,25 @@ def format_room_items_for_player_message(
             item_map[idx + 1] = room_item_instance.id
     return "\n".join(lines), item_map
 
-def format_inventory_for_player_message(
-    inventory_display_schema: schemas.CharacterInventoryDisplay
-) -> str:
+
+def format_room_mobs_for_player_message(room_mobs: List[models.RoomMobInstance]) -> Tuple[str, Dict[int, uuid.UUID]]: # ... content ...
+    lines = []
+    mob_map: Dict[int, uuid.UUID] = {}
+    if room_mobs:
+        lines.append("\nAlso here:")
+        for idx, mob_instance in enumerate(room_mobs):
+            template = mob_instance.mob_template
+            mob_name = template.name if template else "Unknown Creature"
+            mob_number_html = f"<span class='inv-backpack-number'>{idx + 1}.</span>"
+            mob_name_html = f"<span class='inv-item-name'>{mob_name}</span>"
+            lines.append(f"  {mob_number_html} {mob_name_html}")
+            mob_map[idx + 1] = mob_instance.id
+    return "\n".join(lines), mob_map
+
+def format_inventory_for_player_message(inventory_display_schema: schemas.CharacterInventoryDisplay) -> str: # ... content from previous version ...
     lines = []
     equipped_item_parts = [] 
     max_visible_equipped_prefix_len = 0
-
     if inventory_display_schema.equipped_items:
         for slot_key, inv_item_schema in inventory_display_schema.equipped_items.items():
             processed_slot_key = str(slot_key).strip()
@@ -47,13 +56,7 @@ def format_inventory_for_player_message(
             item_name_html = f"<span class='inv-item-name'>{item_name_raw}</span>"
             item_qty_html = f"<span class='inv-item-qty'>(Qty: {inv_item_schema.quantity})</span>"
             suffix_html = f"{item_name_html} {item_qty_html}"
-            equipped_item_parts.append({
-                'sort_key': display_slot_name_raw,
-                'prefix_html': prefix_html,
-                'visible_prefix_len': visible_prefix_len,
-                'suffix_html': suffix_html
-            })
-
+            equipped_item_parts.append({'sort_key': display_slot_name_raw,'prefix_html': prefix_html,'visible_prefix_len': visible_prefix_len,'suffix_html': suffix_html})
     lines.append(f"<span class='inv-section-header'>--- Equipped ---</span>")
     if equipped_item_parts:
         equipped_item_parts.sort(key=lambda x: x['sort_key'])
@@ -61,9 +64,7 @@ def format_inventory_for_player_message(
             padding_needed = (max_visible_equipped_prefix_len + 2) - parts['visible_prefix_len']
             padding_spaces = " " * padding_needed
             lines.append(f"{parts['prefix_html']}{padding_spaces}{parts['suffix_html']}")
-    else:
-        lines.append("  Nothing equipped.")
-    
+    else: lines.append("  Nothing equipped.")
     backpack_item_parts = []
     max_visible_backpack_prefix_len = 0
     if inventory_display_schema.backpack_items:
@@ -76,19 +77,100 @@ def format_inventory_for_player_message(
             item_name_html = f"<span class='inv-item-name'>{item_name_raw}</span>"
             item_qty_html = f"<span class='inv-item-qty'>(Qty: {inv_item_schema.quantity})</span>"
             suffix_html = f"{item_name_html} {item_qty_html}"
-            backpack_item_parts.append({
-                'prefix_html': prefix_html,
-                'visible_prefix_len': visible_prefix_len,
-                'suffix_html': suffix_html
-            })
-
+            backpack_item_parts.append({'prefix_html': prefix_html,'visible_prefix_len': visible_prefix_len,'suffix_html': suffix_html})
     lines.append(f"\n<span class='inv-section-header'>--- Backpack ---</span>")
     if backpack_item_parts:
         for parts in backpack_item_parts:
             padding_needed = (max_visible_backpack_prefix_len + 1) - parts['visible_prefix_len']
             padding_spaces = " " * padding_needed
             lines.append(f"{parts['prefix_html']}{padding_spaces}{parts['suffix_html']}")
-    else:
-        lines.append("  Your backpack is empty.")
-        
+    else: lines.append("  Your backpack is empty.")
     return "\n".join(lines)
+
+def roll_dice(dice_str: str) -> int: # ... content ...
+    if not dice_str: return 0
+    dice_str = dice_str.replace(" ", "")
+    parts = dice_str.lower().split('d')
+    num_dice = 1
+    if parts[0]:
+        if parts[0] == "" and len(parts) > 1: num_dice = 1
+        else:
+            try: num_dice = int(parts[0])
+            except ValueError:
+                try: return int(parts[0])
+                except ValueError: return 0
+    if len(parts) < 2: return num_dice
+    dice_spec = parts[1]
+    modifier = 0
+    if '+' in dice_spec:
+        sides_mod = dice_spec.split('+')
+        try:
+            dice_sides = int(sides_mod[0]); modifier = int(sides_mod[1])
+        except (ValueError, IndexError): return 0 
+    elif '-' in dice_spec:
+        sides_mod_neg = dice_spec.split('-')
+        try:
+            dice_sides = int(sides_mod_neg[0]); modifier = -int(sides_mod_neg[1])
+        except (ValueError, IndexError): return 0
+    else:
+        try: dice_sides = int(dice_spec)
+        except ValueError: return 0
+    if dice_sides <= 0: return 0 
+    total_roll = 0
+    for _ in range(num_dice): total_roll += random.randint(1, dice_sides)
+    return total_roll + modifier
+
+def resolve_mob_target(
+    target_ref: str, 
+    mobs_in_room: List[models.RoomMobInstance] # Pass the list of RoomMobInstance ORM objects
+) -> Tuple[Optional[models.RoomMobInstance], Optional[str]]:
+    """
+    Resolves a target reference (number, full name, or partial name) to a specific mob instance.
+    Returns (mob_instance, error_message_or_ambiguity_prompt_or_None_if_success)
+    """
+    if not mobs_in_room: # No mobs to target
+        return None, f"There is nothing called '{target_ref}' here to target."
+
+    target_ref_lower = target_ref.lower()
+    
+    # 1. Try to parse as a number (from 1-based index)
+    try:
+        num_ref = int(target_ref)
+        if 1 <= num_ref <= len(mobs_in_room):
+            return mobs_in_room[num_ref - 1], None # Found by number
+    except ValueError:
+        pass # Not a number, proceed to name matching
+
+    # 2. Try exact full name match (case-insensitive)
+    exact_matches: List[models.RoomMobInstance] = []
+    for mob_instance in mobs_in_room:
+        if mob_instance.mob_template and mob_instance.mob_template.name.lower() == target_ref_lower:
+            exact_matches.append(mob_instance)
+    
+    if len(exact_matches) == 1:
+        return exact_matches[0], None # Unique exact match
+    if len(exact_matches) > 1:
+        # Prefer exact match over partial if multiple exacts (unlikely for unique mob instances)
+        return exact_matches[0], "(Multiple exact name matches found, targeting first.)" 
+
+    # 3. Try partial name match (prefix, case-insensitive)
+    partial_matches: List[models.RoomMobInstance] = []
+    for mob_instance in mobs_in_room:
+        if mob_instance.mob_template and mob_instance.mob_template.name.lower().startswith(target_ref_lower):
+            partial_matches.append(mob_instance)
+
+    if len(partial_matches) == 1:
+        return partial_matches[0], None # Unique partial match
+    
+    if len(partial_matches) > 1:
+        # Ambiguous partial match
+        prompt_lines = [f"Which '{target_ref}' did you mean?"]
+        # Sort partial_matches by name for consistent numbering, if desired
+        partial_matches.sort(key=lambda m: m.mob_template.name if m.mob_template else "")
+        for i, mob_match in enumerate(partial_matches):
+            mob_name = mob_match.mob_template.name if mob_match.mob_template else "Unknown Mob"
+            prompt_lines.append(f"  {i + 1}. {mob_name}")
+        return None, "\n".join(prompt_lines)
+
+    # 4. No match found
+    return None, f"Cannot find anything called '{target_ref}' here to target."

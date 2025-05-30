@@ -179,23 +179,109 @@
             display: block;
             /* Ensures it takes its own line if appendToOutput's newline logic is tricky */
         }
+
         /* --- NEW CSS Classes for Inventory --- */
-        .inv-slot-name { /* For [Slot Name] */
-            color: #00ffff; /* Cyan */
+        .inv-slot-name {
+            /* For [Slot Name] */
+            color: #00ffff;
+            /* Cyan */
             font-weight: bold;
         }
-        .inv-backpack-number { /* For   1.   */
-            color: #ffff00; /* Yellow */
+
+        .inv-backpack-number {
+            /* For   1.   */
+            color: #ffff00;
+            /* Yellow */
         }
-        .inv-item-name { /* For the item's actual name */
-            color: #00ff00; /* Default bright green, but you could vary this by item type/rarity later */
+
+        .inv-item-name {
+            /* For the item's actual name */
+            color: #00ff00;
+            /* Default bright green, but you could vary this by item type/rarity later */
         }
-        .inv-item-qty { /* For (Qty: N) */
-            color: #aaaaaa; /* Dimmer grey */
+
+        .inv-item-qty {
+            /* For (Qty: N) */
+            color: #aaaaaa;
+            /* Dimmer grey */
         }
-        .inv-section-header { /* For --- Equipped --- and --- Backpack --- */
-            color: #f0f0f0; /* Brighter white/light grey */
+
+        .inv-section-header {
+            /* For --- Equipped --- and --- Backpack --- */
+            color: #f0f0f0;
+            /* Brighter white/light grey */
             font-weight: bold;
+        }
+
+        .inv-item-name {
+            /* Already exists - used for mob names too */
+            color: #00ff00;
+        }
+
+        .char-name {
+            /* Already exists - used for player name in messages */
+            color: #00ff00;
+            /* Or a distinct player color */
+        }
+
+        /* --- NEW Combat Specific Styles --- */
+        .combat-success {
+            color: #33cc33;
+            /* Bright Green for HIT */
+            font-weight: bold;
+        }
+
+        .combat-miss {
+            color: #ff9933;
+            /* Orange for MISS */
+        }
+
+        .combat-hit {
+            /* Damage player deals */
+            color: #ffff00;
+            /* Yellow */
+            font-weight: bold;
+        }
+
+        .combat-crit {
+            /* Critical damage player deals */
+            color: #ff9900;
+            /* Bright Orange */
+            font-weight: bold;
+            /* text-shadow: 0 0 5px #ff0000; Maybe a glow? */
+        }
+
+        .combat-hp {
+            color: #ffdddd;
+            /* Light pink for HP values */
+        }
+
+        .combat-death {
+            color: #ff3333;
+            /* Red for death */
+            font-weight: bold;
+            font-style: italic;
+        }
+
+        .combat-hit-player {
+            /* Damage mob deals to player */
+            color: #ff6666;
+            /* Red */
+            font-weight: bold;
+        }
+
+        .combat-crit-player {
+            /* Critical damage mob deals to player */
+            color: #cc0000;
+            /* Dark Red */
+            font-weight: bold;
+            /* text-shadow: 0 0 5px #ff0000; */
+        }
+
+        .error-message-inline {
+            /* Already exists */
+            color: #ff4444;
+            font-style: italic;
         }
     </style>
 </head>
@@ -217,7 +303,7 @@
         <!-- Command input line -->
         <div id="input-prompt-line" class="terminal-input-line">
             <span id="prompt-text">> </span>
-            <input type="text" id="commandInput" class="terminal-input" autofocus>
+            <input type="text" id="commandInput" class="terminal-input" name="mud_command_line" autofocus autocomplete="off">
         </div>
     </div>
 

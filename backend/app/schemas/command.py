@@ -1,7 +1,7 @@
 # backend/app/schemas/command.py
 from pydantic import BaseModel
 from typing import Optional
-from .room import RoomInDB # Import RoomInDB from room.py
+from .room import RoomInDB
 
 class CommandRequest(BaseModel):
     command: str
@@ -9,4 +9,5 @@ class CommandRequest(BaseModel):
 class CommandResponse(BaseModel):
     room_data: Optional[RoomInDB] = None
     message_to_player: Optional[str] = None
-    # Future fields: error_code, character_updates, inventory_updates, etc.
+    combat_over: bool = False # True if combat resolved (death, flee)
+    # Add other potential fields for game state updates if needed for HTTP path
