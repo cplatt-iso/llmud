@@ -11,7 +11,8 @@ from app.core.config import settings
 from app.crud.crud_room import seed_initial_world
 from app.crud.crud_item import seed_initial_items 
 from app.crud.crud_mob import seed_initial_mob_templates, seed_initial_mob_spawns
-from app.game_logic.combat_manager import start_combat_ticker_task # <<< NEW
+from app.game_logic.combat_manager import start_combat_ticker_task 
+from app.crud.crud_character_class import seed_initial_character_class_templates 
 
 base_class.Base.metadata.create_all(bind=engine)
 app = FastAPI(title=settings.PROJECT_NAME)
@@ -21,10 +22,11 @@ def on_startup_sync(): # Renamed to avoid clash if we make it async later
     db: Session = next(get_db())
     try:
         print("Running startup event: Seeding initial world...")
-        seed_initial_world(db)
-        # ... other seeders ...
+        seed_initial_world(db)        
         seed_initial_mob_templates(db)
         seed_initial_mob_spawns(db)
+        seed_initial_items(db)
+        seed_initial_character_class_templates(db)
         
         print("Starting combat ticker...")
         start_combat_ticker_task() # Call the function to create the task
@@ -33,7 +35,7 @@ def on_startup_sync(): # Renamed to avoid clash if we make it async later
         db.close()
 
 app.include_router(v1_api_router, prefix=settings.API_V1_STR)
-app.include_router(ws_router) # <<< ADDED WEBSOCKET ROUTER (usually no prefix or /ws)
+app.include_router(ws_router)
 
 @app.get("/")
 async def root():

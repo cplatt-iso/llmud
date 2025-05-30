@@ -17,13 +17,10 @@ router = APIRouter()
 def create_new_character_for_current_player(
     *,
     db: Session = Depends(get_db),
-    character_payload: schemas.CharacterCreate = Body(...),
+    character_payload: schemas.CharacterCreate = Body(...), # Contains name, optional class_name
     current_player: models.Player = Depends(get_current_player)
 ) -> Any:
-    """
-    Create a new character for the currently authenticated player.
-    Places the character in the starting room (0,0,0).
-    """
+    # ... (existing_character check remains the same) ...
     existing_character = crud.crud_character.get_character_by_name(db, name=character_payload.name)
     if existing_character:
         raise HTTPException(
@@ -31,22 +28,25 @@ def create_new_character_for_current_player(
             detail=f"A character with the name '{character_payload.name}' already exists."
         )
     
-    start_room_orm = crud.crud_room.get_room_by_coords(db, x=0, y=0, z=0) # Moved import to top level
+    start_room_orm = crud.crud_room.get_room_by_coords(db, x=0, y=0, z=0)
     if not start_room_orm:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Starting room not found. Cannot create character. Server misconfiguration."
         )
     
+    # The character_payload (schemas.CharacterCreate) now passes name and class_name (optional)
+    # to crud.crud_character.create_character.
+    # The CRUD function handles looking up the class template and applying defaults/modifiers.
     character = crud.crud_character.create_character(
-        db, 
-        character_in=character_payload,
+        db,
+        character_in=character_payload, # Contains name and potentially class_name
         player_id=current_player.id,
         initial_room_id=start_room_orm.id
     )
     
-    print(f"Character '{character.name}' created for player '{current_player.username}', starting in room '{start_room_orm.name}'.")
-    return character
+    print(f"Character '{character.name}' (Class: {character.class_name}) created for player '{current_player.username}', starting in room '{start_room_orm.name}'.")
+    return character # FastAPI will convert to schemas.Character
 
 
 @router.get("/mine", response_model=List[schemas.Character])

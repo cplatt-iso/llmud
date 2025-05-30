@@ -36,6 +36,7 @@ class CharacterInDBBase(CharacterBase): # Now inherits cleanly from CharacterBas
     id: uuid.UUID
     player_id: uuid.UUID
     current_room_id: uuid.UUID
+    character_class_template_id: Optional[uuid.UUID] = None 
 
     # Attributes and Vitals will be present from DB
     # strength, dexterity, etc., are already defined in CharacterBase as int

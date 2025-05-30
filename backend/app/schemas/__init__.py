@@ -19,3 +19,7 @@ from .mob import ( # <<< ADDED
     RoomMobInstanceBase, RoomMobInstanceCreate, RoomMobInstanceUpdate,
     RoomMobInstance, RoomMobsView
 )
+from .character_class_template import ( # <<< ADD THIS BLOCK
+    CharacterClassTemplateBase, CharacterClassTemplateCreate, CharacterClassTemplateUpdate,
+    CharacterClassTemplate, CharacterClassTemplateInDB
+)
