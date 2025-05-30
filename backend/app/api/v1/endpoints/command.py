@@ -65,6 +65,10 @@ COMMAND_REGISTRY: Dict[str, CommandHandler] = {
     "spawnmob": debug_parser.handle_spawnmob,
 
     # Meta
+    "score": meta_parser.handle_score, # <<< ADDED
+    "sc": meta_parser.handle_score, # <<< ADDED
+    "status": meta_parser.handle_score, # Alias for score
+    "st": meta_parser.handle_score, # Alias for score
     "help": meta_parser.handle_help,
     "?": meta_parser.handle_help,
 }

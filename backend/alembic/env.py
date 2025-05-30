@@ -16,9 +16,7 @@ sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(__file__), '..'
 
 
 from app.db.base_class import Base
-from app.models.room import Room
-from app.models.player import Player
-from app.models.character import Character
+from app import models
 
 config = context.config
 
@@ -97,7 +95,7 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, target_metadata=target_metadata, compare_type=True,  # Ensure type comparison is enabled
         )
 
         with context.begin_transaction():
