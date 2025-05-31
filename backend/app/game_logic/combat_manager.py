@@ -91,13 +91,14 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
             await send_combat_log(player_id, round_log_dead_char, True, current_room_schema_for_update)
         return
 
-    # Using actual character stats now
+    char_combat_stats = character.calculate_combat_stats()
+    
     player_current_hp = character.current_health 
     player_max_hp = character.max_health
-    player_ac = character.base_ac # Will be derived later
-    player_attack_bonus = character.base_attack_bonus # Will be derived later
-    player_damage_dice = character.base_damage_dice # Will be derived from weapon later
-    player_damage_bonus = character.base_damage_bonus # Will be derived from stats/weapon later
+    player_ac = char_combat_stats["effective_ac"] # Use calculated AC
+    player_attack_bonus = char_combat_stats["attack_bonus"]
+    player_damage_dice = char_combat_stats["damage_dice"]
+    player_damage_bonus = char_combat_stats["damage_bonus"]
 
     round_log: List[str] = []
     combat_resolved_this_round = False

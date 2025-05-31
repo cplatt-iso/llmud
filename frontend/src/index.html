@@ -303,9 +303,24 @@
         <!-- Command input line -->
         <div id="input-prompt-line" class="terminal-input-line">
             <span id="prompt-text">> </span>
-            <input type="text" id="commandInput" class="terminal-input" name="mud_command_line" autofocus autocomplete="off">
+            <input type="text" id="commandInput" class="terminal-input" name="mud_command_line" autofocus
+                autocomplete="off">
         </div>
-    </div>
+
+    <div id="map-viewport" style="
+        position: fixed; 
+        top: 70px; /* Adjust as needed */
+        right: 20px; /* Adjust as needed */
+        width: 300px; 
+        height: 250px; 
+        border: 1px solid #00cc00; 
+        background-color: #080808; 
+        overflow: hidden; /* Important for SVG panning later */
+        display: none; /* Initially hidden, shown when in game */
+        box-shadow: 0 0 10px #00cc00; /* Optional glow */
+    ">
+        <svg id="map-svg" width="100%" height="100%"></svg>
+    </div>  
 
     <!-- We no longer need separate HTML sections for char select/create.
          JS will handle these flows within the #output div. -->

@@ -23,3 +23,4 @@ from .character_class_template import ( # <<< ADD THIS BLOCK
     CharacterClassTemplateBase, CharacterClassTemplateCreate, CharacterClassTemplateUpdate,
     CharacterClassTemplate, CharacterClassTemplateInDB
 )
+from .map import MapLevelDataResponse, MapRoomData

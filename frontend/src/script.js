@@ -1,4 +1,4 @@
-// --- script.js (Main Orchestration & Event Listeners) ---
+// frontend/src/script.js
 
 // --- Configuration ---
 const API_BASE_URL = 'https://llmud.trazen.org/api/v1'; // For HTTP calls
@@ -9,22 +9,23 @@ const WS_PROTOCOL = window.location.protocol === "https:" ? "wss:" : "ws:";
 const gameState = {
     currentAuthToken: null,
     selectedCharacterId: null,
-    selectedCharacterName: null, // Good to have for display
-    loginState: 'INIT', // INIT, PROMPT_USER, PROMPT_PASSWORD, REGISTER_*, CHAR_SELECT_*, CHAR_CREATE_*, IN_GAME
+    selectedCharacterName: null,
+    loginState: 'INIT',
     tempUsername: '',
     tempPassword: '',
     tempCharName: '',
     availableCharacters: [],
     displayedRoomId: null,
     gameSocket: null,
-    isInCombat: false, // True if server indicates ongoing combat for this player
-    // No need for lastCombatCommand client-side if server drives rounds
+    isInCombat: false,
 };
 
 // --- UI Elements (Global for simplicity, could be managed by a UI module) ---
 let outputDiv, commandInput, exitsDisplayDiv, promptTextSpan, inputPromptLineDiv;
+let mapViewportDiv, mapSvgElement; // For Map
 
-// --- UI Module (Conceptual - ui.js) ---
+
+// --- UI Module ---
 const UI = {
     initializeElements: function () {
         outputDiv = document.getElementById('output');
@@ -32,8 +33,10 @@ const UI = {
         exitsDisplayDiv = document.getElementById('exits-display');
         promptTextSpan = document.getElementById('prompt-text');
         inputPromptLineDiv = document.getElementById('input-prompt-line');
+        mapViewportDiv = document.getElementById('map-viewport');     // MAP
+        mapSvgElement = document.getElementById('map-svg');         // MAP
 
-        if (!outputDiv || !commandInput || !exitsDisplayDiv || !promptTextSpan || !inputPromptLineDiv) {
+        if (!outputDiv || !commandInput || !exitsDisplayDiv || !promptTextSpan || !inputPromptLineDiv || !mapViewportDiv || !mapSvgElement) {
             console.error("CRITICAL: One or more core UI elements not found!");
             document.body.innerHTML = "Error: Core UI elements missing. App cannot start.";
             return false;
@@ -46,10 +49,7 @@ const UI = {
             commandInput.type = type;
             if (type === 'text') {
                 commandInput.setAttribute('autocomplete', 'off');
-                // Or even a bogus value sometimes works better if 'off' is ignored
-                // commandInput.setAttribute('autocomplete', 'nope'); 
             } else if (type === 'password') {
-                // Allow browser to help with password suggestions
                 commandInput.setAttribute('autocomplete', 'current-password');
             }
         }
@@ -57,7 +57,7 @@ const UI = {
 
     showAppropriateView: function () {
         console.log("UI.showAppropriateView called. Current loginState:", gameState.loginState);
-        if (!exitsDisplayDiv || !inputPromptLineDiv) return;
+        if (!exitsDisplayDiv || !inputPromptLineDiv || !mapViewportDiv) return;
 
         const isGameInputState = gameState.loginState === 'IN_GAME' ||
             gameState.loginState === 'CHAR_SELECT_PROMPT' ||
@@ -70,23 +70,21 @@ const UI = {
 
         exitsDisplayDiv.style.display = (gameState.loginState === 'IN_GAME') ? 'block' : 'none';
         inputPromptLineDiv.style.display = isGameInputState ? 'flex' : 'none';
+        mapViewportDiv.style.display = (gameState.loginState === 'IN_GAME') ? 'block' : 'none'; // MAP
     },
 
     appendToOutput: function (htmlContent, options = {}) {
         const { isPrompt = false, noNewLineBefore = false, noNewLineAfter = false, styleClass = '' } = options;
-        if (!outputDiv) return; // Ensure outputDiv is initialized and available
+        if (!outputDiv) return;
 
         let finalContent = '';
 
-        // Add newline before regular messages unless suppressed or it's a prompt continuing a line
         if (!isPrompt && !noNewLineBefore && outputDiv.innerHTML !== '' &&
             !outputDiv.innerHTML.endsWith('\n') && !outputDiv.innerHTML.endsWith('<br>') &&
             !outputDiv.innerHTML.endsWith(' ')) {
             finalContent += '\n';
         }
 
-        // Space before prompt text if not starting a new line or after space
-        // CORRECTED LINE:
         if (isPrompt && outputDiv.innerHTML !== '' && !outputDiv.innerHTML.endsWith(' ') &&
             !outputDiv.innerHTML.endsWith('\n') && !outputDiv.innerHTML.endsWith('<br>')) { // Was output_innerHTML
             finalContent += ' ';
@@ -101,13 +99,13 @@ const UI = {
         outputDiv.innerHTML += finalContent;
 
         if (!isPrompt && !noNewLineAfter) {
-            outputDiv.innerHTML += '\n'; // Add newline after regular messages unless suppressed
+            outputDiv.innerHTML += '\n';
         }
         outputDiv.scrollTop = outputDiv.scrollHeight;
     },
     clearOutput: function () { if (outputDiv) outputDiv.innerHTML = ''; },
     setInputCommandPlaceholder: function (text) { if (commandInput) commandInput.placeholder = text; },
-    setInputCommandType: function (type) { if (commandInput) commandInput.type = type; },
+    // setInputCommandType is already defined above
 
     updateExitsDisplay: function (roomData) {
         if (!exitsDisplayDiv) return;
@@ -120,14 +118,14 @@ const UI = {
         }
     },
 
-    updateGameDisplay: function (roomData) { // For room name/description
+    updateGameDisplay: function (roomData) {
         if (!outputDiv || !roomData) return;
         UI.appendToOutput(`\n--- ${roomData.name} ---`, { styleClass: 'room-name-header' });
         UI.appendToOutput(roomData.description || "It's eerily quiet.");
     }
 };
 
-// --- API Module (Conceptual - api.js for HTTP calls) ---
+// --- API Module ---
 const API = {
     fetchData: async function (endpoint, options = {}) {
         if (options.headers && gameState.currentAuthToken) {
@@ -140,7 +138,7 @@ const API = {
         const data = await response.json();
         if (!response.ok) {
             const error = new Error(data.detail || `HTTP error! status: ${response.status}`);
-            error.response = response; // Attach response for further inspection if needed
+            error.response = response;
             error.data = data;
             throw error;
         }
@@ -174,7 +172,7 @@ const API = {
     selectCharacterOnBackend: function (characterId) {
         return API.fetchData(`/character/${characterId}/select`, { method: 'POST' });
     },
-    sendHttpCommand: async function (commandText) { // For non-combat commands
+    sendHttpCommand: async function (commandText) {
         try {
             const responseData = await API.fetchData('/command', {
                 method: 'POST',
@@ -190,6 +188,9 @@ const API = {
                 await GameLogic.displayCharacterSelection();
             }
         }
+    },
+    fetchMapData: function () { // MAP
+        return API.fetchData('/map/level_data');
     }
 };
 
@@ -212,13 +213,12 @@ const WebSocketService = {
 
         gameState.gameSocket.onopen = function (event) {
             console.log("WebSocket connection established.");
-            // Server will send initial welcome/room data upon successful connection & auth
         };
 
         gameState.gameSocket.onmessage = function (event) {
             try {
                 const serverData = JSON.parse(event.data);
-                console.log("WS RCV:", serverData); // Log the raw data
+                console.log("WS RCV:", serverData);
                 GameLogic.handleWebSocketMessage(serverData);
             } catch (e) {
                 console.error("Error parsing WebSocket message or processing:", e);
@@ -236,11 +236,11 @@ const WebSocketService = {
             console.log("WebSocket connection closed:", event.code, event.reason);
             UI.appendToOutput(`! Game server connection closed. (Code: ${event.code} ${event.reason || ''})`.trim(), { styleClass: "game-message" });
             gameState.gameSocket = null;
-            gameState.isInCombat = false; // Reset combat state
+            gameState.isInCombat = false;
         };
     },
 
-    sendMessage: function (payloadObject) { // Always send JSON objects
+    sendMessage: function (payloadObject) {
         if (gameState.gameSocket && gameState.gameSocket.readyState === WebSocket.OPEN) {
             gameState.gameSocket.send(JSON.stringify(payloadObject));
         } else {
@@ -256,298 +256,480 @@ const WebSocketService = {
     }
 };
 
-// --- Game Logic & Command Handling (Conceptual - commandHandler.js / gameLogic.js) ---
-const GameLogic = {
-    startLoginProcess: function () {
-        gameState.loginState = 'PROMPT_USER';
-        gameState.currentAuthToken = null;
-        gameState.selectedCharacterId = null;
-        gameState.tempUsername = '';
-        gameState.availableCharacters = [];
-        gameState.isInCombat = false;
-        WebSocketService.close(); // Ensure WS is closed on logout/restart
-        UI.showAppropriateView();
-        UI.clearOutput();
-        UI.appendToOutput("Welcome to The Unholy MUD of Tron & Allen1.");
-        UI.appendToOutput("Version 0.0.0.0.Alpha.Pre-Shitshow");
-        UI.appendToOutput("-------------------------------------------------");
-        UI.appendToOutput("Username (or type 'new' to register): ", { isPrompt: true });
-        UI.setInputCommandPlaceholder("Enter username or 'new'");
-        UI.setInputCommandType('text');
-        if (commandInput) commandInput.focus();
+
+// --- MapDisplay Module ---
+const MapDisplay = {
+    svgNS: "http://www.w3.org/2000/svg",
+    config: {
+        roomBoxSize: 30,
+        roomSpacing: 15,
+        strokeWidth: 2,
+        roomDefaultFill: "#222233",
+        roomStroke: "#00dd00",
+        currentRoomFill: "#55ff55",
+        currentRoomStroke: "#ffffff",
+        lineStroke: "#009900",
+        visitedRoomFill: "#333344",
+    },
+    mapDataCache: null,
+
+    initialize: function () {
+        if (!mapSvgElement) {
+            console.error("Map SVG element not found for MapDisplay!");
+        }
     },
 
-    promptForPassword: async function () { /* ... */ gameState.loginState = 'PROMPT_PASSWORD'; UI.appendToOutput("Password: ", { isPrompt: true, noNewLineBefore: true }); UI.setInputCommandPlaceholder("Enter password"); UI.setInputCommandType('password'); if (commandInput) commandInput.focus(); },
-    promptForRegistrationUsername: async function () { /* ... */ gameState.loginState = 'REGISTER_PROMPT_USER'; UI.appendToOutput("Registering new user."); UI.appendToOutput("Desired username: ", { isPrompt: true }); UI.setInputCommandPlaceholder("Enter desired username"); UI.setInputCommandType('text'); if (commandInput) commandInput.focus(); },
-    promptForRegistrationPassword: async function () { /* ... */ gameState.loginState = 'REGISTER_PROMPT_PASSWORD'; UI.appendToOutput("Desired password (min 8 chars): ", { isPrompt: true, noNewLineBefore: true }); UI.setInputCommandPlaceholder("Enter desired password"); UI.setInputCommandType('password'); if (commandInput) commandInput.focus(); },
-    promptForNewCharacterName: async function () { /* ... */ gameState.loginState = 'CHAR_CREATE_PROMPT_NAME'; UI.appendToOutput("\n--- New Character Creation ---"); UI.appendToOutput("Enter character name: ", { isPrompt: true }); UI.setInputCommandPlaceholder("Character Name (3-50 chars)"); UI.setInputCommandType('text'); if (commandInput) commandInput.focus(); },
-    promptForNewCharacterClass: async function () { /* ... */ gameState.loginState = 'CHAR_CREATE_PROMPT_CLASS'; UI.appendToOutput(`Class for ${gameState.tempCharName} (e.g., Swindler) [Adventurer]: `, { isPrompt: true, noNewLineBefore: true }); UI.setInputCommandPlaceholder("Character Class (optional)"); UI.setInputCommandType('text'); if (commandInput) commandInput.focus(); },
+    clearMap: function () {
+        if (mapSvgElement) {
+            while (mapSvgElement.firstChild) {
+                mapSvgElement.removeChild(mapSvgElement.firstChild);
+            }
+        }
+    },
 
-    displayCharacterSelection: async function () {
-        gameState.loginState = 'CHAR_SELECT_PROMPT';
-        UI.showAppropriateView();
-        if (!gameState.currentAuthToken) { UI.appendToOutput("! Auth error.", { styleClass: 'error-message-inline' }); GameLogic.handleLogout(); return; }
-        UI.appendToOutput("\nFetching character list...");
+    fetchAndDrawMap: async function () {
+        if (gameState.loginState !== 'IN_GAME' || !gameState.currentAuthToken) {
+            this.clearMap();
+            return;
+        }
         try {
-            gameState.availableCharacters = await API.fetchCharacters();
-            UI.appendToOutput("\n--- Character Selection ---");
-            if (gameState.availableCharacters.length === 0) {
-                UI.appendToOutput("No characters found.");
+            // UI.appendToOutput("~ Fetching map data...", {styleClass: "game-message", noNewLineAfter: true}); // A bit noisy
+            console.log("Fetching map data...");
+            const data = await API.fetchMapData();
+            this.mapDataCache = data;
+            this.drawMap(data);
+            // UI.appendToOutput(" done.", {isPrompt: false, noNewLineBefore: true});
+            console.log("Map data fetched and drawn.");
+        } catch (error) {
+            console.error("Error fetching or drawing map:", error);
+            UI.appendToOutput(`! Map error: ${error.message || 'Failed to load map.'}`, { styleClass: 'error-message-inline' });
+            this.clearMap();
+        }
+    },
+
+    redrawMapForCurrentRoom: function (newCurrentRoomId) {
+        if (this.mapDataCache) {
+            this.mapDataCache.current_room_id = newCurrentRoomId;
+            this.drawMap(this.mapDataCache);
+        } else {
+            this.fetchAndDrawMap();
+        }
+    },
+
+    drawMap: function (mapData) {
+        this.clearMap();
+        if (!mapSvgElement || !mapData || !mapData.rooms || mapData.rooms.length === 0) {
+            if (mapSvgElement) {
+                const text = document.createElementNS(this.svgNS, "text");
+                text.setAttribute("x", "50%");
+                text.setAttribute("y", "50%");
+                text.setAttribute("fill", this.config.roomStroke);
+                text.setAttribute("text-anchor", "middle");
+                text.textContent = "(No map data for this level)";
+                mapSvgElement.appendChild(text);
+            }
+            return;
+        }
+
+        const rooms = mapData.rooms;
+        const currentRoomId = mapData.current_room_id;
+
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        rooms.forEach(room => {
+            minX = Math.min(minX, room.x);
+            maxX = Math.max(maxX, room.x);
+            minY = Math.min(minY, room.y); // Logical Y
+            maxY = Math.max(maxY, room.y); // Logical Y
+        });
+
+        const mapWidthInGridUnits = maxX - minX + 1;
+        const mapHeightInGridUnits = maxY - minY + 1;
+
+        // Effective size of a room cell including spacing for calculation
+        const cellWidth = this.config.roomBoxSize + this.config.roomSpacing;
+        const cellHeight = this.config.roomBoxSize + this.config.roomSpacing;
+
+        // Total pixel dimensions needed for the map content if drawn at 1:1 roomBoxSize
+        // Subtract one spacing because there's no spacing after the last room
+        const totalContentPixelWidth = mapWidthInGridUnits * this.config.roomBoxSize + Math.max(0, mapWidthInGridUnits - 1) * this.config.roomSpacing;
+        const totalContentPixelHeight = mapHeightInGridUnits * this.config.roomBoxSize + Math.max(0, mapHeightInGridUnits - 1) * this.config.roomSpacing;
+
+        const svgViewportWidth = mapSvgElement.clientWidth || 300;
+        const svgViewportHeight = mapSvgElement.clientHeight || 250;
+
+        // Add padding around the map content within the SVG viewport
+        const mapPadding = this.config.roomBoxSize * 0.5; // e.g., half a roomBoxSize
+
+        // Calculate scale to fit map into viewport (maintaining aspect ratio)
+        let scale = 1;
+        if (totalContentPixelWidth > 0 && totalContentPixelHeight > 0) { // Avoid division by zero if map is empty/tiny
+            const scaleX = (svgViewportWidth - 2 * mapPadding) / totalContentPixelWidth;
+            const scaleY = (svgViewportHeight - 2 * mapPadding) / totalContentPixelHeight;
+            scale = Math.min(scaleX, scaleY, 1.2); // Allow slight upscale if map is small, but primarily fit
+        }
+
+        // Scaled dimensions of one room cell
+        const scaledRoomBoxSize = this.config.roomBoxSize * scale;
+        const scaledRoomSpacing = this.config.roomSpacing * scale;
+        const scaledCellWidth = scaledRoomBoxSize + scaledRoomSpacing;
+        const scaledCellHeight = scaledRoomBoxSize + scaledRoomSpacing;
+
+        // Calculate total scaled dimensions of the map content
+        const totalScaledContentWidth = mapWidthInGridUnits * scaledRoomBoxSize + Math.max(0, mapWidthInGridUnits - 1) * scaledRoomSpacing;
+        const totalScaledContentHeight = mapHeightInGridUnits * scaledRoomBoxSize + Math.max(0, mapHeightInGridUnits - 1) * scaledRoomSpacing;
+
+        // Calculate offsets to center the map content within the padded area
+        // This is the top-left corner of the entire map grid in SVG coordinates
+        const overallOffsetX = mapPadding + (svgViewportWidth - 2 * mapPadding - totalScaledContentWidth) / 2;
+        const overallOffsetY = mapPadding + (svgViewportHeight - 2 * mapPadding - totalScaledContentHeight) / 2;
+
+        const g = document.createElementNS(this.svgNS, "g");
+        mapSvgElement.appendChild(g);
+
+        const roomLookup = {};
+        rooms.forEach(room => { roomLookup[room.id] = room; });
+
+        // Function to transform MUD (x,y) to SVG screen (x,y) for the top-left of the room box
+        const getRoomSvgPos = (roomX, roomY) => {
+            // X increases to the right, same as SVG
+            const svgX = overallOffsetX + (roomX - minX) * scaledCellWidth;
+            // Y in MUD increases "North" (up), SVG Y increases "South" (down)
+            // So we subtract from maxY or use (maxY - roomY)
+            const svgY = overallOffsetY + (maxY - roomY) * scaledCellHeight; // <<< Y-AXIS INVERSION
+            return { x: svgX, y: svgY };
+        };
+
+        // Draw lines first
+        rooms.forEach(room => {
+            const roomPos = getRoomSvgPos(room.x, room.y);
+            const startX = roomPos.x + scaledRoomBoxSize / 2; // Center of the box
+            const startY = roomPos.y + scaledRoomBoxSize / 2; // Center of the box
+
+            if (room.exits) {
+                for (const dir in room.exits) {
+                    const targetRoomId = room.exits[dir];
+                    const targetRoom = roomLookup[targetRoomId];
+                    if (targetRoom) {
+                        const targetRoomPos = getRoomSvgPos(targetRoom.x, targetRoom.y);
+                        const endX = targetRoomPos.x + scaledRoomBoxSize / 2;
+                        const endY = targetRoomPos.y + scaledRoomBoxSize / 2;
+
+                        const line = document.createElementNS(this.svgNS, "line");
+                        line.setAttribute("x1", startX);
+                        line.setAttribute("y1", startY);
+                        line.setAttribute("x2", endX);
+                        line.setAttribute("y2", endY);
+                        line.setAttribute("stroke", this.config.lineStroke);
+                        line.setAttribute("stroke-width", Math.max(1, this.config.strokeWidth * scale * 0.75));
+                        g.appendChild(line);
+                    }
+                }
+            }
+        });
+
+        // Draw rooms on top of lines
+        rooms.forEach(room => {
+            const roomPos = getRoomSvgPos(room.x, room.y);
+
+            const rect = document.createElementNS(this.svgNS, "rect");
+            rect.setAttribute("x", roomPos.x);
+            rect.setAttribute("y", roomPos.y);
+            rect.setAttribute("width", scaledRoomBoxSize);
+            rect.setAttribute("height", scaledRoomBoxSize);
+            rect.setAttribute("stroke-width", Math.max(1, this.config.strokeWidth * scale));
+            rect.setAttribute("rx", Math.max(1, 3 * scale));
+
+            if (room.id === currentRoomId) {
+                rect.setAttribute("fill", this.config.currentRoomFill);
+                rect.setAttribute("stroke", this.config.currentRoomStroke);
             } else {
-                UI.appendToOutput("Your characters:");
-                gameState.availableCharacters.forEach((char, index) => {
-                    UI.appendToOutput(`<span class="char-list-item"><span class="char-index">${index + 1}.</span> <span class="char-name">${char.name}</span> (<span class="char-class">${char.class_name}</span>)</span>`);
-                });
+                rect.setAttribute("fill", this.config.roomDefaultFill);
+                rect.setAttribute("stroke", this.config.roomStroke);
             }
-            UI.appendToOutput("Enter character #, or 'new': ", { isPrompt: true });
-            UI.setInputCommandPlaceholder("Enter #, or 'new'");
-        } catch (error) {
-            UI.appendToOutput(`! Error fetching characters: ${error.message}`, { styleClass: 'error-message-inline' });
-            if (error.response && error.response.status === 401) GameLogic.handleLogout(); else GameLogic.startLoginProcess();
-        }
-        if (commandInput) commandInput.focus();
-    },
 
-    selectCharacterAndStartGame: async function (character) { // Called after player picks a char from list
-        UI.appendToOutput(`\nSelecting ${character.name}...`);
-        try {
-            const initialRoomData = await API.selectCharacterOnBackend(character.id);
-            await GameLogic.enterGameModeWithCharacter(character, initialRoomData);
-        } catch (error) {
-            UI.appendToOutput(`! Error selecting character: ${error.message}`, { styleClass: 'error-message-inline' });
-            await GameLogic.displayCharacterSelection();
-        }
-    },
+            const title = document.createElementNS(this.svgNS, "title");
+            title.textContent = `${room.name || 'Unknown Room'} (${room.x},${room.y})`;
+            rect.appendChild(title);
 
-    enterGameModeWithCharacter: async function (character, initialRoomData) {
-        gameState.selectedCharacterId = character.id;
-        gameState.selectedCharacterName = character.name;
-        gameState.loginState = 'IN_GAME';
-        UI.showAppropriateView();
-        UI.clearOutput();
-        UI.appendToOutput(`Playing as: <span class="char-name">${character.name}</span>, the <span class="char-class">${character.class_name}</span>`);
-        UI.setInputCommandPlaceholder("Type command...");
-        UI.setInputCommandType('text');
-
-        if (initialRoomData) { // From HTTP /select response
-            UI.updateGameDisplay(initialRoomData);
-            UI.updateExitsDisplay(initialRoomData);
-            gameState.displayedRoomId = initialRoomData.id;
-        }
-        WebSocketService.connect(); // Connect WebSocket
-        if (commandInput) commandInput.focus();
-    },
-
-    handleLogout: function () {
-        WebSocketService.close();
-        // Reset all relevant gameState properties
-        gameState.currentAuthToken = null; gameState.selectedCharacterId = null; gameState.selectedCharacterName = null;
-        gameState.tempUsername = ''; gameState.availableCharacters = []; gameState.isInCombat = false;
-        console.log("Logged out.");
-        GameLogic.startLoginProcess();
-    },
-
-    handleHttpCommandResponse: function (responseData, originalCommand) {
-        // Handles responses from HTTP commands (look, move, inventory, etc.)
-        if (responseData.message_to_player) {
-            UI.appendToOutput(responseData.message_to_player, { styleClass: 'game-message' });
-        }
-        if (responseData.room_data) {
-            const cmdClean = originalCommand.toLowerCase().trim();
-            const isLook = cmdClean.startsWith("look") || cmdClean === "l";
-            if (isLook || gameState.displayedRoomId !== responseData.room_data.id) {
-                UI.updateGameDisplay(responseData.room_data);
-            }
-            UI.updateExitsDisplay(responseData.room_data);
-            gameState.displayedRoomId = responseData.room_data.id;
-        }
-        // Check if HTTP response indicates combat ended (e.g. if fleeing via HTTP was a thing)
-        if (responseData.combat_over === true) {
-            gameState.isInCombat = false;
-            // UI.appendToOutput("> Combat (via HTTP) has ended.", {styleClass: "game-message"});
-        }
-    },
-
-    handleWebSocketMessage: function (serverData) {
-        // Handles messages received over WebSocket (primarily combat and real-time updates)
-        if (serverData.type === "combat_update") {
-            if (serverData.log && serverData.log.length > 0) {
-                UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
-            }
-            if (serverData.room_data) { // Server might send room updates if combat moves player (flee) or changes room state
-                const isNewRoom = gameState.displayedRoomId !== serverData.room_data.id;
-                if (isNewRoom) { UI.updateGameDisplay(serverData.room_data); }
-                UI.updateExitsDisplay(serverData.room_data);
-                gameState.displayedRoomId = serverData.room_data.id;
-            }
-            gameState.isInCombat = !serverData.combat_over;
-            if (serverData.combat_over) {
-                // UI.appendToOutput("> Combat has ended.", {styleClass: "game-message"}); // Server log should say this
-            }
-        } else if (serverData.type === "initial_state" || serverData.type === "welcome_message") { // Example types
-            if (serverData.message) UI.appendToOutput(`GS: ${serverData.message}`, { styleClass: "game-message" });
-            if (serverData.room_data) { // Initial room data from WS connection
-                UI.updateGameDisplay(serverData.room_data);
-                UI.updateExitsDisplay(serverData.room_data);
-                gameState.displayedRoomId = serverData.room_data.id;
-            }
-            // serverData.log could be an array of initial messages
-            if (serverData.log && serverData.log.length > 0) {
-                UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
-            }
-        } else if (serverData.message) { // Other generic messages from WS
-            UI.appendToOutput(`GS: ${serverData.message}`, { styleClass: "game-message" });
-        } else { // Fallback for unhandled message structures
-            UI.appendToOutput(`GS (unparsed): ${JSON.stringify(serverData)}`, { styleClass: "game-message" });
-        }
-    },
-
-    handleInputSubmission: async function () {
-        if (!commandInput) return;
-        const inputText = commandInput.value.trim();
-        let echoText = inputText;
-        let echoOptions = { noNewLineBefore: true };
-
-        if (gameState.loginState === 'PROMPT_PASSWORD' || gameState.loginState === 'REGISTER_PROMPT_PASSWORD') {
-            echoText = '*'.repeat(inputText.length || 8);
-        } else if (gameState.loginState === 'IN_GAME' && inputText) { // Only echo if there's text in game
-            echoText = `> ${inputText}`;
-            echoOptions = {};
-        }
-
-        if (inputText || gameState.loginState === 'PROMPT_PASSWORD' || gameState.loginState === 'REGISTER_PROMPT_PASSWORD') {
-            UI.appendToOutput(echoText, echoOptions);
-        }
-        commandInput.value = '';
-
-        switch (gameState.loginState) {
-            case 'PROMPT_USER':
-                if (inputText.toLowerCase() === 'new') await GameLogic.promptForRegistrationUsername();
-                else if (inputText) { gameState.tempUsername = inputText; await GameLogic.promptForPassword(); }
-                else UI.appendToOutput("Username (or 'new'): ", { isPrompt: true, noNewLineBefore: true });
-                break;
-            case 'PROMPT_PASSWORD':
-                const passwordAttempt = inputText;
-                // UI.setInputCommandType('text'); // Set type first
-                // UI.setInputCommandPlaceholder("Enter command..."); // Then placeholder
-                // Actually, better to set these AFTER the API call or when moving to next state
-                UI.appendToOutput("\nAttempting login...");
-                try {
-                    const data = await API.loginUser(gameState.tempUsername, passwordAttempt);
-                    gameState.currentAuthToken = data.access_token;
-                    UI.appendToOutput("Login successful!");
-                    UI.setInputCommandType('text'); // << Set to text AFTER successful login
-                    UI.setInputCommandPlaceholder("Enter #, or 'new'"); // For char select
-                    commandInput.setAttribute('autocomplete', 'off'); // Explicitly turn off for next phase
-                    await GameLogic.displayCharacterSelection();
-                } catch (error) {
-                    UI.appendToOutput(`! Login failed: ${error.message || 'Incorrect credentials.'}`, {styleClass: 'error-message-inline'});
-                    // Don't change type yet, re-prompt for password
-                    // UI.setInputCommandType('password'); // Already password type
-                    UI.setInputCommandPlaceholder("Enter password");
-                    commandInput.setAttribute('autocomplete', 'current-password'); // Keep it as password field
-                    // await GameLogic.promptForPassword(); // No, this is called by user hitting enter again
-                }
-                break;
-            case 'REGISTER_PROMPT_USER':
-                if (inputText) { gameState.tempUsername = inputText; await GameLogic.promptForRegistrationPassword(); }
-                else UI.appendToOutput("Desired username: ", { isPrompt: true, noNewLineBefore: true });
-                break;
-            case 'REGISTER_PROMPT_PASSWORD':
-                gameState.tempPassword = inputText;
-                // UI.setInputCommandType('text'); // Set after registration attempt
-                UI.appendToOutput("\nAttempting registration...");
-                try {
-                    await API.registerUser(gameState.tempUsername, gameState.tempPassword);
-                    UI.appendToOutput("Registration successful! Please log in.");
-                } catch (error) {
-                    UI.appendToOutput(`! Registration failed: ${error.message || 'Error.'}`, {styleClass: 'error-message-inline'});
-                } finally {
-                    UI.setInputCommandType('text'); // << Set to text before going to login
-                    commandInput.setAttribute('autocomplete', 'off'); // Turn off autocomplete
-                    GameLogic.startLoginProcess(); // Go back to login after attempt
-                }
-                break;
-            case 'CHAR_SELECT_PROMPT':
-                if (inputText.toLowerCase() === 'new') await GameLogic.promptForNewCharacterName();
-                else {
-                    const charIndex = parseInt(inputText, 10) - 1;
-                    if (gameState.availableCharacters && charIndex >= 0 && charIndex < gameState.availableCharacters.length) {
-                        await GameLogic.selectCharacterAndStartGame(gameState.availableCharacters[charIndex]);
-                    } else {
-                        UI.appendToOutput("! Invalid selection.", { styleClass: 'error-message-inline' });
-                        UI.appendToOutput("Enter character #, or 'new': ", { isPrompt: true, noNewLineBefore: true });
-                    }
-                }
-                break;
-            case 'CHAR_CREATE_PROMPT_NAME':
-                gameState.tempCharName = inputText;
-                if (!gameState.tempCharName || gameState.tempCharName.length < 3 || gameState.tempCharName.length > 50) {
-                    UI.appendToOutput("! Invalid name (3-50 chars). Name: ", { isPrompt: true, styleClass: 'error-message-inline', noNewLineBefore: true });
-                    break;
-                }
-                await GameLogic.promptForNewCharacterClass();
-                break;
-            case 'CHAR_CREATE_PROMPT_CLASS':
-                const charClass = inputText || "Adventurer";
-                UI.appendToOutput(`\nCreating ${gameState.tempCharName} the ${charClass}...`);
-                try {
-                    await API.createCharacter(gameState.tempCharName, charClass);
-                    UI.appendToOutput("Character created!");
-                    await GameLogic.displayCharacterSelection(); // Refresh list
-                } catch (error) {
-                    UI.appendToOutput(`! Error creating character: ${error.message}`, { styleClass: 'error-message-inline' });
-                    await GameLogic.displayCharacterSelection();
-                }
-                break;
-            case 'IN_GAME':
-                if (!inputText) { // Empty input in game
-                    if (gameState.isInCombat) {
-                        // UI.appendToOutput("(Auto-combat active... type 'flee' or other actions)", {styleClass: "game-message"});
-                        // Server is driving rounds, empty input from player might mean "pass" or do nothing.
-                        // Or client could send a "continue_attack" or "default_action" message.
-                        // For now, empty input does nothing if in WS combat.
-                    } else {
-                        // await API.sendHttpCommand("look"); // Default action for empty input if not in combat
-                    }
-                    break;
-                }
-                const lowerInputText = inputText.toLowerCase();
-                // Define which commands go over WebSocket
-                const wsCommands = ["attack", "atk", "kill", "k", "flee", "cast", "skill"];
-                const commandVerb = lowerInputText.split(" ")[0];
-
-                if (wsCommands.includes(commandVerb)) {
-                    WebSocketService.sendMessage({ type: "command", command_text: inputText });
-                    // gameState.isInCombat will be set by server responses
-                } else {
-                    // Other commands (look, move, inv, eq, uneq, etc.) use HTTP
-                    if (gameState.isInCombat) {
-                        // UI.appendToOutput("> Typing non-combat command, server will decide combat disengagement.", {styleClass:"game-message"});
-                        // Server needs to handle if a player in WS combat sends an HTTP command
-                        // Potentially client sends a "cancel_combat_action" over WS first
-                    }
-                    await API.sendHttpCommand(inputText);
-                }
-                break;
-            default:
-                UI.appendToOutput("! System error: Unknown login state.", { styleClass: 'error-message-inline' });
-                GameLogic.startLoginProcess();
-        }
-        if (commandInput) commandInput.focus();
+            g.appendChild(rect);
+        });
     }
 };
 
-// --- Initial Setup (DOMContentLoaded) ---
-document.addEventListener('DOMContentLoaded', () => {
-    if (!UI.initializeElements()) return; // Stop if essential elements are missing
 
-    GameLogic.startLoginProcess();
+// --- Game Logic & Command Handling ---
+const GameLogic = {
+        startLoginProcess: function () {
+            gameState.loginState = 'PROMPT_USER';
+            gameState.currentAuthToken = null;
+            gameState.selectedCharacterId = null;
+            gameState.tempUsername = '';
+            gameState.availableCharacters = [];
+            gameState.isInCombat = false;
+            WebSocketService.close();
+            MapDisplay.clearMap(); // MAP
+            UI.showAppropriateView();
+            UI.clearOutput();
+            UI.appendToOutput("Welcome to The Unholy MUD of Tron & Allen1.");
+            UI.appendToOutput("Version 0.0.0.0.Alpha.Pre-Shitshow.NowWithMaps!");
+            UI.appendToOutput("-------------------------------------------------");
+            UI.appendToOutput("Username (or type 'new' to register): ", { isPrompt: true });
+            UI.setInputCommandPlaceholder("Enter username or 'new'");
+            UI.setInputCommandType('text');
+            if (commandInput) commandInput.focus();
+        },
 
-    commandInput.addEventListener('keypress', function (e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            GameLogic.handleInputSubmission();
+        promptForPassword: async function () { gameState.loginState = 'PROMPT_PASSWORD'; UI.appendToOutput("Password: ", { isPrompt: true, noNewLineBefore: true }); UI.setInputCommandPlaceholder("Enter password"); UI.setInputCommandType('password'); if (commandInput) commandInput.focus(); },
+        promptForRegistrationUsername: async function () { gameState.loginState = 'REGISTER_PROMPT_USER'; UI.appendToOutput("Registering new user."); UI.appendToOutput("Desired username: ", { isPrompt: true }); UI.setInputCommandPlaceholder("Enter desired username"); UI.setInputCommandType('text'); if (commandInput) commandInput.focus(); },
+        promptForRegistrationPassword: async function () { gameState.loginState = 'REGISTER_PROMPT_PASSWORD'; UI.appendToOutput("Desired password (min 8 chars): ", { isPrompt: true, noNewLineBefore: true }); UI.setInputCommandPlaceholder("Enter desired password"); UI.setInputCommandType('password'); if (commandInput) commandInput.focus(); },
+        promptForNewCharacterName: async function () { gameState.loginState = 'CHAR_CREATE_PROMPT_NAME'; UI.appendToOutput("\n--- New Character Creation ---"); UI.appendToOutput("Enter character name: ", { isPrompt: true }); UI.setInputCommandPlaceholder("Character Name (3-50 chars)"); UI.setInputCommandType('text'); if (commandInput) commandInput.focus(); },
+        promptForNewCharacterClass: async function () { gameState.loginState = 'CHAR_CREATE_PROMPT_CLASS'; UI.appendToOutput(`Class for ${gameState.tempCharName} (e.g., Warrior, Swindler) [Adventurer]: `, { isPrompt: true, noNewLineBefore: true }); UI.setInputCommandPlaceholder("Character Class (optional)"); UI.setInputCommandType('text'); if (commandInput) commandInput.focus(); },
+
+        displayCharacterSelection: async function () {
+            gameState.loginState = 'CHAR_SELECT_PROMPT';
+            UI.showAppropriateView();
+            if (!gameState.currentAuthToken) { UI.appendToOutput("! Auth error.", { styleClass: 'error-message-inline' }); GameLogic.handleLogout(); return; }
+            UI.appendToOutput("\nFetching character list...");
+            try {
+                gameState.availableCharacters = await API.fetchCharacters();
+                UI.appendToOutput("\n--- Character Selection ---");
+                if (gameState.availableCharacters.length === 0) {
+                    UI.appendToOutput("No characters found.");
+                } else {
+                    UI.appendToOutput("Your characters:");
+                    gameState.availableCharacters.forEach((char, index) => {
+                        UI.appendToOutput(`<span class="char-list-item"><span class="char-index">${index + 1}.</span> <span class="char-name">${char.name}</span> (<span class="char-class">${char.class_name}</span>)</span>`);
+                    });
+                }
+                UI.appendToOutput("Enter character #, or 'new': ", { isPrompt: true });
+                UI.setInputCommandPlaceholder("Enter #, or 'new'");
+            } catch (error) {
+                UI.appendToOutput(`! Error fetching characters: ${error.message}`, { styleClass: 'error-message-inline' });
+                if (error.response && error.response.status === 401) GameLogic.handleLogout(); else GameLogic.startLoginProcess();
+            }
+            if (commandInput) commandInput.focus();
+        },
+
+        selectCharacterAndStartGame: async function (character) {
+            UI.appendToOutput(`\nSelecting ${character.name}...`);
+            try {
+                const initialRoomData = await API.selectCharacterOnBackend(character.id);
+                await GameLogic.enterGameModeWithCharacter(character, initialRoomData);
+            } catch (error) {
+                UI.appendToOutput(`! Error selecting character: ${error.message}`, { styleClass: 'error-message-inline' });
+                await GameLogic.displayCharacterSelection();
+            }
+        },
+
+        enterGameModeWithCharacter: async function (character, initialRoomData) {
+            gameState.selectedCharacterId = character.id;
+            gameState.selectedCharacterName = character.name;
+            gameState.loginState = 'IN_GAME';
+            UI.showAppropriateView();
+            UI.clearOutput();
+            UI.appendToOutput(`Playing as: <span class="char-name">${character.name}</span>, the <span class="char-class">${character.class_name}</span>`);
+            UI.setInputCommandPlaceholder("Type command...");
+            UI.setInputCommandType('text');
+
+            if (initialRoomData) {
+                UI.updateGameDisplay(initialRoomData);
+                UI.updateExitsDisplay(initialRoomData);
+                gameState.displayedRoomId = initialRoomData.id;
+            }
+            WebSocketService.connect();
+            MapDisplay.fetchAndDrawMap(); // MAP
+            if (commandInput) commandInput.focus();
+        },
+
+        handleLogout: function () {
+            WebSocketService.close();
+            MapDisplay.clearMap(); // MAP
+            gameState.currentAuthToken = null; gameState.selectedCharacterId = null; gameState.selectedCharacterName = null;
+            gameState.tempUsername = ''; gameState.availableCharacters = []; gameState.isInCombat = false;
+            console.log("Logged out.");
+            GameLogic.startLoginProcess();
+        },
+
+        handleHttpCommandResponse: function (responseData, originalCommand) {
+            if (responseData.message_to_player) {
+                UI.appendToOutput(responseData.message_to_player, { styleClass: 'game-message' });
+            }
+            if (responseData.room_data) {
+                const cmdClean = originalCommand.toLowerCase().trim();
+                const isLook = cmdClean.startsWith("look") || cmdClean === "l";
+                const movedRoom = gameState.displayedRoomId !== responseData.room_data.id;
+
+                if (isLook || movedRoom) { // Update main display if looking or moved
+                    UI.updateGameDisplay(responseData.room_data);
+                }
+                UI.updateExitsDisplay(responseData.room_data);
+                gameState.displayedRoomId = responseData.room_data.id;
+
+                if (movedRoom) { // MAP - If player moved rooms
+                    MapDisplay.redrawMapForCurrentRoom(responseData.room_data.id);
+                }
+            }
+            if (responseData.combat_over === true) {
+                gameState.isInCombat = false;
+            }
+        },
+
+        handleWebSocketMessage: function (serverData) {
+            if (serverData.type === "combat_update") {
+                if (serverData.log && serverData.log.length > 0) {
+                    UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
+                }
+                if (serverData.room_data) {
+                    const movedRoom = gameState.displayedRoomId !== serverData.room_data.id;
+                    if (movedRoom) { UI.updateGameDisplay(serverData.room_data); }
+                    UI.updateExitsDisplay(serverData.room_data);
+                    gameState.displayedRoomId = serverData.room_data.id;
+                    if (movedRoom) { // MAP - If player moved via combat effect
+                        MapDisplay.redrawMapForCurrentRoom(serverData.room_data.id);
+                    }
+                }
+                gameState.isInCombat = !serverData.combat_over;
+            } else if (serverData.type === "initial_state" || serverData.type === "welcome_message") {
+                if (serverData.message) UI.appendToOutput(`GS: ${serverData.message}`, { styleClass: "game-message" });
+                if (serverData.room_data) {
+                    UI.updateGameDisplay(serverData.room_data);
+                    UI.updateExitsDisplay(serverData.room_data);
+                    gameState.displayedRoomId = serverData.room_data.id;
+                    // Consider if initial map draw should happen here or after WS fully established
+                    // MapDisplay.fetchAndDrawMap(); // Or rely on enterGameModeWithCharacter
+                }
+                if (serverData.log && serverData.log.length > 0) {
+                    UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
+                }
+            } else if (serverData.message) {
+                UI.appendToOutput(`GS: ${serverData.message}`, { styleClass: "game-message" });
+            } else {
+                UI.appendToOutput(`GS (unparsed): ${JSON.stringify(serverData)}`, { styleClass: "game-message" });
+            }
+        },
+
+        handleInputSubmission: async function () {
+            if (!commandInput) return;
+            const inputText = commandInput.value.trim();
+            let echoText = inputText;
+            let echoOptions = { noNewLineBefore: true };
+
+            if (gameState.loginState === 'PROMPT_PASSWORD' || gameState.loginState === 'REGISTER_PROMPT_PASSWORD') {
+                echoText = '*'.repeat(inputText.length || 8);
+            } else if (gameState.loginState === 'IN_GAME' && inputText) {
+                echoText = `> ${inputText}`;
+                echoOptions = {};
+            }
+
+            if (inputText || gameState.loginState === 'PROMPT_PASSWORD' || gameState.loginState === 'REGISTER_PROMPT_PASSWORD') {
+                UI.appendToOutput(echoText, echoOptions);
+            }
+            commandInput.value = '';
+
+            switch (gameState.loginState) {
+                case 'PROMPT_USER':
+                    if (inputText.toLowerCase() === 'new') await GameLogic.promptForRegistrationUsername();
+                    else if (inputText) { gameState.tempUsername = inputText; await GameLogic.promptForPassword(); }
+                    else UI.appendToOutput("Username (or 'new'): ", { isPrompt: true, noNewLineBefore: true });
+                    break;
+                case 'PROMPT_PASSWORD':
+                    const passwordAttempt = inputText;
+                    UI.appendToOutput("\nAttempting login...");
+                    try {
+                        const data = await API.loginUser(gameState.tempUsername, passwordAttempt);
+                        gameState.currentAuthToken = data.access_token;
+                        UI.appendToOutput("Login successful!");
+                        UI.setInputCommandType('text');
+                        UI.setInputCommandPlaceholder("Enter #, or 'new'");
+                        commandInput.setAttribute('autocomplete', 'off');
+                        await GameLogic.displayCharacterSelection();
+                    } catch (error) {
+                        UI.appendToOutput(`! Login failed: ${error.message || 'Incorrect credentials.'}`, { styleClass: 'error-message-inline' });
+                        UI.setInputCommandPlaceholder("Enter password");
+                        commandInput.setAttribute('autocomplete', 'current-password');
+                    }
+                    break;
+                case 'REGISTER_PROMPT_USER':
+                    if (inputText) { gameState.tempUsername = inputText; await GameLogic.promptForRegistrationPassword(); }
+                    else UI.appendToOutput("Desired username: ", { isPrompt: true, noNewLineBefore: true });
+                    break;
+                case 'REGISTER_PROMPT_PASSWORD':
+                    gameState.tempPassword = inputText;
+                    UI.appendToOutput("\nAttempting registration...");
+                    try {
+                        await API.registerUser(gameState.tempUsername, gameState.tempPassword);
+                        UI.appendToOutput("Registration successful! Please log in.");
+                    } catch (error) {
+                        UI.appendToOutput(`! Registration failed: ${error.message || 'Error.'}`, { styleClass: 'error-message-inline' });
+                    } finally {
+                        UI.setInputCommandType('text');
+                        commandInput.setAttribute('autocomplete', 'off');
+                        GameLogic.startLoginProcess();
+                    }
+                    break;
+                case 'CHAR_SELECT_PROMPT':
+                    if (inputText.toLowerCase() === 'new') await GameLogic.promptForNewCharacterName();
+                    else {
+                        const charIndex = parseInt(inputText, 10) - 1;
+                        if (gameState.availableCharacters && charIndex >= 0 && charIndex < gameState.availableCharacters.length) {
+                            await GameLogic.selectCharacterAndStartGame(gameState.availableCharacters[charIndex]);
+                        } else {
+                            UI.appendToOutput("! Invalid selection.", { styleClass: 'error-message-inline' });
+                            UI.appendToOutput("Enter character #, or 'new': ", { isPrompt: true, noNewLineBefore: true });
+                        }
+                    }
+                    break;
+                case 'CHAR_CREATE_PROMPT_NAME':
+                    gameState.tempCharName = inputText;
+                    if (!gameState.tempCharName || gameState.tempCharName.length < 3 || gameState.tempCharName.length > 50) {
+                        UI.appendToOutput("! Invalid name (3-50 chars). Name: ", { isPrompt: true, styleClass: 'error-message-inline', noNewLineBefore: true });
+                        break;
+                    }
+                    await GameLogic.promptForNewCharacterClass();
+                    break;
+                case 'CHAR_CREATE_PROMPT_CLASS':
+                    const charClass = inputText || "Adventurer"; // Default if empty
+                    UI.appendToOutput(`\nCreating ${gameState.tempCharName} the ${charClass}...`);
+                    try {
+                        await API.createCharacter(gameState.tempCharName, charClass);
+                        UI.appendToOutput("Character created!");
+                        await GameLogic.displayCharacterSelection();
+                    } catch (error) {
+                        UI.appendToOutput(`! Error creating character: ${error.message}`, { styleClass: 'error-message-inline' });
+                        await GameLogic.displayCharacterSelection();
+                    }
+                    break;
+                case 'IN_GAME':
+                    if (!inputText) { break; } // Empty input does nothing for now
+
+                    const lowerInputText = inputText.toLowerCase();
+                    const wsCommands = ["attack", "atk", "kill", "k", "flee", "cast", "skill"]; // Define WS commands
+                    const commandVerb = lowerInputText.split(" ")[0];
+
+                    if (wsCommands.includes(commandVerb)) {
+                        WebSocketService.sendMessage({ type: "command", command_text: inputText });
+                    } else {
+                        await API.sendHttpCommand(inputText);
+                    }
+                    break;
+                default:
+                    UI.appendToOutput("! System error: Unknown login state.", { styleClass: 'error-message-inline' });
+                    GameLogic.startLoginProcess();
+            }
+            if (commandInput) commandInput.focus();
         }
+    };
+
+    // --- Initial Setup (DOMContentLoaded) ---
+    document.addEventListener('DOMContentLoaded', () => {
+        if (!UI.initializeElements()) return;
+        MapDisplay.initialize(); // MAP
+        GameLogic.startLoginProcess();
+
+        commandInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                GameLogic.handleInputSubmission();
+            }
+        });
     });
-});

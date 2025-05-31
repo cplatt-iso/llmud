@@ -4,6 +4,12 @@ import uuid # Import uuid
 from typing import Optional, Dict, List
 from .. import models, schemas
 
+def get_rooms_by_z_level(db: Session, *, z_level: int) -> List[models.Room]:
+    """
+    Retrieve all rooms from the database by their Z-coordinate.
+    """
+    return db.query(models.Room).filter(models.Room.z == z_level).all()
+
 def get_room_by_id(db: Session, room_id: uuid.UUID) -> Optional[models.Room]: # room_id is now uuid.UUID
     """
     Retrieve a room from the database by its ID (which is a UUID).
@@ -60,38 +66,60 @@ def update_room(db: Session, *, db_room: models.Room, room_in: schemas.RoomUpdat
 _SEED_ROOM_UUIDS: Dict[str, uuid.UUID] = {}
 
 def seed_initial_world(db: Session):
-    print("Attempting to seed initial world with UUIDs...")
+    print("Attempting to seed a new, slightly more expansive initial world...")
+    _SEED_ROOM_UUIDS.clear() # Ensure it's empty before seeding
 
     room_definitions = [
         {
-            "coords": {"x": 0, "y": 0, "z": 0},
-            "name_tag": "genesis_room", # Internal tag for _SEED_ROOM_UUIDS
-            "data": schemas.RoomCreate(
-                name="The UUID Genesis of Despair",
-                description="This void is now uniquely identified. The walls whisper of primary keys and existential uniqueness.",
-                x=0, y=0, z=0,
-                exits={} # Will be populated after all rooms are created/UUIDs known
-            )
+            "coords": {"x": 0, "y": 0, "z": 0}, "name_tag": "central_hub",
+            "data": schemas.RoomCreate(name="Central Processing Unit (CPU)", x=0, y=0, z=0,
+                                       description="The air hums with the barely audible whir of unseen processes. Various identical corridors branch off. All business, no pleasure.")
         },
         {
-            "coords": {"x": 0, "y": 1, "z": 0}, # North of Genesis
-            "name_tag": "chilly_north_room",
-            "data": schemas.RoomCreate(
-                name="The Chilly UUID Corridor",
-                description="A uniquely cold passage. The air hums with the vibration of countless GUIDs.",
-                x=0, y=1, z=0,
-                exits={}
-            )
+            "coords": {"x": 0, "y": 1, "z": 0}, "name_tag": "north_corridor_1",
+            "data": schemas.RoomCreate(name="North Data Conduit Alpha", x=0, y=1, z=0,
+                                       description="A sterile corridor stretches northwards. The faint scent of ozone and regret hangs in the air.")
         },
         {
-            "coords": {"x": 1, "y": 1, "z": 0}, # East of Chilly North
-            "name_tag": "overlook_east_room",
-            "data": schemas.RoomCreate(
-                name="The Overlook of Minor UUID Disappointment",
-                description="From this vantage point, you can see a sea of globally unique identifiers, none of them particularly exciting.",
-                x=1, y=1, z=0,
-                exits={}
-            )
+            "coords": {"x": 0, "y": 2, "z": 0}, "name_tag": "archive_access_north",
+            "data": schemas.RoomCreate(name="Archival Sub-sector N-47b", x=0, y=2, z=0,
+                                       description="Rows of identical, featureless data monoliths stand silent sentinel. One of them is probably important.")
+        },
+        {
+            "coords": {"x": 1, "y": 0, "z": 0}, "name_tag": "east_corridor_1",
+            "data": schemas.RoomCreate(name="East Packet-Switching Nexus", x=1, y=0, z=0,
+                                       description="This passage heads east, past blinking lights that signify... something. Or perhaps nothing at all.")
+        },
+        {
+            "coords": {"x": 2, "y": 0, "z": 0}, "name_tag": "personnel_intake_east",
+            "data": schemas.RoomCreate(name="Personnel Intake & Re-Education", x=2, y=0, z=0,
+                                       description="A single, uncomfortable chair sits under a harsh light. A faded motivational poster reads: 'Compliance is Key.'")
+        },
+        {
+            "coords": {"x": 0, "y": -1, "z": 0}, "name_tag": "south_corridor_1",
+            "data": schemas.RoomCreate(name="South Maintenance Tunnel 7", x=0, y=-1, z=0,
+                                       description="Dimly lit and smelling faintly of burnt coffee and existential dread. The floor is slightly sticky.")
+        },
+        {
+            "coords": {"x": 0, "y": -2, "z": 0}, "name_tag": "waste_reclamation_south",
+            "data": schemas.RoomCreate(name="Waste Reclamation & Data Incineration", x=0, y=-2, z=0,
+                                       description="A large, ominous chute dominates one wall. You try not to think about what 'Waste Reclamation' entails here.")
+        },
+        {
+            "coords": {"x": -1, "y": 0, "z": 0}, "name_tag": "west_corridor_1",
+            "data": schemas.RoomCreate(name="West Logic Gate Array", x=-1, y=0, z=0,
+                                       description="To the west, a series of humming conduits. One emits a slightly higher-pitched hum than the others, a tiny rebellion in a sea of conformity.")
+        },
+        {
+            "coords": {"x": -2, "y": 0, "z": 0}, "name_tag": "auxiliary_storage_west",
+            "data": schemas.RoomCreate(name="Auxiliary Data Storage Unit W-Alpha", x=-2, y=0, z=0,
+                                       description="More data storage. It's data all the way down. You suspect some of it might be recipes for lukewarm soup.")
+        },
+        # A room not directly connected to the hub, to make the map more interesting
+        {
+            "coords": {"x": 1, "y": 1, "z": 0}, "name_tag": "break_room_anomaly",
+            "data": schemas.RoomCreate(name="Restricted Sub-routine Lounge (Anomaly)", x=1, y=1, z=0,
+                                       description="An oddly out-of-place room. A dusty vending machine hums defiantly in the corner, offering only 'Nutrient Paste (Beige)'.")
         }
     ]
 
@@ -102,60 +130,67 @@ def seed_initial_world(db: Session):
         
         existing_room = get_room_by_coords(db, **coords)
         if not existing_room:
-            print(f"Creating room '{room_def['data'].name}' at {coords}...")
-            # If ID is needed beforehand for linking (not in this simple exits model, but good to know):
-            # room_def['data'].id = uuid.uuid4() # Pre-assign UUID if needed
-            # _SEED_ROOM_UUIDS[name_tag] = room_def['data'].id
-            
+            print(f"Creating room '{room_def['data'].name}' at {coords} with tag '{name_tag}'...")
             created_room_orm = create_room(db, room_in=room_def["data"])
-            _SEED_ROOM_UUIDS[name_tag] = created_room_orm.id # type: ignore[assignment] # Store the generated UUID
+            _SEED_ROOM_UUIDS[name_tag] = created_room_orm.id
             print(f"  Created '{created_room_orm.name}' with UUID: {_SEED_ROOM_UUIDS[name_tag]}")
             created_rooms_this_run = True
         else:
-            print(f"Room '{existing_room.name}' at {coords} already exists with UUID: {existing_room.id}.")
-            _SEED_ROOM_UUIDS[name_tag] = existing_room.id # type: ignore[assignment] # Store existing UUID
+            print(f"Room '{existing_room.name}' at {coords} (tag: '{name_tag}') already exists with UUID: {existing_room.id}.")
+            _SEED_ROOM_UUIDS[name_tag] = existing_room.id
 
-    # If any rooms were newly created OR if we want to ensure exits are always up-to-date on startup:
     # Link rooms using their known/generated UUIDs
-    # For simplicity, we'll re-fetch and update exits even if rooms existed.
-    # This makes the seeding idempotent for exits too.
+    print("Linking room exits for the new world configuration...")
 
-    print("Linking room exits with UUIDs...")
-    # Genesis Room (0,0,0) exits
-    if "genesis_room" in _SEED_ROOM_UUIDS and "chilly_north_room" in _SEED_ROOM_UUIDS:
-        genesis_room_orm = get_room_by_id(db, room_id=_SEED_ROOM_UUIDS["genesis_room"])
-        if genesis_room_orm:
-            new_exits = {"north": str(_SEED_ROOM_UUIDS["chilly_north_room"])}
-            if genesis_room_orm.exits != new_exits: # type: ignore[operator] # Only update if changed
-                print(f"  Updating Genesis room exits to: {new_exits}")
-                genesis_room_orm.exits = new_exits # type: ignore[assignment]
-                db.add(genesis_room_orm) # Let SQLAlchemy track the change
+    # Define exits as a list of tuples: (source_tag, direction, target_tag)
+    exit_links = [
+        ("central_hub", "north", "north_corridor_1"), ("north_corridor_1", "south", "central_hub"),
+        ("north_corridor_1", "north", "archive_access_north"), ("archive_access_north", "south", "north_corridor_1"),
+        
+        ("central_hub", "east", "east_corridor_1"), ("east_corridor_1", "west", "central_hub"),
+        ("east_corridor_1", "east", "personnel_intake_east"), ("personnel_intake_east", "west", "east_corridor_1"),
+        
+        ("central_hub", "south", "south_corridor_1"), ("south_corridor_1", "north", "central_hub"),
+        ("south_corridor_1", "south", "waste_reclamation_south"), ("waste_reclamation_south", "north", "south_corridor_1"),
 
-    # Chilly North Room (0,1,0) exits
-    if "chilly_north_room" in _SEED_ROOM_UUIDS and "genesis_room" in _SEED_ROOM_UUIDS and "overlook_east_room" in _SEED_ROOM_UUIDS:
-        chilly_room_orm = get_room_by_id(db, room_id=_SEED_ROOM_UUIDS["chilly_north_room"])
-        if chilly_room_orm:
-            new_exits = {
-                "south": str(_SEED_ROOM_UUIDS["genesis_room"]),
-                "east": str(_SEED_ROOM_UUIDS["overlook_east_room"])
-            }
-            if chilly_room_orm.exits != new_exits: # type: ignore[operator]
-                print(f"  Updating Chilly North room exits to: {new_exits}")
-                chilly_room_orm.exits = new_exits # type: ignore[assignment]
-                db.add(chilly_room_orm)
+        ("central_hub", "west", "west_corridor_1"), ("west_corridor_1", "east", "central_hub"),
+        ("west_corridor_1", "west", "auxiliary_storage_west"), ("auxiliary_storage_west", "east", "west_corridor_1"),
 
-    # Overlook East Room (1,1,0) exits
-    if "overlook_east_room" in _SEED_ROOM_UUIDS and "chilly_north_room" in _SEED_ROOM_UUIDS:
-        overlook_room_orm = get_room_by_id(db, room_id=_SEED_ROOM_UUIDS["overlook_east_room"])
-        if overlook_room_orm:
-            new_exits = {"west": str(_SEED_ROOM_UUIDS["chilly_north_room"])}
-            if overlook_room_orm.exits != new_exits: # type: ignore[operator]
-                print(f"  Updating Overlook East room exits to: {new_exits}")
-                overlook_room_orm.exits = new_exits # type: ignore[assignment]
-                db.add(overlook_room_orm)
-    
+        # Connecting the "anomaly" room
+        ("north_corridor_1", "east", "break_room_anomaly"), ("break_room_anomaly", "west", "north_corridor_1"),
+        ("east_corridor_1", "north", "break_room_anomaly"), ("break_room_anomaly", "south", "east_corridor_1"),
+    ]
+
+    for source_tag, direction, target_tag in exit_links:
+        if source_tag in _SEED_ROOM_UUIDS and target_tag in _SEED_ROOM_UUIDS:
+            source_room_orm = get_room_by_id(db, room_id=_SEED_ROOM_UUIDS[source_tag])
+            if source_room_orm:
+                # Ensure exits dictionary exists and work with a mutable copy
+                current_exits = source_room_orm.exits.copy() if source_room_orm.exits is not None else {} # type: ignore
+                
+                new_exit_uuid_str = str(_SEED_ROOM_UUIDS[target_tag])
+
+                # Only update if the exit is different or doesn't exist
+                if current_exits.get(direction) != new_exit_uuid_str:
+                    source_name_for_log = source_room_orm.name if source_room_orm.name else f"Room with ID {_SEED_ROOM_UUIDS[source_tag]}"
+                    target_name_for_log = "Unknown Target Room" # Placeholder
+                    # Attempt to get target room name for better logging
+                    target_room_for_log = get_room_by_id(db, room_id=_SEED_ROOM_UUIDS[target_tag])
+                    if target_room_for_log and target_room_for_log.name:
+                        target_name_for_log = target_room_for_log.name
+                    else:
+                        target_name_for_log = f"Room with ID {_SEED_ROOM_UUIDS[target_tag]}"
+
+                    print(f"  Setting exit for '{source_name_for_log}': {direction} -> '{target_name_for_log}' (UUID: {new_exit_uuid_str})")
+                    
+                    current_exits[direction] = new_exit_uuid_str
+                    source_room_orm.exits = current_exits # Re-assign the modified dictionary
+                    db.add(source_room_orm) # Add to session to mark as dirty for commit
+        else:
+            print(f"  Warning: Could not link exit {source_tag} -> {target_tag}. One or both tags not found in _SEED_ROOM_UUIDS.")
+            print(f"    Available tags: {list(_SEED_ROOM_UUIDS.keys())}")
+
     db.commit() # Commit all exit updates at once
-    print("World seeding and exit linking complete.")
+    print("New world seeding and exit linking complete.")
 
-# Remove the old init_first_room_if_not_exists or ensure it's not called if you keep it.
-# The new seed_initial_world should be called from main.py startup.
+
