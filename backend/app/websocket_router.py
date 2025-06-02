@@ -189,6 +189,7 @@ async def websocket_game_endpoint(
             "max_mp": character.max_mana,
             "current_xp": character.experience_points,
             "next_level_xp": int(xp_for_next_level) if xp_for_next_level != float('inf') else -1,
+            "level": character.level,
             # For more advanced XP bar:
             # "xp_at_start_of_current_level": int(xp_at_start_of_current_level) if xp_at_start_of_current_level != float('inf') else 0,
         }

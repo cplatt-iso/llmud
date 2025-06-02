@@ -19,6 +19,12 @@
             box-sizing: border-box;
         }
 
+        .char-class-desc {
+            font-style: italic;
+            color: #999;
+            /* Or your preferred color */
+        }
+
         .header-text {
             text-align: center;
             margin-bottom: 20px;
@@ -351,6 +357,121 @@
             padding: 0 8px;
             /* Match vitals monitor padding if desired */
         }
+
+        #character-info-bar {
+            display: none;
+            /* Hide initially, show when in game */
+            background-color: #111;
+            /* Slightly different dark shade */
+            color: #00dd00;
+            /* Bright green text */
+            padding: 6px 10px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+            border-bottom: 1px solid #005500;
+            /* Green border */
+            text-align: center;
+            /* Center the content */
+            white-space: nowrap;
+            overflow: hidden;
+            /* Prevent content from breaking layout if too long */
+            text-overflow: ellipsis;
+            /* Add ... if content overflows */
+        }
+
+        #character-info-bar span {
+            margin: 0 5px;
+            /* Spacing between elements */
+        }
+
+        .char-info-separator {
+            color: #007700;
+            /* Darker green for separator */
+            font-weight: bold;
+        }
+
+        #char-info-name {
+            font-weight: bold;
+            color: #ffffff;
+            /* Lighter green for name */
+        }
+
+        #char-info-class {
+            font-style: italic;
+            color: #00ffdd;
+        }
+
+        #char-info-level {
+            font-weight: bold;
+        }
+
+        #bottom-info-bar {
+            display: none;
+            /* Hide initially, show when in game */
+            display: flex;
+            justify-content: space-between;
+            /* Pushes exits to left, currency to right */
+            align-items: center;
+            padding: 5px 10px;
+            background-color: #181818;
+            /* Slightly different from vitals monitor */
+            border-top: 1px solid #005500;
+            border-bottom: 1px solid #005500;
+            /* Add border bottom to separate from input line */
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+            color: #00cc00;
+            margin-bottom: 5px;
+            /* Space before input line */
+        }
+
+        #exits-display-container {
+            flex-basis: 60%;
+            /* Give exits more space initially */
+            text-align: left;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #exits-display-container b {
+            color: #bbb;
+            /* Match other labels */
+        }
+
+        #exits-text {
+            color: #00dd00;
+            /* Bright green for actual exits */
+        }
+
+
+        #currency-display-container {
+            flex-basis: 35%;
+            /* Space for currency */
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .currency {
+            margin-left: 10px;
+            /* Space between currency types */
+            font-weight: bold;
+        }
+
+        .currency.gold {
+            color: #FFD700;
+            /* Gold color */
+        }
+
+        .currency.silver {
+            color: #C0C0C0;
+            /* Silver color */
+        }
+
+        .currency.copper {
+            color: #B87333;
+            /* Copper color */
+        }
     </style>
 </head>
 
@@ -365,8 +486,24 @@
     <div class="game-area-wrapper">
         <div class="mud-container">
             <!-- Main MUD interface elements -->
+            <div id="character-info-bar">
+                <span id="char-info-name">Character Name</span>
+                <span class="char-info-separator">|</span>
+                <span id="char-info-class">Class</span>
+                <span class="char-info-separator">|</span>
+                <span>Level: <span id="char-info-level">1</span></span>
+            </div>
             <div id="output" class="terminal-output"></div>
-            <div id="exits-display" class="exits-bar">Exits: (None)</div>
+            <div id="bottom-info-bar">
+                <div id="exits-display-container">
+                    <b>Exits:</b> <span id="exits-text"></span>
+                </div>
+                <div id="currency-display-container">
+                    <span class="currency gold">0g</span>
+                    <span class="currency silver">0s</span>
+                    <span class="currency copper">0c</span>
+                </div>
+            </div>
             <div id="vitals-monitor">
                 <div class="vital-bar-container">
                     <span class="vital-label">HP:</span>
@@ -406,7 +543,7 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script type="module" src="main.js"></script>
 </body>
 
 </html>
