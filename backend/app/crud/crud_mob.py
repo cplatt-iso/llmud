@@ -102,26 +102,40 @@ INITIAL_MOB_TEMPLATES = [
     {
         "name": "Giant Rat", "description": "A filthy rat, surprisingly large and aggressive.",
         "mob_type": "beast", "base_health": 8, "base_attack": "1d4", "base_defense": 11,
-        "xp_value": 5, "properties": {"aggression": "aggressive_if_approached"}, "level": 1
+        "xp_value": 5, 
+        "aggression_type": "AGGRESSIVE_IF_APPROACHED", # Example, not yet implemented by ticker
+        "level": 1
     },
     {
         "name": "Goblin Scout", "description": "A small, green-skinned humanoid with beady eyes and a rusty dagger.",
         "mob_type": "humanoid", "base_health": 12, "base_attack": "1d6", "base_defense": 13,
-        "xp_value": 10, "properties": {"aggression": "aggressive_on_sight", "faction": "goblins"}, "level": 1
+        "xp_value": 10, "properties": {"faction": "goblins"}, 
+        "aggression_type": "AGGRESSIVE_ON_SIGHT", # <<< MAKE GOBLIN AGGRESSIVE
+        "level": 1
     },
 ]
+
 
 def seed_initial_mob_templates(db: Session):
     print("Attempting to seed initial mob templates...")
     seeded_count = 0
     for template_data in INITIAL_MOB_TEMPLATES:
         existing = get_mob_template_by_name(db, name=template_data["name"])
+        template_schema = schemas.MobTemplateCreate(**template_data) # Convert to schema for validation
         if not existing:
-            print(f"  Creating mob template: {template_data['name']}")
-            create_mob_template(db, template_in=schemas.MobTemplateCreate(**template_data))
+            print(f"  Creating mob template: {template_schema.name}")
+            create_mob_template(db, template_in=template_schema)
             seeded_count += 1
         else:
-            print(f"  Mob template '{template_data['name']}' already exists.")
+            # Optionally update existing templates if their aggression_type or other fields changed
+            # For now, just log existence
+            print(f"  Mob template '{template_schema.name}' already exists. Current aggression: {existing.aggression_type}, Seeded: {template_schema.aggression_type}")
+            if existing.aggression_type != template_schema.aggression_type:
+                 print(f"    Updating aggression type for {existing.name} to {template_schema.aggression_type}")
+                 existing.aggression_type = template_schema.aggression_type
+                 db.add(existing)
+                 db.commit() # Commit update
+
     if seeded_count > 0:
         print(f"Seeded {seeded_count} new mob templates.")
     print("Mob template seeding complete.")

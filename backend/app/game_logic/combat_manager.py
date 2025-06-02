@@ -11,6 +11,17 @@ from app import crud, models, schemas # Ensure all are available
 from app.websocket_manager import connection_manager as ws_manager
 from app.commands.utils import roll_dice, format_room_mobs_for_player_message, format_room_items_for_player_message 
 
+_OPPOSITE_DIRECTIONS = {
+    "north": "south", "south": "north",
+    "east": "west", "west": "east",
+    "up": "down", "down": "up",
+    "northeast": "southwest", "southwest": "northeast",
+    "northwest": "southeast", "southeast": "northwest",
+}
+def get_opposite_direction(direction: str) -> str:
+    return _OPPOSITE_DIRECTIONS.get(direction.lower(), "somewhere")
+
+
 from contextlib import contextmanager
 @contextmanager
 def db_session_for_task_sync(): 
@@ -25,6 +36,61 @@ mob_targets: Dict[uuid.UUID, uuid.UUID] = {}
 character_queued_actions: Dict[uuid.UUID, Optional[str]] = {}
 
 COMBAT_ROUND_INTERVAL = 3.0
+
+async def mob_initiates_combat(db: Session, mob_instance: models.RoomMobInstance, target_character: models.Character):
+    """Handles a mob initiating combat with a character."""
+    if not mob_instance or mob_instance.current_health <= 0:
+        return # Mob is dead or invalid
+    if not target_character or target_character.current_health <= 0:
+        return # Target is dead or invalid
+
+    # Check if target character is already in combat with this specific mob
+    if target_character.id in active_combats and mob_instance.id in active_combats[target_character.id]:
+        # print(f"Mob ({mob_instance.mob_template.name}) tried to initiate on {target_character.name} but already in combat together.")
+        return # Already engaged
+
+    print(f"COMBAT: {mob_instance.mob_template.name} initiates combat with {target_character.name}!")
+
+    # Add to global combat states
+    active_combats.setdefault(target_character.id, set()).add(mob_instance.id)
+    mob_targets[mob_instance.id] = target_character.id  # Mob targets this character
+
+    # No action is queued for the player automatically. They must react.
+    # character_queued_actions.pop(target_character.id, None) # Don't clear player's existing queue if any
+
+    mob_name_html = f"<span class='inv-item-name'>{mob_instance.mob_template.name}</span>"
+    char_name_html = f"<span class='char-name'>{target_character.name}</span>"
+    
+    # Personal message to the target player
+    initiation_message_to_player = [f"{mob_name_html} turns its baleful gaze upon you and <span class='combat-hit-player'>attacks!</span>"]
+    
+    # Get current room for the player's update
+    # Player's current room might not be mob's room if mob just roamed and attacked immediately (unlikely with current ticker separation)
+    # For safety, use target_character's current room.
+    player_room_orm = crud.crud_room.get_room_by_id(db, room_id=target_character.current_room_id)
+    player_room_schema = schemas.RoomInDB.from_orm(player_room_orm) if player_room_orm else None
+
+    await send_combat_log(
+        player_id=target_character.player_id,
+        messages=initiation_message_to_player,
+        room_data=player_room_schema # Send current room data
+    )
+
+    # Broadcast to others in the room (mob's current room)
+    # This uses mob's room_id because that's where the event visually occurs.
+    await _broadcast_combat_event(
+        db, 
+        room_id=mob_instance.room_id, 
+        acting_player_id=target_character.player_id, # The "event" is happening to this player
+        message=f"{mob_name_html} shrieks and <span class='combat-hit-player'>attacks</span> {char_name_html}!"
+    )
+
+def is_mob_in_any_player_combat(mob_id: uuid.UUID) -> bool:
+    """Checks if the given mob_id is part of any active combat session (as a target)."""
+    for _character_id, targeted_mob_ids in active_combats.items():
+        if mob_id in targeted_mob_ids:
+            return True
+    return False
 
 async def send_combat_log(player_id: uuid.UUID, messages: List[str], combat_ended: bool = False, room_data: Optional[schemas.RoomInDB] = None):
     if not messages and not combat_ended and not room_data:

@@ -16,6 +16,7 @@ class MobTemplateBase(BaseModel):
     loot_table_ref: Optional[str] = None
     properties: Optional[Dict[str, Any]] = None
     level: Optional[int] = None
+    aggression_type: Optional[str] = Field("NEUTRAL", description="e.g., NEUTRAL, AGGRESSIVE_ON_SIGHT") # <<< NEW FIELD
 
 class MobTemplateCreate(MobTemplateBase):
     pass
@@ -31,6 +32,7 @@ class MobTemplateUpdate(BaseModel): # Allow partial updates
     loot_table_ref: Optional[str] = None
     properties: Optional[Dict[str, Any]] = None
     level: Optional[int] = None
+    aggression_type: Optional[str] = None # <<< NEW FIELD
 
 class MobTemplateInDBBase(MobTemplateBase):
     id: uuid.UUID
@@ -52,30 +54,29 @@ class RoomMobInstanceCreate(BaseModel): # For service layer use
     mob_template_id: uuid.UUID
     # current_health typically set from template by service
     instance_properties_override: Optional[Dict[str, Any]] = None 
-    spawn_point_id: Optional[uuid.UUID] = None 
+    spawn_definition_id: Optional[uuid.UUID] = None # <<< RENAMED FROM spawn_point_id
     
 class RoomMobInstanceUpdate(BaseModel): # For combat updates
     current_health: Optional[int] = None
     instance_properties_override: Optional[Dict[str, Any]] = Field(None, description="Use with caution, replaces entire dict")
 
-class RoomMobInstanceInDBBase(BaseModel): # Note: Not inheriting from RoomMobInstanceBase to control field order for MobTemplate
+class RoomMobInstanceInDBBase(BaseModel): 
     id: uuid.UUID
     room_id: uuid.UUID
-    mob_template_id: uuid.UUID # Keep this for reference
+    mob_template_id: uuid.UUID 
     current_health: int
     instance_properties_override: Optional[Dict[str, Any]] = None
-    spawn_point_id: Optional[uuid.UUID] = None 
+    spawn_definition_id: Optional[uuid.UUID] = None # <<< RENAMED FROM spawn_point_id
     spawned_at: datetime
     last_action_at: Optional[datetime] = None
     
-    mob_template: MobTemplate # Include full mob template details
+    mob_template: MobTemplate 
 
     class Config:
         from_attributes = True
 
-class RoomMobInstance(RoomMobInstanceInDBBase): # For returning to client
+class RoomMobInstance(RoomMobInstanceInDBBase): 
     pass
 
-# Schema for displaying mobs in a room (could be part of a larger RoomDetail schema)
 class RoomMobsView(BaseModel):
     mobs_in_room: List[RoomMobInstance] = Field(default_factory=list)

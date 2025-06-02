@@ -3,16 +3,17 @@ import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any, TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, DateTime, func, String, Boolean # Added Boolean
+from sqlalchemy import ForeignKey, Integer, DateTime, func, String, Boolean 
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.base_class import Base
+# from .. import models # Let's remove this direct import from here
 
 if TYPE_CHECKING:
-    from .room import Room 
-    from .mob_template import MobTemplate 
-    from .mob_spawn_definition import MobSpawnDefinition # Changed from MobSpawnPoint
+    from .room import Room # Import specific model for type hinting
+    from .mob_template import MobTemplate
+    from .mob_spawn_definition import MobSpawnDefinition
 
 class RoomMobInstance(Base):
     __tablename__ = "room_mob_instances"
@@ -22,20 +23,13 @@ class RoomMobInstance(Base):
     room_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("rooms.id"), index=True, nullable=False)
     mob_template_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("mob_templates.id"), index=True, nullable=False)
     
-    # Links to the MobSpawnDefinition that created this instance, if any.
     spawn_definition_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True), 
-        ForeignKey("mob_spawn_definitions.id"), # <<< Will match new table name
+        ForeignKey("mob_spawn_definitions.id"),
         nullable=True, 
         index=True,
-        name="spawn_point_id" # Keep old column name in DB for now to simplify migration if needed, or rename
+        name="spawn_point_id" 
     ) 
-    # If you want to rename the DB column, the migration will be more complex.
-    # For now, let's assume we might keep the column name `spawn_point_id` in the DB for a bit
-    # but use `spawn_definition_id` in the ORM model. Or rename consistently.
-    # Let's be consistent and rename in ORM:
-    # spawn_definition_id: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("mob_spawn_definitions.id"), nullable=True, index=True)
-
 
     current_health: Mapped[int] = mapped_column(Integer, nullable=False)
     instance_properties_override: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
@@ -46,11 +40,16 @@ class RoomMobInstance(Base):
                                                       comment="True if this mob was placed specifically and should not be respawned by general systems.")
 
     # Relationships
+    # For the Mapped type hint, use the specific import from TYPE_CHECKING
+    # For the relationship string, use the class name directly if it's defined in another module
+    # or the fully qualified string if needed.
     room: Mapped["Room"] = relationship(back_populates="mobs_in_room")
-    mob_template: Mapped["MobTemplate"] = relationship(lazy="joined")
+    mob_template: Mapped["MobTemplate"] = relationship(lazy="joined") 
     
-    # Optional: Relationship to MobSpawnDefinition
-    # originating_spawn_definition: Mapped[Optional["MobSpawnDefinition"]] = relationship(foreign_keys=[spawn_definition_id])
+    originating_spawn_definition: Mapped[Optional["MobSpawnDefinition"]] = relationship(
+        foreign_keys=[spawn_definition_id], 
+        back_populates="spawned_mob_instances"
+    )
 
     def __repr__(self) -> str:
         return f"<RoomMobInstance(id={self.id}, room_id='{self.room_id}', template_id='{self.mob_template_id}', spawn_def_id='{self.spawn_definition_id}', hp={self.current_health})>"

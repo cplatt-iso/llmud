@@ -10,39 +10,29 @@ from app.db.session import SessionLocal
 # but generally, tasks will import what they need.
 
 from app.game_logic.mob_respawner import manage_mob_populations_task 
+from app.game_logic.mob_ai_ticker import process_roaming_mobs_task, process_aggressive_mobs_task
 
 # --- Configuration ---
-WORLD_TICK_INTERVAL_SECONDS = 30.0
+WORLD_TICK_INTERVAL_SECONDS = 10.0
 
 # --- Task Registry ---
 world_tick_tasks: Dict[str, Callable[[Session], Awaitable[None]]] = {}
 
 
 @contextmanager
-def db_session_for_world_tick() -> Iterator[Session]: # <<< CORRECTED RETURN TYPE HINT
+def db_session_for_world_tick() -> Iterator[Session]: 
     """Provides a DB session for the duration of a world tick's tasks."""
     db = SessionLocal()
     try:
-        yield db # Yields the Session object
+        yield db 
     finally:
         db.close()
 
-# --- Task Registration Function (defined once) ---
 def register_world_tick_task(task_name: str, task_func: Callable[[Session], Awaitable[None]]):
     if task_name in world_tick_tasks:
         print(f"Warning: World tick task '{task_name}' is being redefined.")
     world_tick_tasks[task_name] = task_func
-    # print(f"World Ticker: Registered task '{task_name}'.") # Moved to init summary
 
-
-# --- Import task functions from their respective modules ---
-from app.game_logic.mob_respawner import manage_mob_populations_task
-# Example for future tasks:
-# from app.game_logic.weather_system import update_weather_task
-# from app.game_logic.item_decay import process_item_decay_task
-
-
-# --- Centralized Initialization and Registration of All Tasks ---
 def _initialize_and_register_all_world_tasks():
     """
     This function is called once when this module is loaded.
@@ -51,18 +41,15 @@ def _initialize_and_register_all_world_tasks():
     print("World Ticker: Initializing and registering world tick tasks...")
     
     register_world_tick_task("mob_population_manager", manage_mob_populations_task)
-    # register_world_tick_task("weather_updater", update_weather_task) # Example
-    # register_world_tick_task("item_decay_processor", process_item_decay_task) # Example
+    register_world_tick_task("roaming_mob_processor", process_roaming_mobs_task) # <<< NEW TASK
+    register_world_tick_task("aggressive_mob_processor", process_aggressive_mobs_task) # <<< NEW TASK
     
     print(f"World Ticker: All tasks registered. Active tasks: {list(world_tick_tasks.keys())}")
 
-_initialize_and_register_all_world_tasks() # Execute registration when this module is first imported
+_initialize_and_register_all_world_tasks() 
 
 
-# --- Main Ticker Loop ---
 async def world_ticker_loop():
-    # Message moved to _initialize_and_register_all_world_tasks
-    # print(f"World Ticker: Loop starting. Tick interval: {WORLD_TICK_INTERVAL_SECONDS}s.")
     print(f"World Ticker: Loop now running with interval: {WORLD_TICK_INTERVAL_SECONDS}s.")
     while True:
         start_time = time.time()
@@ -73,14 +60,18 @@ async def world_ticker_loop():
 
         try:
             with db_session_for_world_tick() as db:
-                for task_name, task_func in world_tick_tasks.items():
+                # Create a list of tasks to run to avoid issues if tasks modify the registry (not expected)
+                tasks_to_run = list(world_tick_tasks.items())
+                for task_name, task_func in tasks_to_run:
                     try:
+                        # print(f"World Ticker: Running task '{task_name}'...") # Verbose logging
                         await task_func(db)
+                        # print(f"World Ticker: Task '{task_name}' completed.") # Verbose logging
                     except Exception as e:
-                        print(f"ERROR in world_tick task '{task_name}': {e}") # Consider logging full traceback
+                        print(f"ERROR in world_tick task '{task_name}': {e}") 
                 db.commit() 
         except Exception as e:
-            print(f"CRITICAL ERROR in world_ticker_loop's DB session: {e}") # Consider logging full traceback
+            print(f"CRITICAL ERROR in world_ticker_loop's DB session: {e}") 
 
         end_time = time.time()
         processing_time = end_time - start_time
@@ -92,7 +83,6 @@ async def world_ticker_loop():
         
         await asyncio.sleep(sleep_duration)
 
-# --- Control Functions ---
 _world_ticker_task_handle: Optional[asyncio.Task] = None
 
 def start_world_ticker_task():
