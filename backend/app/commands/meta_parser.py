@@ -1,4 +1,5 @@
 # backend/app/commands/meta_parser.py
+from typing import List
 from app import schemas, models, crud # <<< ADDED models
 from .command_args import CommandContext 
 
@@ -7,6 +8,8 @@ async def handle_help(context: CommandContext) -> schemas.CommandResponse:
         "General": [
             ("look [target]", "Shows description of location, item, or mob."),
             ("score", "Shows your character's stats and status."),
+            ("skills", "Displays skills you have learned."),         
+            ("traits", "Displays traits you have acquired."),       
             ("help (?)", "Shows this incredibly helpful message."),
             ("fart", "Express yourself. With great feeling."),
         ],
@@ -49,20 +52,19 @@ async def handle_help(context: CommandContext) -> schemas.CommandResponse:
     # All command texts will be padded to this width.
     command_column_width = max_cmd_len 
 
+    help_message_lines = ["<span class='inv-section-header'>--- Available Commands ---</span>"]
+    command_col_width = 30 
+
     for category_name, commands in categories.items():
-        help_message_lines.append(f"\n<span class='room-name-header'>-- {category_name} --</span>") # Re-use style for category header
-        for cmd_text, desc_text in commands:
-            # Pad the command text with spaces to make it 'command_column_width' long
-            padded_command_text = cmd_text.ljust(command_column_width)
-            
-            # Construct the line:
-            # Initial indent + styled padded command + separator + description
-            # The separator "  - " gives 2 spaces, a hyphen, then a space.
-            line = f"  <span class='inv-item-name'>{padded_command_text}</span>  - {desc_text}"
+        help_message_lines.append(f"\n<span class='room-name-header'>-- {category_name} --</span>")
+        for cmd, desc in commands:
+            padded_command_text = cmd.ljust(command_col_width)
+            line = f"  <span class='inv-item-name'>{cmd.ljust(command_col_width)}</span>  - {desc}" # Use ljust on cmd directly
             help_message_lines.append(line)
 
     message_to_player = "\n".join(help_message_lines)
     return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message_to_player)
+
 
 async def handle_score(context: CommandContext) -> schemas.CommandResponse:
     char: models.Character = context.active_character
@@ -97,4 +99,51 @@ async def handle_score(context: CommandContext) -> schemas.CommandResponse:
         f"  (Attack Attribute: {effective_stats['primary_attribute_for_attack'].capitalize()})",
     ]
     message_to_player = "\n".join(score_message_lines)
+    return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message_to_player)
+
+async def handle_skills(context: CommandContext) -> schemas.CommandResponse:
+    char_skills: List[str] = context.active_character.learned_skills or []
+    
+    if not char_skills:
+        message_to_player = "You have not learned any skills yet. Perhaps try hitting things with a stick?"
+        return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message_to_player)
+
+    message_lines = ["<span class='inv-section-header'>--- Your Skills ---</span>"]
+    for skill_tag in char_skills:
+        skill_template = crud.crud_skill.get_skill_template_by_tag(context.db, skill_id_tag=skill_tag)
+        if skill_template:
+            line = f"  <span class='inv-item-name'>{skill_template.name}</span>"
+            if skill_template.description:
+                # Basic alignment for description (adjust width as needed)
+                desc_indent = " " * (25 - len(skill_template.name))
+                if len(skill_template.name) >= 23: desc_indent = "\n    " # Newline if name is too long
+                line += f"{desc_indent}- {skill_template.description}"
+            message_lines.append(line)
+        else:
+            message_lines.append(f"  Unknown skill ID: {skill_tag} (This is probably a bug, you poor sod.)")
+            
+    message_to_player = "\n".join(message_lines)
+    return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message_to_player)
+
+async def handle_traits(context: CommandContext) -> schemas.CommandResponse:
+    char_traits: List[str] = context.active_character.learned_traits or []
+
+    if not char_traits:
+        message_to_player = "You possess no noteworthy traits. You are remarkably unremarkable."
+        return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message_to_player)
+
+    message_lines = ["<span class='inv-section-header'>--- Your Traits ---</span>"]
+    for trait_tag in char_traits:
+        trait_template = crud.crud_trait.get_trait_template_by_tag(context.db, trait_id_tag=trait_tag)
+        if trait_template:
+            line = f"  <span class='inv-item-name'>{trait_template.name}</span>"
+            if trait_template.description:
+                desc_indent = " " * (25 - len(trait_template.name))
+                if len(trait_template.name) >= 23: desc_indent = "\n    "
+                line += f"{desc_indent}- {trait_template.description}"
+            message_lines.append(line)
+        else:
+            message_lines.append(f"  Unknown trait ID: {trait_tag} (The devs are slacking again.)")
+            
+    message_to_player = "\n".join(message_lines)
     return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message_to_player)

@@ -70,6 +70,10 @@ COMMAND_REGISTRY: Dict[str, CommandHandler] = {
     # Meta
     "score": meta_parser.handle_score, # <<< ADDED
     "sc": meta_parser.handle_score, # <<< ADDED
+    "skills": meta_parser.handle_skills,     # <<< NEW
+    "sk": meta_parser.handle_skills,     # <<< NEW
+    "traits": meta_parser.handle_traits,     # <<< NEW
+    "tr": meta_parser.handle_traits,     # <<< NEW
     "status": meta_parser.handle_score, # Alias for score
     "st": meta_parser.handle_score, # Alias for score
     "help": meta_parser.handle_help,

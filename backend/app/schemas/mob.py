@@ -51,7 +51,9 @@ class RoomMobInstanceCreate(BaseModel): # For service layer use
     room_id: uuid.UUID
     mob_template_id: uuid.UUID
     # current_health typically set from template by service
-
+    instance_properties_override: Optional[Dict[str, Any]] = None 
+    spawn_point_id: Optional[uuid.UUID] = None 
+    
 class RoomMobInstanceUpdate(BaseModel): # For combat updates
     current_health: Optional[int] = None
     instance_properties_override: Optional[Dict[str, Any]] = Field(None, description="Use with caution, replaces entire dict")
@@ -62,6 +64,7 @@ class RoomMobInstanceInDBBase(BaseModel): # Note: Not inheriting from RoomMobIns
     mob_template_id: uuid.UUID # Keep this for reference
     current_health: int
     instance_properties_override: Optional[Dict[str, Any]] = None
+    spawn_point_id: Optional[uuid.UUID] = None 
     spawned_at: datetime
     last_action_at: Optional[datetime] = None
     

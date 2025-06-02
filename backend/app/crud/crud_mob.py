@@ -1,4 +1,5 @@
 # backend/app/crud/crud_mob.py
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session, joinedload
 import uuid
 from typing import Dict, List, Optional, Tuple
@@ -37,36 +38,43 @@ def spawn_mob_in_room(
     db: Session, *, 
     room_id: uuid.UUID, 
     mob_template_id: uuid.UUID,
-    instance_properties_override: Optional[Dict] = None
+    instance_properties_override: Optional[Dict] = None,
+    originating_spawn_definition_id: Optional[uuid.UUID] = None # <<< RENAMED PARAMETER
 ) -> Optional[models.RoomMobInstance]:
     template = get_mob_template(db, mob_template_id)
-    if not template:
-        print(f"Error: Mob template ID {mob_template_id} not found for spawning.")
-        return None
-    
+    if not template: return None
     room = db.query(models.Room).filter(models.Room.id == room_id).first()
-    if not room:
-        print(f"Error: Room ID {room_id} not found for spawning mob.")
-        return None
+    if not room: return None
 
     mob_instance = models.RoomMobInstance(
         room_id=room_id,
         mob_template_id=mob_template_id,
-        current_health=template.base_health, # Initialize health from template
-        instance_properties_override=instance_properties_override
+        current_health=template.base_health,
+        instance_properties_override=instance_properties_override,
+        spawn_definition_id=originating_spawn_definition_id # <<< SETTING THE CORRECT FIELD
     )
     db.add(mob_instance)
     db.commit()
     db.refresh(mob_instance)
-    # Manually load mob_template if not automatically loaded by refresh with relationship
-    # db.refresh(mob_instance, attribute_names=['mob_template']) # Or rely on lazy="joined"
     return mob_instance
 
 def despawn_mob_from_room(db: Session, room_mob_instance_id: uuid.UUID) -> bool:
     instance = get_room_mob_instance(db, room_mob_instance_id)
     if instance:
+        spawn_def_id_to_update = instance.spawn_definition_id # Use the renamed field
+
         db.delete(instance)
-        db.commit()
+        db.commit() 
+
+        if spawn_def_id_to_update:
+            # When a mob from a definition is despawned, its definition should be checked soon.
+            # Set its next_respawn_check_at to now to make it eligible for the next tick.
+            crud.crud_mob_spawn_definition.update_mob_spawn_definition_next_check_time(
+                db, 
+                definition_id=spawn_def_id_to_update, 
+                next_check_time=datetime.now(timezone.utc)
+            )
+            print(f"Triggered immediate re-check for spawn definition {spawn_def_id_to_update} due to mob despawn.")
         return True
     return False
 

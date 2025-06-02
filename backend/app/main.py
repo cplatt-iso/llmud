@@ -11,8 +11,12 @@ from app.core.config import settings
 from app.crud.crud_room import seed_initial_world
 from app.crud.crud_item import seed_initial_items 
 from app.crud.crud_mob import seed_initial_mob_templates, seed_initial_mob_spawns
-from app.game_logic.combat_manager import start_combat_ticker_task 
+from app.game_logic.combat_manager import start_combat_ticker_task, stop_combat_ticker_task
 from app.crud.crud_character_class import seed_initial_character_class_templates 
+from app.crud.crud_skill import seed_initial_skill_templates # <<< NEW
+from app.crud.crud_trait import seed_initial_trait_templates # <<< NEW
+from app.game_logic.world_ticker import start_world_ticker_task, stop_world_ticker_task
+from app.crud.crud_mob_spawn_definition import seed_initial_mob_spawn_definitions 
 
 base_class.Base.metadata.create_all(bind=engine)
 app = FastAPI(title=settings.PROJECT_NAME)
@@ -27,10 +31,16 @@ def on_startup_sync(): # Renamed to avoid clash if we make it async later
         seed_initial_mob_spawns(db)
         seed_initial_items(db)
         seed_initial_character_class_templates(db)
+        seed_initial_skill_templates(db)
+        seed_initial_mob_spawn_definitions(db)
         
         print("Starting combat ticker...")
-        start_combat_ticker_task() # Call the function to create the task
+        start_combat_ticker_task()
         print("Startup event finished.")        
+
+        print("Starting world ticker...") 
+        start_world_ticker_task()    
+        print("Startup event finished.")     
     finally:
         db.close()
 
@@ -39,6 +49,6 @@ app.include_router(ws_router)
 
 @app.get("/")
 async def root():
-    return {"message": f"Welcome to {settings.PROJECT_NAME}. Now with WebSockets for combat!"}
+    return {"message": f"Welcome to {settings.PROJECT_NAME}. Now with a World Ticker humming in the background!"}
 
 print("FastAPI app instance created.")

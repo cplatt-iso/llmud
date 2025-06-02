@@ -18,35 +18,12 @@ sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(__file__), '..'
 from app.db.base_class import Base
 from app import models
 
-try:
-    from app.models.character import Character
-    print(f"DEBUG env.py: Character model imported. Annotations: {getattr(Character, '__annotations__', 'NOT FOUND')}")
-    if 'character_class_template_id' in getattr(Character, '__annotations__', {}):
-        print("DEBUG env.py: 'character_class_template_id' FOUND in Character annotations.")
-    else:
-        print("DEBUG env.py: 'character_class_template_id' ***NOT FOUND*** in Character annotations.")
-except ImportError as e:
-    print(f"DEBUG env.py: FAILED to import Character model: {e}")
-
-print(f"DEBUG env.py: Tables known to Base.metadata BEFORE config: {list(Base.metadata.tables.keys())}")
-
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
-print(f"DEBUG env.py: Tables known to target_metadata AFTER assignment: {list(target_metadata.tables.keys())}")
-if 'characters' in target_metadata.tables:
-    character_cols = [c.name for c in target_metadata.tables['characters'].columns]
-    print(f"DEBUG env.py: Columns in 'characters' table (from target_metadata): {character_cols}")
-    if 'character_class_template_id' in character_cols:
-        print("DEBUG env.py: 'character_class_template_id' FOUND in target_metadata for characters table.")
-    else:
-        print("DEBUG env.py: 'character_class_template_id' ***NOT FOUND*** in target_metadata for characters table.")
-else:
-    print("DEBUG env.py: 'characters' table NOT FOUND in target_metadata.")
-print("--- DEBUG: env.py proceeding to migration logic ---")
 
 def get_url() -> str | None:
     db_url_env = os.getenv("DB_URL") # This should be your primary source

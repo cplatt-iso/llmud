@@ -8,3 +8,6 @@ from . import crud_character_inventory  # <<< ADDED
 from . import crud_room_item  # <<< ADDED
 from . import crud_mob
 from . import crud_character_class
+from . import crud_skill
+from . import crud_trait
+from . import crud_mob_spawn_definition

@@ -24,3 +24,12 @@ from .character_class_template import ( # <<< ADD THIS BLOCK
     CharacterClassTemplate, CharacterClassTemplateInDB
 )
 from .map import MapLevelDataResponse, MapRoomData
+from .skill import ( # <<< ADD THIS BLOCK
+    SkillTemplateBase, SkillTemplateCreate, SkillTemplateUpdate, SkillTemplate
+)
+from .trait import ( # <<< ADD THIS BLOCK
+    TraitTemplateBase, TraitTemplateCreate, TraitTemplateUpdate, TraitTemplate
+)
+from .mob_spawn_definition import (
+    MobSpawnDefinitionBase, MobSpawnDefinitionCreate, MobSpawnDefinitionUpdate, MobSpawnDefinition
+)

@@ -45,14 +45,16 @@ def delete_character_class_template(db: Session, class_template_id: uuid.UUID) -
 INITIAL_CLASS_TEMPLATES = [
     {
         "name": "Warrior",
-        "description": "A stalwart fighter, skilled with martial weapons and clad in sturdy armor. They excel in direct combat.",
+        "description": "A stalwart fighter...",
         "base_stat_modifiers": {"strength": 2, "constitution": 1, "intelligence": -1},
-        "starting_health_bonus": 5,
-        "starting_mana_bonus": -5, # Warriors ain't got much use for mana
+        "starting_health_bonus": 5, "starting_mana_bonus": -5,
         "skill_tree_definition": {
             "core_skills_by_level": {
-                "1": ["power_attack_skill_id"], # Placeholder skill ID
-                "3": ["shield_bash_skill_id"]
+                "1": ["basic_punch"], # Assuming "basic_punch" is a seeded skill_id_tag
+                "2": ["power_attack_melee"] # Assuming this is seeded
+            },
+            "core_traits_by_level": {
+                "1": ["tough_hide"] # Assuming "tough_hide" is a seeded trait_id_tag
             }
         },
         "starting_equipment_refs": ["Rusty Sword", "Wooden Shield", "Cloth Tunic"],
@@ -60,21 +62,33 @@ INITIAL_CLASS_TEMPLATES = [
     },
     {
         "name": "Swindler",
-        "description": "A cunning rogue who relies on wit, agility, and dirty tricks. Often found where they shouldn't be, taking what isn't theirs.",
+        "description": "A cunning rogue...",
         "base_stat_modifiers": {"dexterity": 2, "luck": 1, "strength": -1},
-        "starting_health_bonus": 0,
-        "starting_mana_bonus": 0, # Swindlers use 'gumption' not mana
         "skill_tree_definition": {
             "core_skills_by_level": {
-                "2": ["filch_item_skill_id"], # Placeholder
-                "4": ["evasive_dodge_passive_id"]
+                "1": ["basic_punch"], # Swindlers can punch too!
+                "3": ["pick_lock_basic"] # Assuming this is seeded
             },
-            "specialization_points_by_level": {
-                "5": { "point_id": "swindler_L5_specialization", "prompt_to_player": "Do you focus on nimble fingers or a sharper blade?", "choices": [] } # Stub
+            "core_traits_by_level": {
+                 "2": ["quick_learner"] # Assuming this is seeded
             }
         },
-        "starting_equipment_refs": ["Dagger", "Cloth Tunic"], # No shield for sneaky types
+        "starting_equipment_refs": ["Dagger", "Cloth Tunic"],
         "playstyle_tags": ["melee", "stealth", "utility", "debuff"]
+    },
+    # Add Adventurer if you want it to have a basic progression too
+    {
+        "name": "Adventurer",
+        "description": "A jack-of-all-trades, master of none. Ready for anything, prepared for nothing.",
+        "base_stat_modifiers": {}, # No stat mods, uses defaults
+        "skill_tree_definition": {
+            "core_skills_by_level": {
+                "1": ["basic_punch"]
+            }
+            # No special traits by default for Adventurer unless you add them
+        },
+        "starting_equipment_refs": ["Dagger", "Cloth Tunic"], # Generic start
+        "playstyle_tags": ["versatile", "generalist"]
     }
 ]
 
