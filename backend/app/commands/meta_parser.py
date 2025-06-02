@@ -1,5 +1,5 @@
 # backend/app/commands/meta_parser.py
-from app import schemas, models # <<< ADDED models
+from app import schemas, models, crud # <<< ADDED models
 from .command_args import CommandContext 
 
 async def handle_help(context: CommandContext) -> schemas.CommandResponse:
@@ -67,12 +67,24 @@ async def handle_help(context: CommandContext) -> schemas.CommandResponse:
 async def handle_score(context: CommandContext) -> schemas.CommandResponse:
     char: models.Character = context.active_character
     
-    # Calculate effective combat stats
     effective_stats = char.calculate_combat_stats()
     
+    # --- Calculate XP for next level ---
+    xp_for_next_level_val = crud.crud_character.get_xp_for_level(char.level + 1)
+    xp_to_next_display = ""
+    if xp_for_next_level_val == float('inf'):
+        xp_to_next_display = "(Max Level)"
+    else:
+        # xp_needed_for_this_level_up = int(xp_for_next_level_val) - int(crud.crud_character.get_xp_for_level(char.level))
+        # xp_progress_this_level = char.experience_points - int(crud.crud_character.get_xp_for_level(char.level))
+        # xp_to_next_display = f"{xp_progress_this_level} / {xp_needed_for_this_level_up} (Next: {int(xp_for_next_level_val)})"
+        # Simpler: just show current XP / total XP for next level
+        xp_to_next_display = f"{char.experience_points} / {int(xp_for_next_level_val)}"
+
+
     score_message_lines = [
         f"--- <span class='char-name'>{char.name}</span> --- the <span class='char-class'>{char.class_name}</span> ---",
-        f"Level: {char.level}   XP: {char.experience_points} / ??? (to next level)",
+        f"Level: {char.level}   XP: {xp_to_next_display}", # <<< UPDATED XP DISPLAY
         f"HP: <span class='combat-hp'>{char.current_health}/{char.max_health}</span>   MP: <span class='combat-hp'>{char.current_mana}/{char.max_mana}</span>",
         "--- Attributes ---",
         f"  Strength:     {char.strength:<4} ({char.get_attribute_modifier('strength'):+}) Intelligence: {char.intelligence:<4} ({char.get_attribute_modifier('intelligence'):+})",
@@ -80,13 +92,9 @@ async def handle_score(context: CommandContext) -> schemas.CommandResponse:
         f"  Constitution: {char.constitution:<4} ({char.get_attribute_modifier('constitution'):+}) Charisma:     {char.charisma:<4} ({char.get_attribute_modifier('charisma'):+})",
         f"  Luck:         {char.luck:<4} ({char.get_attribute_modifier('luck'):+})",
         "--- Effective Combat Stats ---",
-        f"  Armor Class:  {effective_stats['effective_ac']:<4}         Attack Bonus: {effective_stats['attack_bonus']:<+4}", # Show sign for bonus
+        f"  Armor Class:  {effective_stats['effective_ac']:<4}         Attack Bonus: {effective_stats['attack_bonus']:<+4}",
         f"  Damage:       {effective_stats['damage_dice']} + {effective_stats['damage_bonus']}",
         f"  (Attack Attribute: {effective_stats['primary_attribute_for_attack'].capitalize()})",
-        # You can optionally still show "Base" stats if you want, for comparison or debugging
-        # "--- Combat Stats (Base Model) ---",
-        # f"  Base AC:  {char.base_ac:<4}         Base Atk Bonus: {char.base_attack_bonus:<4}",
-        # f"  Base Dmg: {char.base_damage_dice} + {char.base_damage_bonus}",
     ]
     message_to_player = "\n".join(score_message_lines)
     return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message_to_player)

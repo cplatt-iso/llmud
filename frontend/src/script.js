@@ -261,8 +261,8 @@ const WebSocketService = {
 const MapDisplay = {
     svgNS: "http://www.w3.org/2000/svg",
     config: {
-        roomBoxSize: 30,
-        roomSpacing: 15,
+        roomBoxSize: 15,
+        roomSpacing: 7,
         strokeWidth: 2,
         roomDefaultFill: "#222233",
         roomStroke: "#00dd00",

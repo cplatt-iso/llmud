@@ -196,8 +196,21 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
                 if player_current_hp <= 0:
                     round_log.append("<span class='combat-death'>YOU HAVE DIED! How utterly predictable.</span>")
                     combat_resolved_this_round = True
-                    # TODO: Handle player death (respawn, penalties, etc.)
-                    # For now, combat ends. Player is just "dead" at 0 HP.
+                    respawn_room_orm = crud.crud_room.get_room_by_coords(db, x=0, y=0, z=0)
+                    if respawn_room_orm:
+                        crud.crud_character.update_character_room(db, character_id=character.id, new_room_id=respawn_room_orm.id)
+                        round_log.append(f"You have been teleported to {respawn_room_orm.name}.")
+                        # Update room_data for the client message to reflect the new room
+                        # This will be handled by current_room_schema_for_update later.
+                    else:
+                        round_log.append("Error: Respawn room not found. You are now a very dead ghost.")
+
+                    # 2. Restore to full health (or partial, e.g., 1 HP if you're mean)
+                    # We need the character object to get max_health
+                    dead_char = crud.crud_character.get_character(db, character_id) # Re-fetch for safety
+                    if dead_char:
+                         crud.crud_character.update_character_health(db, character.id, dead_char.max_health) # Heal to full
+                         round_log.append("You feel a faint stirring of life, or maybe it's just indigestion.")
                     break 
             else:
                 round_log.append(f"<span class='inv-item-name'>{mob_template.name}</span> <span class='combat-miss'>MISSES</span> <span class='char-name'>{character.name}</span>. Try not to wet yourself.")

@@ -11,10 +11,9 @@
             color: #00ff00;
             font-family: 'Courier New', Courier, monospace;
             margin: 0;
-            display: flex;
-            /* For centering the container */
-            flex-direction: column;
-            align-items: center;
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
             min-height: 100vh;
             padding: 10px;
             box-sizing: border-box;
@@ -22,12 +21,13 @@
 
         .header-text {
             text-align: center;
-            margin-bottom: 10px;
+            margin-bottom: 20px; /* Increased space a bit */
         }
 
         .header-text h1 {
             margin: 0 0 5px 0;
             font-size: 1.8em;
+            line-height: 1.2; /* Adjusted for multi-line title */
         }
 
         .header-text p {
@@ -36,21 +36,30 @@
             color: #00cc00;
         }
 
+        /* NEW WRAPPER FOR MUD AND MAP */
+        .game-area-wrapper {
+            display: flex;        
+            flex-direction: row;  
+            align-items: flex-start; 
+            width: 100%; /* Allow it to take full width if needed */
+            max-width: 1200px; /* Example: MUD (900) + Map (250) + Spacing (50) */
+            /* margin: 0 auto; /* Uncomment to center the whole game area if body isn't doing it */
+        }
+
         .mud-container {
-            width: 100%;
-            max-width: 900px;
-            /* Or your preferred max width */
+            /* flex-grow: 1; /* Allow mud-container to take up remaining space if map has fixed width */
+            /* Or set a specific width/max-width */
+            width: 100%; 
+            max-width: 900px; 
             display: flex;
             flex-direction: column;
             border: 1px solid #005500;
-            /* Border around the whole MUD interface */
+            /* position: relative; /* No longer needed for map */
         }
 
         .terminal-output {
             flex-grow: 1;
-            /* Takes up available vertical space */
-            height: 75vh;
-            /* Start with a good height, flex-grow will adjust */
+            height: 70vh; /* Adjusted viewport height slightly */
             overflow-y: scroll;
             background-color: #030303;
             padding: 10px;
@@ -58,23 +67,17 @@
             white-space: pre-wrap;
             line-height: 1.4;
             border-bottom: 1px solid #005500;
-            /* Separator to exits bar */
         }
 
         .exits-bar {
-            /* New bar for exits */
             background-color: #050505;
             padding: 5px 10px;
             color: #00ffff;
-            /* Cyan for exits */
             font-size: 0.9em;
             border-bottom: 1px solid #005500;
-            /* Separator to input line */
-            min-height: 1.5em;
-            /* Ensure it has some height even if empty */
+            min-height: 1.5em; 
             white-space: nowrap;
             overflow-x: auto;
-            /* In case exits are very long */
         }
 
         .terminal-input-line {
@@ -87,47 +90,11 @@
         #prompt-text {
             margin-right: 8px;
             color: #00dd00;
-            /* Bright green for prompt */
-        }
-
-        .terminal-output::-webkit-scrollbar {
-            width: 10px;
-            /* Width of the vertical scrollbar */
-            height: 10px;
-            /* Height of the horizontal scrollbar (if any) */
-        }
-
-        .terminal-output::-webkit-scrollbar-track {
-            background: #080808;
-            /* Dark background for the track (very dark grey) */
-            /* border-radius: 5px; */
-            /* Optional: rounded corners for the track */
-        }
-
-        .terminal-output::-webkit-scrollbar-thumb {
-            background-color: #005500;
-            /* Dark green for the scrollbar thumb */
-            border-radius: 5px;
-            /* Rounded corners for the thumb */
-            border: 2px solid #030303;
-            /* Creates a small border around the thumb, using the output bg color for seamlessness */
-        }
-
-        .terminal-output::-webkit-scrollbar-thumb:hover {
-            background-color: #007700;
-            /* Slightly lighter green on hover */
-        }
-
-        .terminal-output::-webkit-scrollbar-corner {
-            background: #030303;
-            /* Background of the corner where vertical and horizontal scrollbars meet */
         }
 
         .terminal-input {
             scrollbar-width: thin;
-            /* Options: 'auto', 'thin', 'none' */
             scrollbar-color: #005500 #080808;
-            /* thumb color, track color */
             flex-grow: 1;
             background-color: transparent;
             border: none;
@@ -137,193 +104,85 @@
             outline: none;
             padding: 0;
         }
+        
+        /* Scrollbar styling for terminal-output */
+        .terminal-output::-webkit-scrollbar { width: 10px; height: 10px; }
+        .terminal-output::-webkit-scrollbar-track { background: #080808; }
+        .terminal-output::-webkit-scrollbar-thumb { background-color: #005500; border-radius: 5px; border: 2px solid #030303; }
+        .terminal-output::-webkit-scrollbar-thumb:hover { background-color: #007700; }
+        .terminal-output::-webkit-scrollbar-corner { background: #030303; }
+
+
+        /* Map Viewport Styling */
+        #map-viewport {
+            width: 250px; 
+            height: 250px; /* Made it square, adjust as desired */
+            border: 1px solid #00cc00; 
+            background-color: #080808; 
+            overflow: hidden; 
+            display: none; /* JS will control this */
+            box-shadow: 0 0 10px #00cc00;
+            margin-left: 15px; /* Space between MUD container and map */
+            /* flex-shrink: 0; /* Prevent map from shrinking if .mud-container wants all space */
+        }
 
         /* Styling for character lists in terminal output */
-        .char-list-item {
-            margin-left: 20px;
-        }
-
-        .char-list-item .char-index {
-            color: #ffff00;
-            /* Yellow for index */
-        }
-
-        .char-list-item .char-name {
-            color: #00ff00;
-        }
-
-        .char-list-item .char-class {
-            color: #00aaaa;
-            /* Teal for class */
-        }
+        .char-list-item { margin-left: 20px; }
+        .char-list-item .char-index { color: #ffff00; }
+        .char-list-item .char-name { color: #00ff00; }
+        .char-list-item .char-class { color: #00aaaa; }
 
         /* Styling for room name in terminal output */
-        .room-name-header {
-            color: #ffff00;
-            font-weight: bold;
-            margin-top: 1em;
-            margin-bottom: 0.5em;
-        }
+        .room-name-header { color: #ffff00; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
+        .error-message-inline { color: #ff4444; font-style: italic; }
+        .game-message { color: #cccccc; display: block; }
 
-        .error-message-inline {
-            color: #ff4444;
-            font-style: italic;
-        }
+        /* Inventory Styles */
+        .inv-slot-name { color: #00ffff; font-weight: bold; }
+        .inv-backpack-number { color: #ffff00; }
+        .inv-item-name { color: #00ff00; } /* Used for items and mobs */
+        .inv-item-qty { color: #aaaaaa; }
+        .inv-section-header { color: #f0f0f0; font-weight: bold; }
+        
+        /* Character Name style (if different from item name) */
+        .char-name { color: #00ff00; } /* Or a distinct player color e.g. #99ff99 */
 
-        .game-message {
-            /* <<< ADDED CLASS */
-            color: #cccccc;
-            /* Light grey for general game messages */
-            /* For example, "You can't go that way." or "You look around." */
-            /* You might want different colors for different types of messages later. */
-            display: block;
-            /* Ensures it takes its own line if appendToOutput's newline logic is tricky */
-        }
+        /* Combat Specific Styles */
+        .combat-success { color: #33cc33; font-weight: bold; }
+        .combat-miss { color: #ff9933; }
+        .combat-hit { color: #ffff00; font-weight: bold; }
+        .combat-crit { color: #ff9900; font-weight: bold; }
+        .combat-hp { color: #ffdddd; }
+        .combat-death { color: #ff3333; font-weight: bold; font-style: italic; }
+        .combat-hit-player { color: #ff6666; font-weight: bold; }
+        .combat-crit-player { color: #cc0000; font-weight: bold; }
 
-        /* --- NEW CSS Classes for Inventory --- */
-        .inv-slot-name {
-            /* For [Slot Name] */
-            color: #00ffff;
-            /* Cyan */
-            font-weight: bold;
-        }
-
-        .inv-backpack-number {
-            /* For   1.   */
-            color: #ffff00;
-            /* Yellow */
-        }
-
-        .inv-item-name {
-            /* For the item's actual name */
-            color: #00ff00;
-            /* Default bright green, but you could vary this by item type/rarity later */
-        }
-
-        .inv-item-qty {
-            /* For (Qty: N) */
-            color: #aaaaaa;
-            /* Dimmer grey */
-        }
-
-        .inv-section-header {
-            /* For --- Equipped --- and --- Backpack --- */
-            color: #f0f0f0;
-            /* Brighter white/light grey */
-            font-weight: bold;
-        }
-
-        .inv-item-name {
-            /* Already exists - used for mob names too */
-            color: #00ff00;
-        }
-
-        .char-name {
-            /* Already exists - used for player name in messages */
-            color: #00ff00;
-            /* Or a distinct player color */
-        }
-
-        /* --- NEW Combat Specific Styles --- */
-        .combat-success {
-            color: #33cc33;
-            /* Bright Green for HIT */
-            font-weight: bold;
-        }
-
-        .combat-miss {
-            color: #ff9933;
-            /* Orange for MISS */
-        }
-
-        .combat-hit {
-            /* Damage player deals */
-            color: #ffff00;
-            /* Yellow */
-            font-weight: bold;
-        }
-
-        .combat-crit {
-            /* Critical damage player deals */
-            color: #ff9900;
-            /* Bright Orange */
-            font-weight: bold;
-            /* text-shadow: 0 0 5px #ff0000; Maybe a glow? */
-        }
-
-        .combat-hp {
-            color: #ffdddd;
-            /* Light pink for HP values */
-        }
-
-        .combat-death {
-            color: #ff3333;
-            /* Red for death */
-            font-weight: bold;
-            font-style: italic;
-        }
-
-        .combat-hit-player {
-            /* Damage mob deals to player */
-            color: #ff6666;
-            /* Red */
-            font-weight: bold;
-        }
-
-        .combat-crit-player {
-            /* Critical damage mob deals to player */
-            color: #cc0000;
-            /* Dark Red */
-            font-weight: bold;
-            /* text-shadow: 0 0 5px #ff0000; */
-        }
-
-        .error-message-inline {
-            /* Already exists */
-            color: #ff4444;
-            font-style: italic;
-        }
     </style>
 </head>
 
 <body>
     <div class="header-text">
-        <h1>Legend of the Solar Dragon's Tradewar<br>2002 Barrels of Food Fight<br>Over a Usurped Pit of Devastation
-            (Alpha)</h1>
+        <h1>Legend of the Solar Dragon's Tradewar<br>2002 Barrels of Food Fight<br>Over a Usurped Pit of Devastation (Alpha)</h1>
         <p>(UMGTWOTRDBSR_EUPFDX_TPSC for short, obviously)</p>
     </div>
 
-    <div class="mud-container">
-        <!-- Main output for telnet login, char select, game log -->
-        <div id="output" class="terminal-output"></div>
-
-        <!-- Exits bar - will be updated by JS -->
-        <div id="exits-display" class="exits-bar">Exits: (None)</div>
-
-        <!-- Command input line -->
-        <div id="input-prompt-line" class="terminal-input-line">
-            <span id="prompt-text">> </span>
-            <input type="text" id="commandInput" class="terminal-input" name="mud_command_line" autofocus
-                autocomplete="off">
+    <!-- NEW WRAPPER FOR MUD AND MAP -->
+    <div class="game-area-wrapper"> 
+        <div class="mud-container">
+            <!-- Main MUD interface elements -->
+            <div id="output" class="terminal-output"></div>
+            <div id="exits-display" class="exits-bar">Exits: (None)</div>
+            <div id="input-prompt-line" class="terminal-input-line">
+                <span id="prompt-text">> </span>
+                <input type="text" id="commandInput" class="terminal-input" name="mud_command_line" autofocus autocomplete="off">
+            </div>
         </div>
 
-    <div id="map-viewport" style="
-        position: fixed; 
-        top: 70px; /* Adjust as needed */
-        right: 20px; /* Adjust as needed */
-        width: 300px; 
-        height: 250px; 
-        border: 1px solid #00cc00; 
-        background-color: #080808; 
-        overflow: hidden; /* Important for SVG panning later */
-        display: none; /* Initially hidden, shown when in game */
-        box-shadow: 0 0 10px #00cc00; /* Optional glow */
-    ">
-        <svg id="map-svg" width="100%" height="100%"></svg>
-    </div>  
-
-    <!-- We no longer need separate HTML sections for char select/create.
-         JS will handle these flows within the #output div. -->
+        <!-- MAP VIEWPORT IS NOW A SIBLING TO .mud-container, INSIDE THE WRAPPER -->
+        <div id="map-viewport"> 
+            <svg id="map-svg" width="100%" height="100%"></svg>
+        </div>
+    </div>
 
     <script src="script.js"></script>
 </body>

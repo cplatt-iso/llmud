@@ -1,7 +1,7 @@
 # backend/app/crud/crud_character.py
 from sqlalchemy.orm import Session
 import uuid
-from typing import Optional, List
+from typing import Optional, List, Tuple, Union 
 
 from .. import models, schemas, crud # <<< ADDED crud FOR crud_character_class
 
@@ -15,6 +15,27 @@ DEFAULT_STATS = {
     "base_damage_dice": "1d4", "base_damage_bonus": 0,
     "learned_skills": [], "learned_traits": []
 }
+
+XP_THRESHOLDS = {
+    1: 0,       # Start at level 1 with 0 XP
+    2: 100,
+    3: 300,     # Need 200 more XP from level 2 (100+200)
+    4: 600,     # Need 300 more XP from level 3 (300+300)
+    5: 1000,    # Need 400 more XP
+    # ... add more levels as needed
+}
+
+CLASS_LEVEL_BONUSES = {
+    "Warrior": {"hp_per_level": 5, "mp_per_level": 1, "base_attack_bonus_per_level": 0.5}, # BAB increases every 2 levels
+    "Swindler": {"hp_per_level": 3, "mp_per_level": 2, "base_attack_bonus_per_level": 0.5},
+    "Adventurer": {"hp_per_level": 4, "mp_per_level": 1, "base_attack_bonus_per_level": 0.5}, # Default
+    # Add other seeded classes
+}
+
+def get_xp_for_level(level: int) -> Union[int, float]: # <<< CHANGED RETURN TYPE
+    """Returns the total XP required to attain the specified level."""
+    return XP_THRESHOLDS.get(level, float('inf')) # <<< USE float('inf')
+
 
 def get_character(db: Session, character_id: uuid.UUID) -> Optional[models.Character]:
     return db.query(models.Character).filter(models.Character.id == character_id).first()
@@ -142,19 +163,125 @@ def update_character_health(db: Session, character_id: uuid.UUID, amount_change:
     db.refresh(character)
     return character
 
-def add_experience(db: Session, character_id: uuid.UUID, amount: int) -> Optional[models.Character]:
-    """Adds experience points to a character. Level up logic to be implemented later."""
-    character = get_character(db, character_id=character_id)
-    if not character or amount <=0: # No negative XP for now, you cheapskate
-        return character # Or None if char not found
-
-    character.experience_points += amount
-    # TODO: Implement level_up_character(db, character) call here if XP crosses threshold
-    # For now, just adding XP.
+# Conceptual: def level_up_character(db: Session, character: models.Character): ...
+def _apply_level_up(db: Session, character: models.Character) -> List[str]:
+    level_up_messages = []
     
+    next_level_xp_needed = get_xp_for_level(character.level + 1)
+    if character.experience_points < next_level_xp_needed : # Should not happen if called correctly
+        # This check is more for set_level's iterative calls
+        if next_level_xp_needed == float('inf'):
+             level_up_messages.append(f"You are already at the maximum defined level ({character.level}). Cannot level up further.")
+             return level_up_messages # No actual level up occurs
+
+    character.level += 1
+    level_up_messages.append(f"Ding! You have reached Level {character.level}!")
+
+    class_bonuses = CLASS_LEVEL_BONUSES.get(character.class_name, CLASS_LEVEL_BONUSES["Adventurer"])
+    con_mod = character.get_attribute_modifier("constitution")
+    hp_gain = max(1, con_mod + class_bonuses.get("hp_per_level", 3)) 
+    character.max_health += hp_gain
+    level_up_messages.append(f"Your maximum health increases by {hp_gain}!")
+
+    int_mod = character.get_attribute_modifier("intelligence")
+    mp_gain = max(0, int_mod + class_bonuses.get("mp_per_level", 1)) 
+    character.max_mana += mp_gain
+    if mp_gain > 0:
+        level_up_messages.append(f"Your maximum mana increases by {mp_gain}!")
+
+    character.current_health = character.max_health
+    character.current_mana = character.max_mana
+    level_up_messages.append("You feel invigorated!")
+    
+    # TODO: Proper BAB progression
+    db.add(character)
+    return level_up_messages
+
+def _apply_level_down(db: Session, character: models.Character) -> List[str]:
+    if character.level <= 1:
+        return ["You cannot de-level below level 1, you pathetic worm."]
+    
+    level_down_messages = []
+    
+    # Store previous level's XP requirement BEFORE changing level
+    xp_for_new_lower_level = get_xp_for_level(character.level - 1)
+    if xp_for_new_lower_level == float('inf'): # Should not happen if level > 1
+        xp_for_new_lower_level = XP_THRESHOLDS.get(character.level -1, 0) # Failsafe
+
+
+    class_bonuses = CLASS_LEVEL_BONUSES.get(character.class_name, CLASS_LEVEL_BONUSES["Adventurer"])
+    con_mod = character.get_attribute_modifier("constitution") 
+    hp_loss_estimate = max(1, con_mod + class_bonuses.get("hp_per_level", 3))
+    character.max_health = max(1, character.max_health - hp_loss_estimate) 
+    level_down_messages.append(f"Your maximum health decreases by {hp_loss_estimate}.")
+
+    int_mod = character.get_attribute_modifier("intelligence")
+    mp_loss_estimate = max(0, int_mod + class_bonuses.get("mp_per_level", 1))
+    character.max_mana = max(0, character.max_mana - mp_loss_estimate)
+    if mp_loss_estimate > 0:
+        level_down_messages.append(f"Your maximum mana decreases by {mp_loss_estimate}.")
+
+    character.current_health = min(character.current_health, character.max_health)
+    character.current_mana = min(character.current_mana, character.max_mana)
+
+    character.level -= 1
+    level_down_messages.append(f"You feel weaker... You have de-leveled to Level {character.level}.")
+    
+    character.experience_points = int(xp_for_new_lower_level) # XP at start of new (lower) level
+
+    db.add(character)
+    return level_down_messages
+
+
+def add_experience(db: Session, character_id: uuid.UUID, amount: int) -> Tuple[Optional[models.Character], List[str]]:
+    character = get_character(db, character_id=character_id)
+    if not character:
+        return None, ["Character not found."]
+
+    messages = []
+    if amount == 0:
+        return character, ["No experience gained or lost. How pointless."]
+
+    initial_level = character.level
+    character.experience_points += amount
+    if amount !=0 : # only print if xp actually changed
+      messages.append(f"{'Gained' if amount > 0 else 'Lost'} {abs(amount)} experience points. Current XP: {character.experience_points}")
+
+
+    # Handle Leveling Up
+    xp_for_next_level = get_xp_for_level(character.level + 1)
+    while character.experience_points >= xp_for_next_level and xp_for_next_level != float('inf'):
+        overflow_xp = character.experience_points - int(xp_for_next_level) # xp_for_next_level is total for that level
+        
+        # Temporarily set XP to what's needed for the level up, so _apply_level_up has correct context if it needs it.
+        # character.experience_points = int(xp_for_next_level) # Not strictly necessary with current _apply_level_up
+        
+        level_up_messages = _apply_level_up(db, character) # character.level is incremented inside
+        messages.extend(level_up_messages)
+        
+        # After level up, new character.level is set.
+        # XP should be the XP requirement for this new level + any overflow from the previous.
+        xp_at_start_of_new_level = get_xp_for_level(character.level)
+        character.experience_points = int(xp_at_start_of_new_level) + overflow_xp
+        
+        xp_for_next_level = get_xp_for_level(character.level + 1) # Update for potential multi-level up
+
+    # Handle De-Leveling
+    xp_required_for_current_level = get_xp_for_level(character.level)
+    while character.level > 1 and character.experience_points < xp_required_for_current_level :
+        # Note: _apply_level_down sets XP to the start of the new lower level.
+        delevel_messages = _apply_level_down(db, character) # character.level is decremented
+        messages.extend(delevel_messages)
+        xp_required_for_current_level = get_xp_for_level(character.level) # Update for new (lower) current level
+
+    # Clamp XP if it went negative after de-leveling to level 1
+    if character.level == 1 and character.experience_points < 0:
+        character.experience_points = 0
+        # messages.append("Your experience cannot fall below zero at level 1.") # Already part of _apply_level_down potentially
+
     db.add(character)
     db.commit()
     db.refresh(character)
-    return character
-
-# Conceptual: def level_up_character(db: Session, character: models.Character): ...
+    if character.level != initial_level and not any("Ding!" in m or "de-leveled" in m for m in messages): # Ensure level change message is there
+        messages.append(f"Your level is now {character.level}.")
+    return character, messages

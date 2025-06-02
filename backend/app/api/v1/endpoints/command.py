@@ -63,6 +63,9 @@ COMMAND_REGISTRY: Dict[str, CommandHandler] = {
     # Debug
     "giveme": debug_parser.handle_giveme,
     "spawnmob": debug_parser.handle_spawnmob,
+    "set_hp": debug_parser.handle_set_hp,       # <<< NEW
+    "mod_xp": debug_parser.handle_mod_xp,       # <<< NEW
+    "set_level": debug_parser.handle_set_level, # <<< NEW
 
     # Meta
     "score": meta_parser.handle_score, # <<< ADDED
