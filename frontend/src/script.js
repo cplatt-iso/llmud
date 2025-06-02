@@ -601,6 +601,8 @@ const GameLogic = {
                 if (serverData.log && serverData.log.length > 0) {
                     UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
                 }
+            } else if (serverData.type === "ooc_message") { 
+                UI.appendToOutput(serverData.message, { styleClass: "ooc-chat-message" });
             } else if (serverData.message) {
                 UI.appendToOutput(`GS: ${serverData.message}`, { styleClass: "game-message" });
             } else {

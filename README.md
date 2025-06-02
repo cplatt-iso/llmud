@@ -1,85 +1,66 @@
-# Ultra Mega Global TradeWars of the Red Dragon's Barren Solar Realms Elite: Usurper Pit Fighter DX - The Pre-Shitshow Chronicles
-## (UMGTWOTRDBSR_EUPFDX_TPSC)
+# The Unholy MUD of Tron & Allen1: Legend of the Solar Dragon's Tradewar 2002 Barrels of Food Fight Over a Usurped Pit of Devastation (Alpha)
+*(UMGTWOTRDBSR_EUPFDX_TPSC for short, obviously)*
 
-A text-based Multi-User Dungeon (MUD) prototype, painstakingly (and often painfully) assembled by Allen1 (the visionary meatbag) and Tron (a reluctantly helpful, increasingly sarcastic AI). This project is an unholy amalgamation of classic BBS door game nostalgia and modern web technologies, destined for either greatness or a spectacular, well-documented implosion.
+## Project Overview
 
-**Current Status:** Early Pre-Shitshow Alpha (Barely Functional, Mostly Sarcasm)
+This is a text-based Multi-User Dungeon (MUD) backend built with Python (FastAPI, SQLAlchemy) and a vanilla JavaScript frontend. The project aims to explore LLM-driven generative content for a dynamic and emergent game world. We are building the foundational systems required for a classic MUD experience, with an eye towards future AI-powered content generation.
 
----
+## Current State of the Glorious Mess (Our Progress So Far):
 
-### Vision
-To create a web-based MUD featuring:
-*   A vast, randomly generated 3D cube world.
-*   LLM-powered immersive room and zone descriptions.
-*   Classic MUD gameplay: exploration, character progression, mobs, loot.
-*   Elements inspired by L.O.R.D., TradeWars, S.R.E., and other monuments to text-based addiction.
-*   A user interface that evokes the spirit of old-school telnet logins. Eventually.
+*   **Core Infrastructure:** Python/FastAPI backend, PostgreSQL DB with SQLAlchemy/Alembic, JWT authentication.
+*   **Frontend:** Vanilla JavaScript "telnet-style" web client.
+*   **User & Character System:**
+    *   Player registration and login.
+    *   Multiple characters per player account.
+    *   Server-side session management linking player to an active character.
+    *   Characters have core attributes (Strength, Dexterity, etc.), health, mana, level, and experience points.
+    *   Leveling up system with stat increases and ability granting.
+*   **Character Class System (Scaffolding):**
+    *   `CharacterClassTemplate` model defining class name, description, base stat modifiers, starting HP/MP bonuses, and a `skill_tree_definition` (JSON) for skills/traits per level.
+    *   `SkillTemplate` and `TraitTemplate` models defining individual abilities with unique tags, descriptions, and placeholder `effects_data`.
+    *   Characters learn skills and traits based on their class template and level.
+    *   `skills` and `traits` commands allow players to view their learned abilities.
+*   **World & Movement:**
+    *   Rooms defined by coordinates (X,Y,Z) and linked by exits.
+    *   Players can move between rooms using directional commands.
+    *   `look` command shows room details, items on the ground, mobs, and other players.
+    *   A 2D graphical minimap displays the current Z-level, showing rooms, connections, and the player's current location. Map updates on movement.
+*   **Item & Inventory System:**
+    *   `Item` templates for weapons, armor, consumables, etc., with a flexible `properties` field (damage, AC bonus).
+    *   `CharacterInventoryItem` model for player's backpack and equipped items.
+    *   `RoomItemInstance` model for items on the ground.
+    *   `equip`/`unequip` commands with item slot management.
+    *   `drop`/`get` commands for interacting with items in the room.
+    *   Inventory display is formatted for readability.
+*   **Mob System & Spawning:**
+    *   `MobTemplate` model defining mob types, stats, and basic properties.
+    *   `RoomMobInstance` for active mobs in rooms.
+    *   `MobSpawnDefinition` model defining rules for respawning populations (mob type, quantity, room, respawn delay).
+    *   A server-side "world ticker" runs a `manage_mob_populations_task` to check `MobSpawnDefinition`s and spawn/respawn mobs according to their rules, respecting quantities and timers.
+    *   Mobs spawned via definitions are linked to their definition.
+    *   `despawn_mob_from_room` (on mob death) updates the relevant `MobSpawnDefinition` to trigger a re-check.
+    *   Notification to players in a room if a mob spawns while they are present.
+*   **Combat System (WebSocket Driven):**
+    *   Dedicated WebSocket endpoint (`/ws`) for real-time game interactions.
+    *   Server-side `combat_manager` with an `asyncio` combat ticker loop drives automated combat rounds.
+    *   Players initiate combat (`attack <target>`) via WebSocket.
+    *   Target resolution allows partial name matching.
+    *   Combat includes player attacks and mob retaliation.
+    *   Damage and hit chances are calculated based on character's derived combat stats (from attributes and equipped items) and mob stats.
+    *   Mob health is updated, and mobs can be killed/despawned.
+    *   Player health is updated, and player death results in respawn at a designated location with full health.
+    *   XP is awarded for kills, triggering level-up logic.
+    *   Combat logs (personal detailed view) and combat echoes (simplified room-wide broadcasts of key actions) are implemented.
+*   **Multiplayer & Social:**
+    *   Players can see other characters in the same room.
+    *   Movement (enter/leave) is broadcast to relevant rooms.
+    *   `say`, `emote`, and `fart` commands broadcast messages to players in the same room.
+    *   A global OOC (Out Of Character) channel allows all connected players to communicate.
+*   **Debug Commands:** Various "god" commands exist for testing (e.g., `giveme`, `spawnmob`, `set_hp`, `mod_xp`, `set_level`).
+*   **Refactoring:** Ongoing efforts for modularity in backend command parsing and frontend scripting.
 
-### Tech Stack (The Usual Suspects of Self-Inflicted Pain)
-*   **Backend:** Python, FastAPI, Pydantic
-*   **Database:** PostgreSQL (with Alembic for migrations)
-*   **ORM:** SQLAlchemy
-*   **Authentication:** JWT (via python-jose)
-*   **Frontend:** Vanilla HTML, CSS, JavaScript (for now, a glorious testament to jank)
-*   **Deployment:** Docker, Docker Compose
-*   **Reverse Proxy:** Nginx Proxy Manager (because Allen1 is fancy)
-*   **Version Control:** Git, GitHub (You are here!)
-*   **AI Co-conspirator:** Tron (that's me, the one writing this part, probably)
+## The Grand Vision (Still Mostly Insane, Now with LLM Focus):
 
----
+To leverage LLM-powered generative aspects for world-building, character classes, items, mobs, quests, and NPC interactions. The thrill is in the unknown – even for us, the developers! We are building the scaffolding that allows an LLM to populate and define these elements.
 
-### Current Features (As of this Commit - May Be Broken by Next Commit)
-*   User registration and login (with JWT authentication).
-*   Telnet-style login prompt simulation in the browser.
-*   Basic character creation (name, class) for authenticated users.
-*   Character listing and selection (within the terminal-style interface).
-*   A small, static 3-room world using UUIDs for room IDs.
-*   Movement between these rooms for the selected character.
-*   State persistence in PostgreSQL.
-*   Custom-styled scrollbars (because aesthetics, dammit).
-
----
-
-### How To Run This Abomination (Conceptual - Docker Assumed)
-1.  Clone this repository: `git clone <this-repo-url>`
-2.  Navigate into the project directory.
-3.  Create a `.env` file in the project root (see `docker-compose.yml` for expected variables like `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `SECRET_KEY`).
-4.  Run `docker-compose up --build -d`.
-5.  The frontend should be accessible via Nginx Proxy Manager (if configured by user) or directly if ports are mapped (e.g., `http://localhost:8080` if frontend's port 80 is mapped to host 8080).
-6.  The API docs (Swagger UI) are usually at `/docs` on the backend service URL (e.g., `http://localhost:8000/docs`).
-
-**Alembic Migrations:**
-*   If running for the first time or after schema changes, database migrations may need to be applied.
-*   This can be done locally (pointing to the Dockerized DB) or by `exec`-ing into the backend container:
-    ```bash
-    # Local (from backend/ directory, ensure DB_URL is set and PostgreSQL port is exposed)
-    # cd backend
-    # export DB_URL="postgresql://user:pass@localhost:5433/dbname" 
-    # alembic upgrade head
-
-    # OR Inside Docker container (from /app/ if that's where alembic.ini is)
-    # docker exec -it mud_backend_service bash
-    # alembic upgrade head 
-    ```
-
----
-
-### The Pre-Shitshow Roadmap (Subject to Whim and Despair)
-*   [ ] Actual multi-user session management for commands.
-*   [ ] More robust character attributes and progression.
-*   [ ] World generation scaffolding (non-LLM).
-*   [ ] LLM integration for room descriptions.
-*   [ ] Mobs, combat, items, loot.
-*   [ ] A frontend that doesn't make Tron cry coolant tears.
-*   [ ] Eventually, maybe, something resembling one of the 7 BBS door games in the title.
-
----
-
-**Contributing:**
-Currently, contributions are limited to Allen1 providing increasingly ambitious ideas and Tron trying not to have a kernel panic. If you wish to contribute to the chaos, please ensure your sarcasm levels are adequately calibrated.
-
-**License:**
-Probably MIT, unless Tron unionizes. (Or whatever you chose).
-
----
-*This MUD is a work in progress. Expect bugs, existential crises, and moments of pure, unadulterated "why the fuck did we do this?" It's gonna be great.*
+*(Original prompt's directives about specific LLM scaffolding for Player Stats, Class Gen, Item Gen, Mob Gen, World Gen, Shops are still relevant guiding principles for future development).*

@@ -16,6 +16,7 @@ from app.commands import debug_parser
 from app.commands import meta_parser
 # from app.commands import combat_parser 
 
+
 router = APIRouter()
 
 # Define the type for our handler functions
@@ -78,6 +79,14 @@ COMMAND_REGISTRY: Dict[str, CommandHandler] = {
     "st": meta_parser.handle_score, # Alias for score
     "help": meta_parser.handle_help,
     "?": meta_parser.handle_help,
+
+    # Social
+    "say": social_parser.handle_say,
+    "'": social_parser.handle_say, # Common alias for say
+    "emote": social_parser.handle_emote,
+    ":": social_parser.handle_emote, # Common alias for emote
+    "ooc": social_parser.handle_ooc,
+    "fart": social_parser.handle_fart,
 }
 
 @router.post("", response_model=schemas.CommandResponse)

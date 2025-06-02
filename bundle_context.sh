@@ -17,64 +17,88 @@ echo "" >> "$OUTPUT_FILE"
 # Paths are relative to where the script is run (mud_project root).
 FILES_TO_BUNDLE=(
     # --- Core Application & Configuration ---
-    "$BASE_DIR/main.py"                     # Shows app setup, startup events (ticker, seeders)
+    "$BASE_DIR/main.py"                     # App setup, startup events (tickers, seeders)
     "$BASE_DIR/core/config.py"              # Settings, API_V1_STR
     "$BASE_DIR/core/security.py"            # JWT creation, password hashing
+    "$BASE_DIR/db/session.py"               # DB Session setup, get_db
+    "$BASE_DIR/db/base_class.py"            # SQLAlchemy Base
 
-    # --- WebSocket & Real-time Logic (CRITICAL for combat continuation) ---
+    # --- WebSocket & Real-time Logic ---
     "$BASE_DIR/websocket_router.py"         # Main WebSocket endpoint, message handling
-    "$BASE_DIR/websocket_manager.py"        # Manages WebSocket connections & player-character mapping
-    "$BASE_DIR/game_logic/combat_manager.py" # Server-side combat loop, state, round processing
+    "$BASE_DIR/websocket_manager.py"        # Manages WebSocket connections & broadcasting
 
-    # --- Command System (Refactored) ---
+    # --- Game Logic (Tickers, Managers) ---
+    "$BASE_DIR/game_logic/combat_manager.py" # Server-side combat loop, state, round processing
+    "$BASE_DIR/game_logic/world_ticker.py"   # World tick loop and task registration
+    "$BASE_DIR/game_logic/mob_respawner.py"  # Mob respawn task logic
+
+    # --- Command System ---
     "$BASE_DIR/commands/command_args.py"    # CommandContext Pydantic model
     "$BASE_DIR/commands/utils.py"           # Shared utilities (formatters, roll_dice, resolve_mob_target)
-    # Individual command parsers (HTTP ones, for context on non-combat commands)
-    "$BASE_DIR/commands/movement_parser.py" # For 'look' (which shows mobs/items) & movement
-    "$BASE_DIR/commands/inventory_parser.py" # For 'inventory', 'equip', etc.
-    "$BASE_DIR/commands/meta_parser.py"     # For 'help'
-    "$BASE_DIR/commands/debug_parser.py"    # For 'giveme', 'spawnmob'
-    "$BASE_DIR/api/v1/endpoints/command.py" # The HTTP command DISPATCHER (less logic, more routing)
+    "$BASE_DIR/commands/movement_parser.py" # 'look', movement, broadcasts movement
+    "$BASE_DIR/commands/inventory_parser.py"# 'inventory', 'equip', etc.
+    "$BASE_DIR/commands/social_parser.py"   # 'say', 'emote', 'fart', 'ooc'
+    "$BASE_DIR/commands/meta_parser.py"     # 'help', 'score', 'skills', 'traits'
+    "$BASE_DIR/commands/debug_parser.py"    # 'giveme', 'spawnmob', 'set_hp', 'mod_xp', 'set_level'
+    "$BASE_DIR/api/v1/endpoints/command.py" # HTTP command dispatcher
 
-    # --- Player & Character (Models, CRUD, Schemas - for adding stats/health) ---
+    # --- Models ---
+    "$BASE_DIR/models/__init__.py"
     "$BASE_DIR/models/player.py"
-    "$BASE_DIR/models/character.py"         # <<< WILL BE MODIFIED FOR STATS/HEALTH
-    # "$BASE_DIR/models/character_class.py" # <<< NEW FILE TO BE CREATED (for CharacterClassTemplate)
-    "$BASE_DIR/schemas/player.py"
-    "$BASE_DIR/schemas/character.py"        # <<< WILL BE MODIFIED FOR STATS/HEALTH
-    # "$BASE_DIR/schemas/character_class.py" # <<< NEW FILE TO BE CREATED
-    "$BASE_DIR/crud/crud_player.py"
-    "$BASE_DIR/crud/crud_character.py"      # <<< WILL BE MODIFIED FOR STATS/HEALTH
-    # "$BASE_DIR/crud/crud_character_class.py" # <<< NEW FILE TO BE CREATED
-    "$BASE_DIR/api/v1/endpoints/character.py" # For character creation/selection (HTTP)
-
-    # --- Mobs (Context for combat) ---
-    "$BASE_DIR/models/mob_template.py"
-    "$BASE_DIR/models/room_mob_instance.py"
-    "$BASE_DIR/schemas/mob.py"
-    "$BASE_DIR/crud/crud_mob.py"            # Includes seeding mob templates & initial spawns
-
-    # --- Items & Rooms (Context for what's in the world) ---
+    "$BASE_DIR/models/character.py"
+    "$BASE_DIR/models/character_class_template.py"
+    "$BASE_DIR/models/skill_template.py"
+    "$BASE_DIR/models/trait_template.py"
     "$BASE_DIR/models/item.py"
     "$BASE_DIR/models/character_inventory_item.py"
     "$BASE_DIR/models/room_item_instance.py"
+    "$BASE_DIR/models/mob_template.py"
+    "$BASE_DIR/models/room_mob_instance.py"
+    "$BASE_DIR/models/mob_spawn_definition.py" # Replaced mob_spawn_point
     "$BASE_DIR/models/room.py"
-    "$BASE_DIR/schemas/item.py"             # Includes CharacterInventoryItem schemas
+
+    # --- Schemas ---
+    "$BASE_DIR/schemas/__init__.py"
+    "$BASE_DIR/schemas/player.py"
+    "$BASE_DIR/schemas/character.py"
+    "$BASE_DIR/schemas/character_class_template.py"
+    "$BASE_DIR/schemas/skill.py"
+    "$BASE_DIR/schemas/trait.py"
+    "$BASE_DIR/schemas/item.py"
     "$BASE_DIR/schemas/room_item.py"
+    "$BASE_DIR/schemas/mob.py"
+    "$BASE_DIR/schemas/mob_spawn_definition.py" # Replaced mob_spawn_point
     "$BASE_DIR/schemas/room.py"
+    "$BASE_DIR/schemas/map.py"                  # For map data endpoint
+    "$BASE_DIR/schemas/command.py"              # CommandRequest/Response
+    "$BASE_DIR/schemas/token.py"                # Token schema for login
+
+    # --- CRUD Operations ---
+    "$BASE_DIR/crud/__init__.py"
+    "$BASE_DIR/crud/crud_player.py"
+    "$BASE_DIR/crud/crud_character.py"
+    "$BASE_DIR/crud/crud_character_class.py"
+    "$BASE_DIR/crud/crud_skill.py"
+    "$BASE_DIR/crud/crud_trait.py"
     "$BASE_DIR/crud/crud_item.py"
     "$BASE_DIR/crud/crud_character_inventory.py"
     "$BASE_DIR/crud/crud_room_item.py"
-    "$BASE_DIR/crud/crud_room.py"           # Includes world seeding
+    "$BASE_DIR/crud/crud_mob.py"
+    "$BASE_DIR/crud/crud_mob_spawn_definition.py" # Replaced crud_mob_spawn_point
+    "$BASE_DIR/crud/crud_room.py"
 
-    # --- Dependencies & Schemas Root ---
-    "$BASE_DIR/api/dependencies.py"         # get_current_active_character (HTTP), get_current_player
-    "$BASE_DIR/schemas/__init__.py"         # How all schemas are exposed
+    # --- API Endpoints & Dependencies ---
+    "$BASE_DIR/api/dependencies.py"
+    "$BASE_DIR/api/v1/api_router.py"
+    "$BASE_DIR/api/v1/endpoints/users.py"
+    "$BASE_DIR/api/v1/endpoints/character.py"
+    "$BASE_DIR/api/v1/endpoints/map.py"
+    # Add other specific endpoint files if they become complex and are relevant
 
-    # --- Frontend (Crucial for how player interacts and sees updates) ---
-    "frontend/src/script.js"                # The refactored version handling WS
-    "frontend/src/index.html"               # For CSS classes and basic structure
-);
+    # --- Frontend (For context on UI interaction and WebSocket usage) ---
+    "$FRONTEND_DIR/src/script.js"
+    "$FRONTEND_DIR/src/index.html"
+)
 
 for FILE_PATH in "${FILES_TO_BUNDLE[@]}"; do
     if [ -f "$FILE_PATH" ]; then

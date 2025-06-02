@@ -174,3 +174,19 @@ def resolve_mob_target(
 
     # 4. No match found
     return None, f"Cannot find anything called '{target_ref}' here to target."
+
+def format_room_characters_for_player_message(
+    room_characters: List[models.Character] # Expects a list of Character ORM objects
+) -> str: # No map needed here, just the text
+    """Formats characters in the room into a readable string."""
+    if not room_characters:
+        return "" # No extra "Also here for characters" if none are present
+
+    lines = ["\nAlso present:"] # Or "You also see:"
+    for char_orm in room_characters:
+        # TODO: Add more detail later, e.g., " (PlayerName's CharacterName the Warrior)"
+        # For now, just the character name and class.
+        char_name_html = f"<span class='char-name'>{char_orm.name}</span>" # Re-use char-name style
+        char_class_html = f"<span class='char-class'>({char_orm.class_name})</span>" # Re-use char-class style
+        lines.append(f"  {char_name_html} {char_class_html}")
+    return "\n".join(lines)

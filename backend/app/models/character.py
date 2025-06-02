@@ -21,6 +21,7 @@ class Character(Base):
     id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(100), index=True, nullable=False, unique=True)
     class_name: Mapped[str] = mapped_column(String(50), nullable=False, default="Adventurer") # Keep as stored field
+    owner: Mapped["Player"] = relationship(back_populates="characters")
 
     player_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("players.id"), nullable=False, index=True)
     current_room_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("rooms.id"), nullable=False, index=True)

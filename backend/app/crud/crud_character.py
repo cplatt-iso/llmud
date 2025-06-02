@@ -279,6 +279,8 @@ def _apply_level_down(db: Session, character: models.Character) -> List[str]:
 
 
 def add_experience(db: Session, character_id: uuid.UUID, amount: int) -> Tuple[Optional[models.Character], List[str]]:
+
+    
     character = get_character(db, character_id=character_id)
     if not character:
         return None, ["Character not found."]
@@ -330,3 +332,13 @@ def add_experience(db: Session, character_id: uuid.UUID, amount: int) -> Tuple[O
     if character.level != initial_level and not any("Ding!" in m or "de-leveled" in m for m in messages): # Ensure level change message is there
         messages.append(f"Your level is now {character.level}.")
     return character, messages
+
+def get_characters_in_room(db: Session, *, room_id: uuid.UUID, exclude_character_id: Optional[uuid.UUID] = None) -> List[models.Character]:
+    """
+    Retrieves all characters currently in the specified room,
+    optionally excluding one character (e.g., the one looking).
+    """
+    query = db.query(models.Character).filter(models.Character.current_room_id == room_id)
+    if exclude_character_id:
+        query = query.filter(models.Character.id != exclude_character_id)
+    return query.all()

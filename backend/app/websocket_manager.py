@@ -59,8 +59,22 @@ class ConnectionManager:
         #         except Exception:
         #             pass # Handle send errors or disconnects
 
+    async def broadcast_to_players(self, message_payload: dict, player_ids: List[uuid.UUID]):
+        """Sends a message to a specific list of connected player_ids."""
+        encoded_payload = jsonable_encoder(message_payload)
+        for player_id in player_ids:
+            if player_id in self.active_player_connections:
+                websocket = self.active_player_connections[player_id]
+                try:
+                    await websocket.send_json(encoded_payload)
+                except Exception as e:
+                    print(f"Error broadcasting to player {player_id}: {e}")
+                    # Handle any specific cleanup or logging here
     def is_player_connected(self, player_id: uuid.UUID) -> bool:
         return player_id in self.active_player_connections
+    
+    def get_all_active_player_ids(self) -> List[uuid.UUID]: # Helper
+        return list(self.active_player_connections.keys())
 
 # Global instance
 connection_manager = ConnectionManager()

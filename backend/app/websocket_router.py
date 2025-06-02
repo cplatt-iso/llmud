@@ -11,7 +11,12 @@ from app import crud, models, schemas # General app imports
 from app.core.config import settings # Corrected settings import
 from app.websocket_manager import connection_manager # Global connection manager instance
 from app.game_logic import combat_manager # For initiating combat, sending structured messages
-from app.commands.utils import format_room_items_for_player_message, format_room_mobs_for_player_message, resolve_mob_target # Corrected import for formatters
+from app.commands.utils import ( # Ensure all formatters are imported
+    format_room_items_for_player_message, 
+    format_room_mobs_for_player_message, 
+    format_room_characters_for_player_message, 
+    resolve_mob_target
+)
 
 router = APIRouter()
 
@@ -66,27 +71,31 @@ async def websocket_game_endpoint(
     # --- Send Initial Game State ---
     initial_messages = [f"Welcome {character.name}! You are connected."]
     initial_room_schema: Optional[schemas.RoomInDB] = None
-    with get_db_sync() as db: # New session for this block of operations
+    with get_db_sync() as db: 
         initial_room_orm = crud.crud_room.get_room_by_id(db, room_id=character.current_room_id)
         if initial_room_orm:
             initial_room_schema = schemas.RoomInDB.from_orm(initial_room_orm)
-            initial_messages.insert(1, f"You are in {initial_room_orm.name}.") # Insert before items/mobs
+            initial_messages.insert(1, f"You are in {initial_room_orm.name}.")
 
             items_on_ground = crud.crud_room_item.get_items_in_room(db, room_id=initial_room_orm.id)
             items_text, _ = format_room_items_for_player_message(items_on_ground)
-            if items_text: 
-                initial_messages.append(items_text)
+            if items_text: initial_messages.append(items_text)
             
             mobs_in_room = crud.crud_mob.get_mobs_in_room(db, room_id=initial_room_orm.id)
             mobs_text, _ = format_room_mobs_for_player_message(mobs_in_room)
-            if mobs_text: 
-                initial_messages.append(mobs_text)
+            if mobs_text: initial_messages.append(mobs_text)
+
+            # <<< NEW: Add other characters to initial message
+            other_chars_in_room = crud.crud_character.get_characters_in_room(
+                db, room_id=initial_room_orm.id, exclude_character_id=character.id
+            )
+            chars_text_initial = format_room_characters_for_player_message(other_chars_in_room)
+            if chars_text_initial: initial_messages.append(chars_text_initial)
     
-    await combat_manager.send_combat_log( # Using this generic sender for structured messages
+    await combat_manager.send_combat_log( 
         player_id=player.id, 
         messages=initial_messages,
-        combat_ended=False, # Not in combat on initial connect
-        room_data=initial_room_schema # Send current room data
+        room_data=initial_room_schema 
     )
     # --- End Initial Game State ---
 
@@ -192,17 +201,23 @@ async def websocket_game_endpoint(
                             await combat_manager.send_combat_log(player.id, ["You are not in combat."], room_data=current_room_schema_for_command)
                     
                     elif verb in ["look", "l"]: # Handle 'look' via WebSocket
-                         look_messages = []
-                         # Room name/desc will be in room_data part of send_combat_log
-                         items_on_ground = crud.crud_room_item.get_items_in_room(db_loop, current_char_state.current_room_id)
-                         items_text, _ = format_room_items_for_player_message(items_on_ground)
-                         if items_text: look_messages.append(items_text)
+                        look_messages = []
+                        # Room name/desc will be in room_data part of send_combat_log
+                        items_on_ground = crud.crud_room_item.get_items_in_room(db_loop, current_char_state.current_room_id)
+                        items_text, _ = format_room_items_for_player_message(items_on_ground)
+                        if items_text: look_messages.append(items_text)
                          
-                         mobs_in_current_room = crud.crud_mob.get_mobs_in_room(db_loop, current_char_state.current_room_id)
-                         mobs_text, _ = format_room_mobs_for_player_message(mobs_in_current_room)
-                         if mobs_text: look_messages.append(mobs_text)
-                         
-                         await combat_manager.send_combat_log(player.id, look_messages, room_data=current_room_schema_for_command)
+                        mobs_in_current_room = crud.crud_mob.get_mobs_in_room(db_loop, current_char_state.current_room_id)
+                        mobs_text, _ = format_room_mobs_for_player_message(mobs_in_current_room)
+                        if mobs_text: look_messages.append(mobs_text)
+
+                        other_chars_look = crud.crud_character.get_characters_in_room(
+                            db_loop, room_id=current_char_state.current_room_id, exclude_character_id=character.id
+                        )
+                        chars_text_look = format_room_characters_for_player_message(other_chars_look)
+                        if chars_text_look: look_messages.append(chars_text_look)
+
+                        await combat_manager.send_combat_log(player.id, look_messages, room_data=current_room_schema_for_command)
                     
                     # TODO: Add more WebSocket command handlers (move, inventory, etc.) or a dispatcher
                     # For commands not handled here, the client would still use HTTP
