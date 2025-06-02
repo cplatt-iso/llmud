@@ -125,28 +125,3 @@ def seed_initial_mob_templates(db: Session):
     if seeded_count > 0:
         print(f"Seeded {seeded_count} new mob templates.")
     print("Mob template seeding complete.")
-
-# --- Spawning Mobs on Startup (Example) ---
-def seed_initial_mob_spawns(db: Session):
-    print("Attempting to seed initial mob spawns...")
-    # Example: Spawn a Giant Rat in the Genesis Room (0,0,0) if it's empty of rats
-    genesis_room = crud.crud_room.get_room_by_coords(db, x=0, y=0, z=0)
-    rat_template = get_mob_template_by_name(db, name="Giant Rat")
-
-    if genesis_room and rat_template:
-        # Check if a rat of this template already exists in this room to avoid over-spawning on every startup
-        # This is a simple check; a real system might have max counts per room or more complex spawn rules.
-        mobs_in_genesis = get_mobs_in_room(db, room_id=genesis_room.id)
-        rat_already_present = any(mob.mob_template_id == rat_template.id for mob in mobs_in_genesis)
-
-        if not rat_already_present:
-            print(f"  Spawning 'Giant Rat' in '{genesis_room.name}'...")
-            spawned_rat = spawn_mob_in_room(db, room_id=genesis_room.id, mob_template_id=rat_template.id)
-            if spawned_rat:
-                print(f"    Spawned {spawned_rat.mob_template.name} with ID {spawned_rat.id}")
-        else:
-            print(f"  'Giant Rat' (or similar) already present in '{genesis_room.name}'. Skipping spawn.")
-    else:
-        if not genesis_room: print("  Genesis room not found for mob spawning.")
-        if not rat_template: print("  Giant Rat template not found for mob spawning.")
-    print("Initial mob spawning process complete.")
