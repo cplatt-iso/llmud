@@ -11,6 +11,7 @@ from app.db.session import SessionLocal
 
 from app.game_logic.mob_respawner import manage_mob_populations_task 
 from app.game_logic.mob_ai_ticker import process_roaming_mobs_task, process_aggressive_mobs_task
+from app.game_logic.player_vital_regenerator import regenerate_player_vitals_task 
 
 # --- Configuration ---
 WORLD_TICK_INTERVAL_SECONDS = 10.0
@@ -43,6 +44,7 @@ def _initialize_and_register_all_world_tasks():
     register_world_tick_task("mob_population_manager", manage_mob_populations_task)
     register_world_tick_task("roaming_mob_processor", process_roaming_mobs_task) # <<< NEW TASK
     register_world_tick_task("aggressive_mob_processor", process_aggressive_mobs_task) # <<< NEW TASK
+    register_world_tick_task("player_vital_regenerator", regenerate_player_vitals_task)
     
     print(f"World Ticker: All tasks registered. Active tasks: {list(world_tick_tasks.keys())}")
 

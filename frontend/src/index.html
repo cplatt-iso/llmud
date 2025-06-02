@@ -11,9 +11,9 @@
             color: #00ff00;
             font-family: 'Courier New', Courier, monospace;
             margin: 0;
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
             min-height: 100vh;
             padding: 10px;
             box-sizing: border-box;
@@ -21,13 +21,15 @@
 
         .header-text {
             text-align: center;
-            margin-bottom: 20px; /* Increased space a bit */
+            margin-bottom: 20px;
+            /* Increased space a bit */
         }
 
         .header-text h1 {
             margin: 0 0 5px 0;
             font-size: 1.8em;
-            line-height: 1.2; /* Adjusted for multi-line title */
+            line-height: 1.2;
+            /* Adjusted for multi-line title */
         }
 
         .header-text p {
@@ -38,19 +40,21 @@
 
         /* NEW WRAPPER FOR MUD AND MAP */
         .game-area-wrapper {
-            display: flex;        
-            flex-direction: row;  
-            align-items: flex-start; 
-            width: 100%; /* Allow it to take full width if needed */
-            max-width: 1200px; /* Example: MUD (900) + Map (250) + Spacing (50) */
+            display: flex;
+            flex-direction: row;
+            align-items: flex-start;
+            width: 100%;
+            /* Allow it to take full width if needed */
+            max-width: 1200px;
+            /* Example: MUD (900) + Map (250) + Spacing (50) */
             /* margin: 0 auto; /* Uncomment to center the whole game area if body isn't doing it */
         }
 
         .mud-container {
             /* flex-grow: 1; /* Allow mud-container to take up remaining space if map has fixed width */
             /* Or set a specific width/max-width */
-            width: 100%; 
-            max-width: 900px; 
+            width: 100%;
+            max-width: 900px;
             display: flex;
             flex-direction: column;
             border: 1px solid #005500;
@@ -59,7 +63,8 @@
 
         .terminal-output {
             flex-grow: 1;
-            height: 70vh; /* Adjusted viewport height slightly */
+            height: 70vh;
+            /* Adjusted viewport height slightly */
             overflow-y: scroll;
             background-color: #030303;
             padding: 10px;
@@ -67,6 +72,9 @@
             white-space: pre-wrap;
             line-height: 1.4;
             border-bottom: 1px solid #005500;
+            display: flex;
+            flex-direction: column-reverse;
+            overflow-y: auto;
         }
 
         .exits-bar {
@@ -75,7 +83,7 @@
             color: #00ffff;
             font-size: 0.9em;
             border-bottom: 1px solid #005500;
-            min-height: 1.5em; 
+            min-height: 1.5em;
             white-space: nowrap;
             overflow-x: auto;
         }
@@ -104,87 +112,296 @@
             outline: none;
             padding: 0;
         }
-        
+
         /* Scrollbar styling for terminal-output */
-        .terminal-output::-webkit-scrollbar { width: 10px; height: 10px; }
-        .terminal-output::-webkit-scrollbar-track { background: #080808; }
-        .terminal-output::-webkit-scrollbar-thumb { background-color: #005500; border-radius: 5px; border: 2px solid #030303; }
-        .terminal-output::-webkit-scrollbar-thumb:hover { background-color: #007700; }
-        .terminal-output::-webkit-scrollbar-corner { background: #030303; }
+        .terminal-output::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        .terminal-output::-webkit-scrollbar-track {
+            background: #080808;
+        }
+
+        .terminal-output::-webkit-scrollbar-thumb {
+            background-color: #005500;
+            border-radius: 5px;
+            border: 2px solid #030303;
+        }
+
+        .terminal-output::-webkit-scrollbar-thumb:hover {
+            background-color: #007700;
+        }
+
+        .terminal-output::-webkit-scrollbar-corner {
+            background: #030303;
+        }
+
+        #vitals-monitor {
+            display: none;
+            /* Remains hidden initially */
+            flex-direction: row;
+            /* <<< CHANGE TO ROW for single line */
+            justify-content: space-around;
+            /* <<< EVENLY SPACE THE BARS */
+            align-items: center;
+            /* Align items vertically in the center of the row */
+            padding: 5px 8px;
+            background-color: #1a1a1a;
+            border-bottom: 1px solid #333;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+            height: auto;
+            /* Let content determine height, or set a fixed height if preferred */
+        }
+
+        .vital-bar-container {
+            display: flex;
+            align-items: center;
+            /* margin-bottom: 3px; <<< REMOVE, no longer needed for vertical stacking */
+            flex-basis: 30%;
+            /* <<< Give each bar container a basis, adjust for desired spacing/width */
+            /* For 3 items, ~30-32% each allows for some spacing. */
+            /* Or use flex-grow: 1; if you want them to expand to fill available space from space-around */
+            flex-grow: 1;
+            /* <<< Let them grow to fill space given by space-around */
+            margin-right: 10px;
+            /* Space between bars if not using space-around effectively */
+        }
+
+        .vital-bar-container:last-child {
+            margin-right: 0;
+            /* No margin for the last bar */
+        }
+
+
+        .vital-label {
+            color: #bbb;
+            /* min-width: 35px; /* May not need min-width if bars are side-by-side like this */
+            margin-right: 5px;
+            font-size: 0.85em;
+            /* Slightly smaller label if space is tight */
+        }
+
+        .vital-bar-outer {
+            flex-grow: 1;
+            height: 16px;
+            /* Can make bars slightly shorter if needed for single line */
+            background-color: #333;
+            border: 1px solid #555;
+            border-radius: 3px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .vital-bar-inner {
+            height: 100%;
+            transition: width 0.3s ease-out;
+            border-radius: 2px;
+        }
+
+        .vital-bar-text {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            color: #ffffff;
+            font-size: 0.75em;
+            /* Smaller text for smaller bars */
+            font-weight: bold;
+            text-shadow: 1px 1px 1px #000000;
+            white-space: nowrap;
+        }
 
 
         /* Map Viewport Styling */
         #map-viewport {
-            width: 250px; 
-            height: 250px; /* Made it square, adjust as desired */
-            border: 1px solid #00cc00; 
-            background-color: #080808; 
-            overflow: hidden; 
-            display: none; /* JS will control this */
+            width: 250px;
+            height: 250px;
+            /* Made it square, adjust as desired */
+            border: 1px solid #00cc00;
+            background-color: #080808;
+            overflow: hidden;
+            display: none;
+            /* JS will control this */
             box-shadow: 0 0 10px #00cc00;
-            margin-left: 15px; /* Space between MUD container and map */
+            margin-left: 15px;
+            /* Space between MUD container and map */
             /* flex-shrink: 0; /* Prevent map from shrinking if .mud-container wants all space */
         }
 
         /* Styling for character lists in terminal output */
-        .char-list-item { margin-left: 20px; }
-        .char-list-item .char-index { color: #ffff00; }
-        .char-list-item .char-name { color: #00ff00; }
-        .char-list-item .char-class { color: #00aaaa; }
+        .char-list-item {
+            margin-left: 20px;
+        }
+
+        .char-list-item .char-index {
+            color: #ffff00;
+        }
+
+        .char-list-item .char-name {
+            color: #00ff00;
+        }
+
+        .char-list-item .char-class {
+            color: #00aaaa;
+        }
 
         /* Styling for room name in terminal output */
-        .room-name-header { color: #ffff00; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
-        .error-message-inline { color: #ff4444; font-style: italic; }
-        .game-message { color: #cccccc; display: block; }
+        .room-name-header {
+            color: #ffff00;
+            font-weight: bold;
+            margin-top: 1em;
+            margin-bottom: 0.5em;
+        }
 
-        /* Inventory Styles */
-        .inv-slot-name { color: #00ffff; font-weight: bold; }
-        .inv-backpack-number { color: #ffff00; }
-        .inv-item-name { color: #00ff00; } /* Used for items and mobs */
-        .inv-item-qty { color: #aaaaaa; }
-        .inv-section-header { color: #f0f0f0; font-weight: bold; }
-        
-        /* Character Name style (if different from item name) */
-        .char-name { color: #00ff00; } /* Or a distinct player color e.g. #99ff99 */
-
-        /* Combat Specific Styles */
-        .combat-success { color: #33cc33; font-weight: bold; }
-        .combat-miss { color: #ff9933; }
-        .combat-hit { color: #ffff00; font-weight: bold; }
-        .combat-crit { color: #ff9900; font-weight: bold; }
-        .combat-hp { color: #ffdddd; }
-        .combat-death { color: #ff3333; font-weight: bold; font-style: italic; }
-        .combat-hit-player { color: #ff6666; font-weight: bold; }
-        .combat-crit-player { color: #cc0000; font-weight: bold; }
-
-        .ooc-chat-message {
-            color: #9999ff; /* Example: Light purple for OOC */
+        .error-message-inline {
+            color: #ff4444;
             font-style: italic;
         }
 
+        .game-message {
+            color: #cccccc;
+            display: block;
+        }
+
+        /* Inventory Styles */
+        .inv-slot-name {
+            color: #00ffff;
+            font-weight: bold;
+        }
+
+        .inv-backpack-number {
+            color: #ffff00;
+        }
+
+        .inv-item-name {
+            color: #00ff00;
+        }
+
+        /* Used for items and mobs */
+        .inv-item-qty {
+            color: #aaaaaa;
+        }
+
+        .inv-section-header {
+            color: #f0f0f0;
+            font-weight: bold;
+        }
+
+        /* Character Name style (if different from item name) */
+        .char-name {
+            color: #00ff00;
+        }
+
+        /* Or a distinct player color e.g. #99ff99 */
+
+        /* Combat Specific Styles */
+        .combat-success {
+            color: #33cc33;
+            font-weight: bold;
+        }
+
+        .combat-miss {
+            color: #ff9933;
+        }
+
+        .combat-hit {
+            color: #ffff00;
+            font-weight: bold;
+        }
+
+        .combat-crit {
+            color: #ff9900;
+            font-weight: bold;
+        }
+
+        .combat-hp {
+            color: #ffdddd;
+        }
+
+        .combat-death {
+            color: #ff3333;
+            font-weight: bold;
+            font-style: italic;
+        }
+
+        .combat-hit-player {
+            color: #ff6666;
+            font-weight: bold;
+        }
+
+        .combat-crit-player {
+            color: #cc0000;
+            font-weight: bold;
+        }
+
+        .ooc-chat-message {
+            color: #9999ff;
+            /* Example: Light purple for OOC */
+            font-style: italic;
+        }
+
+        #input-prompt-line {
+            display: flex;
+            /* Keep this from your existing styles */
+            align-items: center;
+            /* Keep this */
+            padding: 0 8px;
+            /* Match vitals monitor padding if desired */
+        }
     </style>
 </head>
 
 <body>
     <div class="header-text">
-        <h1>Legend of the Solar Dragon's Tradewar<br>2002 Barrels of Food Fight<br>Over a Usurped Pit of Devastation (Alpha)</h1>
+        <h1>Legend of the Solar Dragon's Tradewar<br>2002 Barrels of Food Fight<br>Over a Usurped Pit of Devastation
+            (Alpha)</h1>
         <p>(UMGTWOTRDBSR_EUPFDX_TPSC for short, obviously)</p>
     </div>
 
     <!-- NEW WRAPPER FOR MUD AND MAP -->
-    <div class="game-area-wrapper"> 
+    <div class="game-area-wrapper">
         <div class="mud-container">
             <!-- Main MUD interface elements -->
             <div id="output" class="terminal-output"></div>
             <div id="exits-display" class="exits-bar">Exits: (None)</div>
+            <div id="vitals-monitor">
+                <div class="vital-bar-container">
+                    <span class="vital-label">HP:</span>
+                    <div class="vital-bar-outer" id="hp-bar-outer">
+                        <div class="vital-bar-inner" id="player-hp-bar" style="width: 100%; background-color: #d9534f;">
+                        </div>
+                        <span class="vital-bar-text" id="player-hp-text">100 / 100</span>
+                    </div>
+                </div>
+                <div class="vital-bar-container">
+                    <span class="vital-label">MP:</span>
+                    <div class="vital-bar-outer" id="mp-bar-outer">
+                        <div class="vital-bar-inner" id="player-mp-bar" style="width: 100%; background-color: #5bc0de;">
+                        </div>
+                        <span class="vital-bar-text" id="player-mp-text">50 / 50</span>
+                    </div>
+                </div>
+                <div class="vital-bar-container">
+                    <span class="vital-label">XP:</span>
+                    <div class="vital-bar-outer" id="xp-bar-outer">
+                        <div class="vital-bar-inner" id="player-xp-bar" style="width: 0%; background-color: #f0ad4e;">
+                        </div>
+                        <span class="vital-bar-text" id="player-xp-text">0 / 100</span>
+                    </div>
+                </div>
+            </div>
             <div id="input-prompt-line" class="terminal-input-line">
                 <span id="prompt-text">> </span>
-                <input type="text" id="commandInput" class="terminal-input" name="mud_command_line" autofocus autocomplete="off">
+                <input type="text" id="commandInput" class="terminal-input" name="mud_command_line" autofocus
+                    autocomplete="off">
             </div>
         </div>
 
         <!-- MAP VIEWPORT IS NOW A SIBLING TO .mud-container, INSIDE THE WRAPPER -->
-        <div id="map-viewport"> 
+        <div id="map-viewport">
             <svg id="map-svg" width="100%" height="100%"></svg>
         </div>
     </div>
