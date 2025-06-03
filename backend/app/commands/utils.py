@@ -40,8 +40,10 @@ def format_room_mobs_for_player_message(room_mobs: List[models.RoomMobInstance])
             mob_map[idx + 1] = mob_instance.id
     return "\n".join(lines), mob_map
 
-def format_inventory_for_player_message(inventory_display_schema: schemas.CharacterInventoryDisplay) -> str: # ... content from previous version ...
+def format_inventory_for_player_message(inventory_display_schema: schemas.CharacterInventoryDisplay) -> str:
     lines = []
+    
+    # --- Equipped Items ---
     equipped_item_parts = [] 
     max_visible_equipped_prefix_len = 0
     if inventory_display_schema.equipped_items:
@@ -52,19 +54,30 @@ def format_inventory_for_player_message(inventory_display_schema: schemas.Charac
             prefix_html = f"  [{slot_name_html}]"
             visible_prefix_len = get_visible_length(prefix_html)
             max_visible_equipped_prefix_len = max(max_visible_equipped_prefix_len, visible_prefix_len)
+            
             item_name_raw = inv_item_schema.item.name.strip() if inv_item_schema.item else "Unknown Item"
             item_name_html = f"<span class='inv-item-name'>{item_name_raw}</span>"
-            item_qty_html = f"<span class='inv-item-qty'>(Qty: {inv_item_schema.quantity})</span>"
+            item_qty_html = f"<span class='inv-item-qty'>(Qty: {inv_item_schema.quantity})</span>" # Quantity of this equipped instance
             suffix_html = f"{item_name_html} {item_qty_html}"
-            equipped_item_parts.append({'sort_key': display_slot_name_raw,'prefix_html': prefix_html,'visible_prefix_len': visible_prefix_len,'suffix_html': suffix_html})
+            equipped_item_parts.append({
+                'sort_key': display_slot_name_raw,
+                'prefix_html': prefix_html,
+                'visible_prefix_len': visible_prefix_len,
+                'suffix_html': suffix_html
+            })
+            
     lines.append(f"<span class='inv-section-header'>--- Equipped ---</span>")
     if equipped_item_parts:
         equipped_item_parts.sort(key=lambda x: x['sort_key'])
         for parts in equipped_item_parts:
-            padding_needed = (max_visible_equipped_prefix_len + 2) - parts['visible_prefix_len']
+            # Calculate padding based on the visible length of the prefix (excluding HTML tags)
+            padding_needed = max(0, (max_visible_equipped_prefix_len + 2) - parts['visible_prefix_len'])
             padding_spaces = " " * padding_needed
             lines.append(f"{parts['prefix_html']}{padding_spaces}{parts['suffix_html']}")
-    else: lines.append("  Nothing equipped.")
+    else:
+        lines.append("  Nothing equipped. You're practically naked, you degenerate.")
+
+    # --- Backpack Items ---
     backpack_item_parts = []
     max_visible_backpack_prefix_len = 0
     if inventory_display_schema.backpack_items:
@@ -73,19 +86,48 @@ def format_inventory_for_player_message(inventory_display_schema: schemas.Charac
             prefix_html = f"  {item_number_html}"
             visible_prefix_len = get_visible_length(prefix_html)
             max_visible_backpack_prefix_len = max(max_visible_backpack_prefix_len, visible_prefix_len)
+
             item_name_raw = inv_item_schema.item.name.strip() if inv_item_schema.item else "Unknown Item"
             item_name_html = f"<span class='inv-item-name'>{item_name_raw}</span>"
             item_qty_html = f"<span class='inv-item-qty'>(Qty: {inv_item_schema.quantity})</span>"
             suffix_html = f"{item_name_html} {item_qty_html}"
-            backpack_item_parts.append({'prefix_html': prefix_html,'visible_prefix_len': visible_prefix_len,'suffix_html': suffix_html})
+            backpack_item_parts.append({
+                'prefix_html': prefix_html,
+                'visible_prefix_len': visible_prefix_len,
+                'suffix_html': suffix_html
+            })
+
     lines.append(f"\n<span class='inv-section-header'>--- Backpack ---</span>")
     if backpack_item_parts:
         for parts in backpack_item_parts:
-            padding_needed = (max_visible_backpack_prefix_len + 1) - parts['visible_prefix_len']
+            padding_needed = max(0, (max_visible_backpack_prefix_len + 1) - parts['visible_prefix_len'])
             padding_spaces = " " * padding_needed
             lines.append(f"{parts['prefix_html']}{padding_spaces}{parts['suffix_html']}")
-    else: lines.append("  Your backpack is empty.")
+    else:
+        lines.append("  Your backpack is as empty as your skull.")
+
+    # --- Currency ---
+    lines.append(f"\n<span class='inv-section-header'>--- Currency ---</span>")
+    currency_parts = []
+    if inventory_display_schema.platinum > 0:
+        currency_parts.append(f"<span class='currency platinum'>{inventory_display_schema.platinum}p</span>")
+    if inventory_display_schema.gold > 0:
+        currency_parts.append(f"<span class='currency gold'>{inventory_display_schema.gold}g</span>")
+    if inventory_display_schema.silver > 0:
+        currency_parts.append(f"<span class='currency silver'>{inventory_display_schema.silver}s</span>")
+    
+    # Always show copper, even if 0, unless other currencies are present
+    if currency_parts or inventory_display_schema.copper > 0 :
+        currency_parts.append(f"<span class='currency copper'>{inventory_display_schema.copper}c</span>")
+
+    if currency_parts:
+        lines.append(f"  {' '.join(currency_parts)}")
+    else:
+        lines.append("  You are utterly destitute. Not a single coin to your pathetic name.")
+            
     return "\n".join(lines)
+
+
 
 def roll_dice(dice_str: str) -> int: # ... content ...
     if not dice_str: return 0

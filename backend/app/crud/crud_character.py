@@ -25,12 +25,95 @@ XP_THRESHOLDS = {
     # ... add more levels as needed
 }
 
+COPPER_PER_SILVER = 100
+SILVER_PER_GOLD = 100
+GOLD_PER_PLATINUM = 100
+
 CLASS_LEVEL_BONUSES = {
     "Warrior": {"hp_per_level": 5, "mp_per_level": 1, "base_attack_bonus_per_level": 0.5}, # BAB increases every 2 levels
     "Swindler": {"hp_per_level": 3, "mp_per_level": 2, "base_attack_bonus_per_level": 0.5},
     "Adventurer": {"hp_per_level": 4, "mp_per_level": 1, "base_attack_bonus_per_level": 0.5}, # Default
     # Add other seeded classes
 }
+
+def update_character_currency(
+    db: Session, 
+    character_id: uuid.UUID, 
+    platinum_change: int = 0,
+    gold_change: int = 0, 
+    silver_change: int = 0, 
+    copper_change: int = 0
+) -> Tuple[Optional[models.Character], str]: # Returns char and a message
+    """
+    Updates a character's currency. Handles negative changes by attempting to make change.
+    Returns the updated character and a status message.
+    """
+    character = get_character(db, character_id=character_id)
+    if not character:
+        return None, "Character not found."
+
+    # Convert all existing currency and changes to the smallest unit (copper)
+    current_total_copper = (character.platinum_coins * GOLD_PER_PLATINUM * SILVER_PER_GOLD * COPPER_PER_SILVER) + \
+                           (character.gold_coins * SILVER_PER_GOLD * COPPER_PER_SILVER) + \
+                           (character.silver_coins * COPPER_PER_SILVER) + \
+                            character.copper_coins
+    
+    change_total_copper = (platinum_change * GOLD_PER_PLATINUM * SILVER_PER_GOLD * COPPER_PER_SILVER) + \
+                          (gold_change * SILVER_PER_GOLD * COPPER_PER_SILVER) + \
+                          (silver_change * COPPER_PER_SILVER) + \
+                           copper_change
+
+    if current_total_copper + change_total_copper < 0:
+        return character, "Not enough funds for this transaction."
+
+    new_total_copper = current_total_copper + change_total_copper
+
+    # Convert back to platinum, gold, silver, copper
+    new_platinum = new_total_copper // (GOLD_PER_PLATINUM * SILVER_PER_GOLD * COPPER_PER_SILVER)
+    remainder_after_platinum = new_total_copper % (GOLD_PER_PLATINUM * SILVER_PER_GOLD * COPPER_PER_SILVER)
+    
+    new_gold = remainder_after_platinum // (SILVER_PER_GOLD * COPPER_PER_SILVER) 
+    remainder_after_gold = remainder_after_platinum % (SILVER_PER_GOLD * COPPER_PER_SILVER)    
+    
+    new_silver = remainder_after_gold // COPPER_PER_SILVER
+    new_copper = remainder_after_gold % COPPER_PER_SILVER
+
+    character.platinum_coins = new_platinum # Store platinum
+    character.gold_coins = new_gold
+    character.silver_coins = new_silver
+    character.copper_coins = new_copper
+
+    db.add(character)
+    db.commit()
+    db.refresh(character)
+    
+    # Construct a message about the change
+    change_parts = []
+    if platinum_change != 0: change_parts.append(f"{abs(platinum_change)}p") # Add platinum to change parts
+    if gold_change != 0: change_parts.append(f"{abs(gold_change)}g")
+    if silver_change != 0: change_parts.append(f"{abs(silver_change)}s")
+    if copper_change != 0: change_parts.append(f"{abs(copper_change)}c")
+    
+    action = "gained" if change_total_copper > 0 else "lost" if change_total_copper < 0 else "changed by"
+    
+    # Construct current balance string
+    balance_parts = []
+    if new_platinum > 0: balance_parts.append(f"{new_platinum}p")
+    if new_gold > 0: balance_parts.append(f"{new_gold}g")
+    if new_silver > 0: balance_parts.append(f"{new_silver}s")
+    # Always show copper if it's the only currency or if other denominations are zero
+    if new_copper > 0 or not balance_parts: balance_parts.append(f"{new_copper}c")
+    current_balance_str = " ".join(balance_parts) if balance_parts else "0c"
+
+
+    if not change_parts and change_total_copper == 0:
+        message = "Currency unchanged."
+    elif not change_parts and change_total_copper != 0: 
+         message = f"Currency updated. New total: {current_balance_str}"
+    else:
+        message = f"You {action} {' '.join(change_parts)}. Current balance: {current_balance_str}"
+
+    return character, message
 
 def get_xp_for_level(level: int) -> Union[int, float]: # <<< CHANGED RETURN TYPE
     """Returns the total XP required to attain the specified level."""

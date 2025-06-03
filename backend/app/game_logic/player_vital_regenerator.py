@@ -72,6 +72,10 @@ async def regenerate_player_vitals_task(db: Session):
                 "max_mp": character.max_mana,
                 "current_xp": character.experience_points, # <<< ADDED
                 "next_level_xp": int(xp_for_next_level) if xp_for_next_level != float('inf') else -1, # <<< ADDED (-1 for max level)
+                "platinum": character.platinum_coins, # <<< NEW
+                "gold": character.gold_coins,     # <<< NEW
+                "silver": character.silver_coins, # <<< NEW
+                "copper": character.copper_coins  # <<< NEW
             }
             await ws_manager.send_personal_message(vitals_payload, player_id)
             

@@ -100,21 +100,24 @@ def update_mob_instance_health(
 # --- Seeding Initial Mob Templates ---
 INITIAL_MOB_TEMPLATES = [
     {
-        "name": "Giant Rat", "description": "A filthy rat, surprisingly large and aggressive.",
+        "name": "Giant Rat", "description": "A filthy rat...",
         "mob_type": "beast", "base_health": 8, "base_attack": "1d4", "base_defense": 11,
         "xp_value": 5, 
-        "aggression_type": "AGGRESSIVE_IF_APPROACHED", # Example, not yet implemented by ticker
-        "level": 1
+        "currency_drop": {"c_min": 1, "c_max": 5}, # Drops 1-5 copper
+        "aggression_type": "AGGRESSIVE_IF_APPROACHED", "level": 1
     },
     {
-        "name": "Goblin Scout", "description": "A small, green-skinned humanoid with beady eyes and a rusty dagger.",
+        "name": "Goblin Scout", "description": "A small, green-skinned humanoid...",
         "mob_type": "humanoid", "base_health": 12, "base_attack": "1d6", "base_defense": 13,
-        "xp_value": 10, "properties": {"faction": "goblins"}, 
-        "aggression_type": "AGGRESSIVE_ON_SIGHT", # <<< MAKE GOBLIN AGGRESSIVE
-        "level": 1
+        "xp_value": 10, 
+        "currency_drop": { # Goblins are a bit richer
+            "c_min": 10, "c_max": 50, 
+            "s_chance": 25, "s_min": 1, "s_max": 3 # 25% chance for 1-3 silver
+        },
+        "properties": {"faction": "goblins"}, 
+        "aggression_type": "AGGRESSIVE_ON_SIGHT", "level": 1
     },
 ]
-
 
 def seed_initial_mob_templates(db: Session):
     print("Attempting to seed initial mob templates...")

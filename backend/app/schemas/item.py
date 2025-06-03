@@ -76,6 +76,10 @@ class CharacterInventoryItem(CharacterInventoryItemInDBBase): # For returning to
 class CharacterInventoryDisplay(BaseModel):
     equipped_items: Dict[str, CharacterInventoryItem] = Field(default_factory=dict, description="Items currently equipped, keyed by their equipped_slot")
     backpack_items: List[CharacterInventoryItem] = Field(default_factory=list, description="Items in inventory but not equipped")
+    platinum: int = 0
+    gold: int = 0
+    silver: int = 0
+    copper: int = 0
     # Add more fields like total_weight, currency later
 
 class EquipRequest(BaseModel):

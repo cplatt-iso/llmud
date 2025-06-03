@@ -66,6 +66,11 @@ class Character(Base):
     base_damage_dice: Mapped[str] = mapped_column(String(20), default="1d4", nullable=False, comment="e.g., 1d6")
     base_damage_bonus: Mapped[int] = mapped_column(Integer, default=0, nullable=False, comment="Base flat damage bonus")
 
+    platinum_coins: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    gold_coins: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    silver_coins: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    copper_coins: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
     inventory_items: Mapped[List["CharacterInventoryItem"]] = relationship(
         back_populates="character",
         cascade="all, delete-orphan"

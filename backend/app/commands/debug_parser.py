@@ -151,4 +151,99 @@ async def handle_set_level(context: CommandContext) -> schemas.CommandResponse:
     context.db.refresh(character)
     
     messages.append(f"Character is now Level {character.level} with {character.experience_points} XP.")
-    return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player="\n".join(messages))    
+    return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player="\n".join(messages))   
+
+async def handle_set_money(context: CommandContext) -> schemas.CommandResponse:
+    """
+    Sets the character's currency.
+    Usage: setmoney <platinum> <gold> <silver> <copper>
+    Example: setmoney 0 10 50 120
+    """
+    if len(context.args) != 4:
+        return schemas.CommandResponse(
+            room_data=context.current_room_schema,
+            message_to_player="Usage: setmoney <plat_amt> <gold_amt> <silver_amt> <copper_amt>"
+        )
+
+    try:
+        plat = int(context.args[0])
+        gold = int(context.args[1])
+        silver = int(context.args[2])
+        copper = int(context.args[3])
+        
+        if any(c < 0 for c in [plat, gold, silver, copper]):
+            return schemas.CommandResponse(
+                room_data=context.current_room_schema,
+                message_to_player="Currency amounts cannot be negative for setmoney."
+            )
+
+    except ValueError:
+        return schemas.CommandResponse(
+            room_data=context.current_room_schema,
+            message_to_player="Invalid amount. All currency amounts must be integers."
+        )
+
+    character = context.active_character
+    character.platinum_coins = plat
+    character.gold_coins = gold
+    character.silver_coins = silver
+    character.copper_coins = copper
+
+    context.db.add(character)
+    context.db.commit()
+    context.db.refresh(character)
+    
+    message = f"Currency set to: {plat}p {gold}g {silver}s {copper}c."
+    return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message)
+
+
+async def handle_add_money(context: CommandContext) -> schemas.CommandResponse:
+    """
+    Adds or removes currency from the character.
+    Usage: addmoney <type> <amount>  (e.g., addmoney gold 100, addmoney copper -50)
+    Valid types: p, g, s, c (or platinum, gold, silver, copper)
+    """
+    if len(context.args) != 2:
+        return schemas.CommandResponse(
+            room_data=context.current_room_schema,
+            message_to_player="Usage: addmoney <type> <amount> (e.g., addmoney gold 100)"
+        )
+
+    currency_type_arg = context.args[0].lower()
+    try:
+        amount = int(context.args[1])
+    except ValueError:
+        return schemas.CommandResponse(
+            room_data=context.current_room_schema,
+            message_to_player="Invalid amount. Must be an integer."
+        )
+
+    plat_change, gold_change, silver_change, copper_change = 0, 0, 0, 0
+
+    if currency_type_arg in ["p", "plat", "platinum"]:
+        plat_change = amount
+    elif currency_type_arg in ["g", "gold"]:
+        gold_change = amount
+    elif currency_type_arg in ["s", "silv", "silver"]:
+        silver_change = amount
+    elif currency_type_arg in ["c", "cop", "copper"]:
+        copper_change = amount
+    else:
+        return schemas.CommandResponse(
+            room_data=context.current_room_schema,
+            message_to_player="Invalid currency type. Use p, g, s, or c."
+        )
+
+    updated_char, message = crud.crud_character.update_character_currency(
+        context.db,
+        character_id=context.active_character.id,
+        platinum_change=plat_change, # Pass platinum
+        gold_change=gold_change,
+        silver_change=silver_change,
+        copper_change=copper_change
+    )
+    
+    if not updated_char: # Should not happen if character exists
+        message = "Error updating currency."
+
+    return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message) 

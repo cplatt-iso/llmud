@@ -11,12 +11,43 @@ from app.api.v1.endpoints.inventory import format_inventory_for_display as forma
 from app.models.item import EQUIPMENT_SLOTS # For equip/unequip logic
 
 async def handle_inventory(context: CommandContext) -> schemas.CommandResponse:
-    raw_inventory_items_orm = crud.crud_character_inventory.get_character_inventory(
-        context.db, character_id=context.active_character.id
+    """Handles the 'inventory' or 'i' command."""
+    character_orm = context.active_character # This is the SQLAlchemy model instance
+
+    # Fetch all inventory item instances for the character
+    # crud_character_inventory.get_character_inventory already eager loads item details
+    all_inv_items_orm = crud.crud_character_inventory.get_character_inventory(context.db, character_id=character_orm.id)
+
+    equipped_items_dict: Dict[str, schemas.CharacterInventoryItem] = {}
+    backpack_items_list: List[schemas.CharacterInventoryItem] = []
+
+    for inv_item_orm in all_inv_items_orm:
+        # Convert ORM model to Pydantic schema.
+        # CharacterInventoryItem schema expects 'item' to be the Item schema.
+        # get_character_inventory should have eager loaded inv_item_orm.item.
+        item_schema = schemas.CharacterInventoryItem.from_orm(inv_item_orm)
+        if inv_item_orm.equipped and inv_item_orm.equipped_slot:
+            equipped_items_dict[inv_item_orm.equipped_slot] = item_schema
+        else:
+            backpack_items_list.append(item_schema)
+            
+    # Create the display schema, now including currency from the character model
+    inventory_display_data = schemas.CharacterInventoryDisplay(
+        equipped_items=equipped_items_dict,
+        backpack_items=backpack_items_list,
+        platinum=character_orm.platinum_coins,
+        gold=character_orm.gold_coins,
+        silver=character_orm.silver_coins,
+        copper=character_orm.copper_coins
     )
-    inventory_as_schema = format_inventory_schema(raw_inventory_items_orm)
-    message_to_player = format_inventory_for_player_message(inventory_as_schema)
-    return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message_to_player)
+
+    message_to_player = format_inventory_for_player_message(inventory_display_data)
+    
+    return schemas.CommandResponse(
+        room_data=context.current_room_schema, 
+        message_to_player=message_to_player
+    )
+
 
 async def handle_equip(context: CommandContext) -> schemas.CommandResponse:
     message_to_player: Optional[str] = None

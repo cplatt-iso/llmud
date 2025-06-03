@@ -14,6 +14,7 @@ class MobTemplateBase(BaseModel):
     base_defense: Optional[int] = 10
     xp_value: int = 0
     loot_table_ref: Optional[str] = None
+    currency_drop: Optional[Dict[str, Any]] = None
     properties: Optional[Dict[str, Any]] = None
     level: Optional[int] = None
     aggression_type: Optional[str] = Field("NEUTRAL", description="e.g., NEUTRAL, AGGRESSIVE_ON_SIGHT") # <<< NEW FIELD
@@ -30,6 +31,7 @@ class MobTemplateUpdate(BaseModel): # Allow partial updates
     base_defense: Optional[int] = None
     xp_value: Optional[int] = None
     loot_table_ref: Optional[str] = None
+    currency_drop: Optional[Dict[str, Any]] = None
     properties: Optional[Dict[str, Any]] = None
     level: Optional[int] = None
     aggression_type: Optional[str] = None # <<< NEW FIELD

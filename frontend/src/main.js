@@ -5,86 +5,113 @@ import { WebSocketService } from './websocket.js';
 import { MapDisplay } from './map.js';
 import { gameState, saveSession, loadSession, clearSession, updateGameState } from './state.js';
 
-// This function will now be exported by websocket.js and imported here
-// but its definition needs to be here as it uses UI, MapDisplay, etc.
+// This function handles messages received over WebSocket
+// It's defined here because it orchestrates calls to UI, MapDisplay, and updates gameState.
 export function handleWebSocketMessage(serverData) {
-    if (serverData.type === "combat_update") {
-        if (serverData.character_vitals && typeof serverData.character_vitals.level !== 'undefined') {
-            UI.updateCharacterInfoBar(gameState.selectedCharacterName, gameState.selectedCharacterClass, serverData.character_vitals.level);
-        }
-        if (serverData.room_data) {
-            const movedRoom = gameState.displayedRoomId !== serverData.room_data.id;
-            UI.updateGameDisplay(serverData.room_data);
-            UI.updateExitsDisplay(serverData.room_data);
-            updateGameState({ displayedRoomId: serverData.room_data.id });
-            if (movedRoom) MapDisplay.redrawMapForCurrentRoom(serverData.room_data.id);
-        }
-        if (serverData.character_vitals) {
+    let charVitals = null; // To hold character vitals if present in the message
+
+    // Consolidate extraction of character_vitals
+    if (serverData.type === "welcome_package" && serverData.character_vitals) {
+        charVitals = serverData.character_vitals;
+    } else if (serverData.type === "combat_update" && serverData.character_vitals) {
+        charVitals = serverData.character_vitals;
+    } else if (serverData.type === "vitals_update") { // vitals_update sends them at root level of serverData
+        charVitals = serverData; // The whole serverData object is the vitals payload here
+    }
+
+    // If we have character vitals from any source, update relevant UI components
+    if (charVitals) {
+        if (typeof UI.updatePlayerVitals === 'function') {
             UI.updatePlayerVitals(
-                serverData.character_vitals.current_hp, serverData.character_vitals.max_hp,
-                serverData.character_vitals.current_mp, serverData.character_vitals.max_mp,
-                serverData.character_vitals.current_xp, serverData.character_vitals.next_level_xp
+                charVitals.current_hp, charVitals.max_hp,
+                charVitals.current_mp, charVitals.max_mp,
+                charVitals.current_xp, charVitals.next_level_xp
             );
         }
-        if (serverData.log && serverData.log.length > 0) {
-            UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
-        }
-        updateGameState({ isInCombat: !serverData.combat_over });
-    } else if (serverData.type === "welcome_package") {
-        if (serverData.log && serverData.log.length > 0) {
-            UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
-        }
-        if (serverData.room_data) {
-            UI.updateGameDisplay(serverData.room_data);
-            UI.updateExitsDisplay(serverData.room_data);
-            updateGameState({ displayedRoomId: serverData.room_data.id });
-            MapDisplay.fetchAndDrawMap();
-        }
-        if (serverData.character_vitals) {
-            UI.updatePlayerVitals(
-                serverData.character_vitals.current_hp, serverData.character_vitals.max_hp,
-                serverData.character_vitals.current_mp, serverData.character_vitals.max_mp,
-                serverData.character_vitals.current_xp, serverData.character_vitals.next_level_xp
-            );
+        if (typeof UI.updateCharacterInfoBar === 'function') {
+            // Use gameState for name/class as they are more stable during session
+            // Level comes from charVitals as it can change
             UI.updateCharacterInfoBar(
                 gameState.selectedCharacterName,
                 gameState.selectedCharacterClass,
-                serverData.character_vitals.level || 1 // Assuming level is part of character_vitals
+                charVitals.level // Assumes 'level' is present in charVitals
             );
         }
-        if (serverData.character_vitals && typeof serverData.character_vitals.level !== 'undefined') {
-            UI.updateCharacterInfoBar(gameState.selectedCharacterName, gameState.selectedCharacterClass, serverData.character_vitals.level);
+        if (typeof UI.updateCurrencyDisplay === 'function' && typeof charVitals.gold !== 'undefined') {
+            UI.updateCurrencyDisplay(
+                charVitals.platinum, // Added platinum
+                charVitals.gold,
+                charVitals.silver,
+                charVitals.copper
+            );
         }
-    } else if (serverData.type === "vitals_update") {
-        UI.updatePlayerVitals(
-            serverData.current_hp, serverData.max_hp,
-            serverData.current_mp, serverData.max_mp,
-            serverData.current_xp, serverData.next_level_xp
-        );
-        if (typeof serverData.level !== 'undefined') { // If backend adds level to this message
-            UI.updateCharacterInfoBar(gameState.selectedCharacterName, gameState.selectedCharacterClass, serverData.level);
-        }
-    } else if (serverData.type === "ooc_message") {
-        UI.appendToOutput(serverData.message, { styleClass: "ooc-chat-message" });
-    } else if (serverData.type === "game_event") {
-        if (serverData.message) UI.appendToOutput(serverData.message, { styleClass: "game-message" });
-    } else if (serverData.message) {
-        UI.appendToOutput(`GS: ${serverData.message}`, { styleClass: "game-message" });
-    } else {
-        UI.appendToOutput(`GS (unparsed): ${JSON.stringify(serverData)}`, { styleClass: "game-message" });
+    }
+
+    // Handle specific message types for logs, room data, and other events
+    switch (serverData.type) {
+        case "welcome_package":
+            if (serverData.log && serverData.log.length > 0) {
+                UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
+            }
+            if (serverData.room_data) {
+                UI.updateGameDisplay(serverData.room_data);
+                UI.updateExitsDisplay(serverData.room_data);
+                updateGameState({ displayedRoomId: serverData.room_data.id });
+                MapDisplay.fetchAndDrawMap(); // Initial map draw
+            }
+            // Vitals already handled by the common charVitals block above
+            break;
+
+        case "combat_update":
+            if (serverData.room_data) {
+                const movedRoom = gameState.displayedRoomId !== serverData.room_data.id;
+                UI.updateGameDisplay(serverData.room_data);
+                UI.updateExitsDisplay(serverData.room_data);
+                updateGameState({ displayedRoomId: serverData.room_data.id });
+                if (movedRoom) MapDisplay.redrawMapForCurrentRoom(serverData.room_data.id);
+            }
+            if (serverData.log && serverData.log.length > 0) {
+                UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
+            }
+            updateGameState({ isInCombat: !serverData.combat_over });
+            // Vitals already handled by the common charVitals block above
+            break;
+
+        case "vitals_update":
+            // Vitals (HP, MP, XP, Currency, Level) already handled by the common charVitals block above.
+            // No further specific action needed here unless there are logs associated with only vitals_update.
+            break;
+
+        case "ooc_message":
+            UI.appendToOutput(serverData.message, { styleClass: "ooc-chat-message" });
+            break;
+
+        case "game_event":
+            if (serverData.message) UI.appendToOutput(serverData.message, { styleClass: "game-message" });
+            break;
+
+        default:
+            // Fallback for messages that have a 'message' field but unknown type
+            if (serverData.message) {
+                UI.appendToOutput(`GS (${serverData.type}): ${serverData.message}`, { styleClass: "game-message" });
+            } else { // Fallback for completely unrecognized structures
+                UI.appendToOutput(`GS (unparsed type: ${serverData.type}): ${JSON.stringify(serverData)}`, { styleClass: "game-message" });
+            }
+            break;
     }
 }
 
+// --- Game Flow and State Management Functions ---
 
 async function startLoginProcess() {
-    clearSession(); // This will reset gameState object via updateGameState internally if needed, or directly
-    updateGameState({ loginState: 'PROMPT_USER' }); // Explicitly set state
-    WebSocketService.close(); // Ensure WS is closed
-    MapDisplay.clearMap();    // Clear the map
-    UI.showAppropriateView(); // This will hide game elements like vitalsMonitor
+    clearSession(); // Resets gameState and clears localStorage
+    updateGameState({ loginState: 'PROMPT_USER' });
+    WebSocketService.close();
+    MapDisplay.clearMap();
+    UI.showAppropriateView(); // Hides game UI elements
     UI.clearOutput();
     UI.appendToOutput("Welcome to The Unholy MUD of Tron & Allen1.");
-    UI.appendToOutput("Version Refactored.Maybe.Less.Shitshow-RC1");
+    UI.appendToOutput("Version: Refactored & Ready to Rumble!"); // New version string
     UI.appendToOutput("-------------------------------------------------");
     UI.appendToOutput("Username (or type 'new' to register): ", { isPrompt: true });
     UI.setInputCommandPlaceholder("Enter username or 'new'");
@@ -119,36 +146,41 @@ async function promptForRegistrationPassword() {
 
 async function displayCharacterSelection() {
     updateGameState({ loginState: 'CHAR_SELECT_PROMPT' });
-    UI.showAppropriateView(); // Update view immediately
+    UI.showAppropriateView();
     if (!gameState.currentAuthToken) {
-        UI.appendToOutput("! Auth error during character selection.", { styleClass: 'error-message-inline' });
-        handleLogout(); return;
+        UI.appendToOutput("! Authentication token missing. Please log in.", { styleClass: 'error-message-inline' });
+        handleLogout(); // Should take back to login start
+        return;
     }
     UI.appendToOutput("\nFetching character list...");
     try {
         const characters = await API.fetchCharacters();
         updateGameState({ availableCharacters: characters });
         UI.appendToOutput("\n--- Character Selection ---");
-        if (gameState.availableCharacters.length === 0) {
-            UI.appendToOutput("No characters found.");
+        if (characters.length === 0) {
+            UI.appendToOutput("No characters found for your account.");
         } else {
             UI.appendToOutput("Your characters:");
-            gameState.availableCharacters.forEach((char, index) => {
-                UI.appendToOutput(`<span class="char-list-item"><span class="char-index">${index + 1}.</span> <span class="char-name">${char.name}</span> (<span class="char-class">${char.class_name}</span>)</span>`);
+            characters.forEach((char, index) => {
+                UI.appendToOutput(`<span class="char-list-item"><span class="char-index">${index + 1}.</span> <span class="char-name">${char.name}</span> (<span class="char-class">${char.class_name}</span> - Lvl ${char.level})</span>`);
             });
         }
-        UI.appendToOutput("Enter character #, or 'new': ", { isPrompt: true });
-        UI.setInputCommandPlaceholder("Enter #, or 'new'");
+        UI.appendToOutput("Enter character # to play, or type 'new' to create one: ", { isPrompt: true });
+        UI.setInputCommandPlaceholder("Enter # or 'new'");
     } catch (error) {
         UI.appendToOutput(`! Error fetching characters: ${error.message}`, { styleClass: 'error-message-inline' });
-        if (error.response && error.response.status === 401) handleLogout();
-        else startLoginProcess(); // Fallback to full login
+        if (error.response && error.response.status === 401) { // Unauthorized
+            UI.appendToOutput("! Your session may have expired. Please log in again.", { styleClass: 'error-message-inline' });
+            handleLogout();
+        } else {
+            startLoginProcess(); // Fallback for other errors
+        }
     }
     UI.focusCommandInput();
 }
 
-async function promptForNewCharacterName() { // Stays mostly the same
-    updateGameState({ loginState: 'CHAR_CREATE_PROMPT_NAME', tempCharName: '' }); // Clear tempCharName
+async function promptForNewCharacterName() {
+    updateGameState({ loginState: 'CHAR_CREATE_PROMPT_NAME', tempCharName: '' });
     UI.appendToOutput("\n--- New Character Creation ---");
     UI.appendToOutput("Enter character name: ", { isPrompt: true });
     UI.setInputCommandPlaceholder("Character Name (3-50 chars)");
@@ -156,45 +188,40 @@ async function promptForNewCharacterName() { // Stays mostly the same
     UI.focusCommandInput();
 }
 
-async function displayClassSelection() { // <<< NEW FUNCTION (replaces promptForNewCharacterClass)
+async function displayClassSelection() {
     updateGameState({ loginState: 'CHAR_CREATE_PROMPT_CLASS' });
     UI.appendToOutput(`\nFetching available classes for ${gameState.tempCharName}...`);
     try {
         const classes = await API.fetchAvailableClasses();
         updateGameState({ availableClasses: classes });
-
         if (classes.length === 0) {
-            UI.appendToOutput("! No character classes available. Using default 'Adventurer'.", { styleClass: 'error-message-inline' });
+            UI.appendToOutput("! No character classes available. Defaulting to 'Adventurer'.", { styleClass: 'error-message-inline' });
             updateGameState({ tempCharClassName: 'Adventurer' });
-            // Directly proceed to create character if no classes to select
             await createCharacterWithSelectedClass();
             return;
         }
-
         UI.appendToOutput("Available Classes:");
         classes.forEach((charClass, index) => {
-            UI.appendToOutput(`<span class="char-list-item"><span class="char-index">${index + 1}.</span> <span class="char-name">${charClass.name}</span> - <span class="char-class-desc">${charClass.description || 'No description.'}</span></span>`);
+            UI.appendToOutput(`<span class="char-list-item"><span class="char-index">${index + 1}.</span> <span class="char-name">${charClass.name}</span> - <span class="char-class-desc">${charClass.description || 'A mysterious path.'}</span></span>`);
         });
-        UI.appendToOutput(`Select class for ${gameState.tempCharName} by number: `, { isPrompt: true });
+        UI.appendToOutput(`Select class for '${gameState.tempCharName}' by number: `, { isPrompt: true });
         UI.setInputCommandPlaceholder("Enter class #");
-        UI.setInputCommandType('text'); // Keep as text for number input
     } catch (error) {
         UI.appendToOutput(`! Error fetching classes: ${error.message}. Defaulting to 'Adventurer'.`, { styleClass: 'error-message-inline' });
         updateGameState({ tempCharClassName: 'Adventurer' });
-        await createCharacterWithSelectedClass(); // Attempt to create with default
+        await createCharacterWithSelectedClass();
     }
     UI.focusCommandInput();
 }
 
-async function createCharacterWithSelectedClass() { // <<< NEW HELPER
+async function createCharacterWithSelectedClass() {
     const charName = gameState.tempCharName;
-    const charClassName = gameState.tempCharClassName || "Adventurer"; // Fallback
-
+    const charClassName = gameState.tempCharClassName || "Adventurer";
     UI.appendToOutput(`\nCreating ${charName} the ${charClassName}...`);
     try {
         await API.createCharacter(charName, charClassName);
-        UI.appendToOutput("Character created!");
-        await displayCharacterSelection(); // Back to main character list (for login)
+        UI.appendToOutput("Character created successfully!");
+        await displayCharacterSelection(); // Refresh character list
     } catch (error) {
         UI.appendToOutput(`! Error creating character: ${error.data?.detail || error.message}`, { styleClass: 'error-message-inline' });
         await displayCharacterSelection(); // Go back to char select on error
@@ -202,16 +229,16 @@ async function createCharacterWithSelectedClass() { // <<< NEW HELPER
 }
 
 async function selectCharacterAndStartGame(character) {
-    UI.appendToOutput(`\nSelecting ${character.name}...`);
+    UI.appendToOutput(`\nSelecting character: ${character.name}...`);
     try {
         const initialRoomData = await API.selectCharacterOnBackend(character.id);
-        // Save selected char class to localStorage if available from character object
         saveSession(
             gameState.currentAuthToken,
             character.id,
             character.name,
-            character.class_name || 'Unknown' // Save class name
+            character.class_name || 'Adventurer' // Save class name from the selected character object
         );
+        // Pass the full character object from selection which includes level for initial info bar
         await enterGameModeWithCharacter(character, initialRoomData);
     } catch (error) {
         UI.appendToOutput(`! Error selecting character: ${error.message}`, { styleClass: 'error-message-inline' });
@@ -223,14 +250,17 @@ async function enterGameModeWithCharacter(character, initialRoomDataFromHttpSele
     updateGameState({
         selectedCharacterId: character.id,
         selectedCharacterName: character.name,
-        selectedCharacterClass: character.class_name, // Store class name
+        selectedCharacterClass: character.class_name || 'Adventurer',
         loginState: 'IN_GAME'
     });
-    UI.updateCharacterInfoBar(character.name, character.class_name, character.level);
-    UI.showAppropriateView(); // This will show vitals bar etc.
-    UI.updateCurrencyDisplay(0, 0, 0);
+
+    // Update Character Info Bar with potentially more complete data from 'character' object
+    UI.updateCharacterInfoBar(character.name, character.class_name, character.level); // character.level from fetchCharacters
+    UI.updateCurrencyDisplay(character.platinum_coins || 0, character.gold_coins || 0, character.silver_coins || 0, character.copper_coins || 0); // From fetchCharacters
+
+    UI.showAppropriateView();
     UI.clearOutput();
-    UI.appendToOutput(`Playing as: <span class="char-name">${character.name}</span>, the <span class="char-class">${character.class_name || 'Adventurer'}</span>`);
+    UI.appendToOutput(`Playing as: <span class="char-name">${character.name}</span>, the <span class="char-class">${character.class_name || 'Adventurer'}</span> (Lvl ${character.level || 1})`);
     UI.setInputCommandPlaceholder("Type command...");
     UI.setInputCommandType('text');
 
@@ -240,16 +270,16 @@ async function enterGameModeWithCharacter(character, initialRoomDataFromHttpSele
         updateGameState({ displayedRoomId: initialRoomDataFromHttpSelect.id });
         MapDisplay.fetchAndDrawMap();
     }
-    WebSocketService.connect();
+    WebSocketService.connect(); // This will trigger "welcome_package" which also updates vitals/UI
     UI.focusCommandInput();
 }
 
 function handleLogout() {
     WebSocketService.close();
     MapDisplay.clearMap();
-    clearSession(); // This resets gameState and clears localStorage
+    clearSession(); // Resets gameState and clears localStorage
     console.log("Logged out.");
-    startLoginProcess(); // Restart the login flow
+    startLoginProcess();
 }
 
 async function handleHttpCommandResponse(responseData, originalCommand) {
@@ -258,7 +288,7 @@ async function handleHttpCommandResponse(responseData, originalCommand) {
     }
     if (responseData.room_data) {
         const cmdClean = originalCommand.toLowerCase().trim();
-        const isLook = cmdClean.startsWith("look") || cmdClean === "l";
+        const isLook = cmdClean.startsWith("look") || cmdClean === "l"; // 'look' via HTTP should still update
         const movedRoom = gameState.displayedRoomId !== responseData.room_data.id;
 
         if (isLook || movedRoom) {
@@ -268,28 +298,24 @@ async function handleHttpCommandResponse(responseData, originalCommand) {
         updateGameState({ displayedRoomId: responseData.room_data.id });
         if (movedRoom) MapDisplay.redrawMapForCurrentRoom(responseData.room_data.id);
     }
-    // combat_over is unlikely for HTTP commands now
-    if (responseData.combat_over === true) updateGameState({ isInCombat: false });
+    // No combat_over or vitals expected from HTTP commands anymore
 }
 
-
 async function handleInputSubmission() {
-    const commandInputEl = UI.getCommandInput(); // Get reference via UI module
+    const commandInputEl = UI.getCommandInput();
     if (!commandInputEl) return;
-
     const inputText = commandInputEl.value.trim();
     let echoText = inputText;
-    let echoOptions = { isPrompt: false }; // Default not a prompt
+    let echoOptions = { isPrompt: false };
 
     if (gameState.loginState === 'PROMPT_PASSWORD' || gameState.loginState === 'REGISTER_PROMPT_PASSWORD') {
         echoText = '*'.repeat(inputText.length || 8);
-        echoOptions.noNewLineBefore = true; // Passwords often follow a prompt on same "line"
+        echoOptions.noNewLineBefore = true;
     } else if (gameState.loginState === 'IN_GAME' && inputText) {
         echoText = `> ${inputText}`;
-    } else if (inputText) { // For other prompt states like username, char name
+    } else if (inputText) {
         echoOptions.noNewLineBefore = true;
     }
-
 
     if (inputText || gameState.loginState === 'PROMPT_PASSWORD' || gameState.loginState === 'REGISTER_PROMPT_PASSWORD') {
         UI.appendToOutput(echoText, echoOptions);
@@ -305,8 +331,8 @@ async function handleInputSubmission() {
                 break;
             case 'PROMPT_PASSWORD':
                 UI.appendToOutput("\nAttempting login...");
-                const data = await API.loginUser(gameState.tempUsername, inputText);
-                saveSession(data.access_token, null, null, null); // Save only token initially
+                const loginData = await API.loginUser(gameState.tempUsername, inputText);
+                saveSession(loginData.access_token, null, null, null); // Token only for now
                 UI.appendToOutput("Login successful!");
                 UI.setInputCommandType('text');
                 await displayCharacterSelection();
@@ -321,7 +347,7 @@ async function handleInputSubmission() {
                 await API.registerUser(gameState.tempUsername, gameState.tempPassword);
                 UI.appendToOutput("Registration successful!");
                 UI.appendToOutput(`Now, please log in as '${gameState.tempUsername}'.`);
-                updateGameState({ loginState: 'PROMPT_PASSWORD' }); // Transition to login for new user
+                updateGameState({ loginState: 'PROMPT_PASSWORD' });
                 UI.appendToOutput("Password: ", { isPrompt: true, noNewLineBefore: true });
                 UI.setInputCommandPlaceholder("Enter password");
                 UI.setInputCommandType('password');
@@ -344,11 +370,9 @@ async function handleInputSubmission() {
                     break;
                 }
                 updateGameState({ tempCharName: inputText });
-                // Instead of promptForNewCharacterClass, call displayClassSelection
                 await displayClassSelection();
                 break;
-
-            case 'CHAR_CREATE_PROMPT_CLASS': // This state is now for selecting from the list
+            case 'CHAR_CREATE_PROMPT_CLASS':
                 const classIndex = parseInt(inputText, 10) - 1;
                 if (gameState.availableClasses && classIndex >= 0 && classIndex < gameState.availableClasses.length) {
                     const selectedClass = gameState.availableClasses[classIndex];
@@ -356,7 +380,6 @@ async function handleInputSubmission() {
                     await createCharacterWithSelectedClass();
                 } else {
                     UI.appendToOutput("! Invalid class selection. Please enter a valid number.", { styleClass: 'error-message-inline' });
-                    // Re-prompt or re-list (for simplicity, just a message)
                     UI.appendToOutput(`Select class for ${gameState.tempCharName} by number: `, { isPrompt: true, noNewLineBefore: true });
                 }
                 break;
@@ -365,15 +388,14 @@ async function handleInputSubmission() {
                 const lowerInputText = inputText.toLowerCase();
                 const commandVerb = lowerInputText.split(" ")[0];
 
-                if (commandVerb === "logout") {
-                    handleLogout(); break;
-                }
-                const webSocketHandledVerbs = ["attack", "atk", "kill", "k", "flee", "look", "l", "rest"];
+                if (commandVerb === "logout") { handleLogout(); break; }
+
+                const webSocketHandledVerbs = ["attack", "atk", "kill", "k", "flee", "look", "l", "rest", "use", "skill", "cast"];
                 if (webSocketHandledVerbs.includes(commandVerb)) {
                     WebSocketService.sendMessage({ type: "command", command_text: inputText });
                 } else {
                     const httpResponse = await API.sendHttpCommand(inputText);
-                    handleHttpCommandResponse(httpResponse, inputText);
+                    handleHttpCommandResponse(httpResponse, inputText); // Pass original command for context
                 }
                 break;
             default:
@@ -383,49 +405,47 @@ async function handleInputSubmission() {
     } catch (error) {
         console.error("Error during input submission:", error);
         UI.appendToOutput(`\n! Error: ${error.data?.detail || error.message || 'An unknown error occurred.'}`, { styleClass: 'error-message-inline' });
-        // Decide on fallback state based on current state or error type
-        if (gameState.loginState === 'PROMPT_PASSWORD' || gameState.loginState === 'REGISTER_PROMPT_PASSWORD') {
-            // Stay on password prompt or similar
-        } else if (gameState.loginState.includes('CHAR_')) {
-            await displayCharacterSelection(); // Back to char select if char creation/selection failed
-        } else {
-            // startLoginProcess(); // Could be too aggressive
-        }
+        // Fallback based on state to avoid getting stuck
+        if (gameState.loginState === 'PROMPT_PASSWORD') await promptForPassword();
+        else if (gameState.loginState.includes('CHAR_')) await displayCharacterSelection();
+        else if (gameState.loginState.includes('REGISTER_')) await promptForRegistrationUsername();
+        // else startLoginProcess(); // Last resort
     }
     UI.focusCommandInput();
 }
 
 async function attemptSessionResume() {
     if (loadSession() && gameState.currentAuthToken && gameState.selectedCharacterId) {
-        UI.clearOutput();
+        UI.clearOutput(); // Clear before attempting resume
         UI.appendToOutput("Attempting to resume session...");
         try {
-            // We need to "re-select" to get fresh room data and validate the session with the backend.
             const initialRoomData = await API.selectCharacterOnBackend(gameState.selectedCharacterId);
             UI.appendToOutput(`Resumed session as ${gameState.selectedCharacterName}.`);
-            // Construct a minimal character object for enterGameMode
-            const resumedCharacter = {
+            const resumedCharacter = { // Construct enough data for enterGameMode
                 id: gameState.selectedCharacterId,
                 name: gameState.selectedCharacterName,
-                class_name: gameState.selectedCharacterClass || 'Adventurer'
+                class_name: gameState.selectedCharacterClass,
+                // Level and currency should come from welcome_package from WS after connect
+                // OR fetch full character details here if needed before WS connect for some reason.
+                // For now, let's assume welcome_package will provide full initial stats.
+                level: 1, // Placeholder, will be updated by welcome_package
+                platinum_coins: 0, gold_coins: 0, silver_coins: 0, copper_coins: 0 // Placeholders
             };
             await enterGameModeWithCharacter(resumedCharacter, initialRoomData);
-            return true; // Session resumed
+            return true;
         } catch (error) {
             UI.appendToOutput(`! Session resume failed: ${error.data?.detail || error.message}. Please log in.`, { styleClass: 'error-message-inline' });
-            clearSession(); // Clear invalid stored data
-            // Fall through to startLoginProcess outside this function
+            clearSession(); // Important: clear invalid/stale session data
         }
     }
-    return false; // No session to resume or resumption failed
+    return false;
 }
-
 
 // --- Initial Setup (DOMContentLoaded) ---
 document.addEventListener('DOMContentLoaded', async () => {
-    if (!UI.initializeElements()) return;
+    if (!UI.initializeElements()) return; // Critical UI elements check
     MapDisplay.initialize();
-
+    
     const commandInputEl = UI.getCommandInput();
     if (commandInputEl) {
         commandInputEl.addEventListener('keypress', function (e) {
@@ -435,7 +455,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
     } else {
-        console.error("Command input not found during DOMContentLoaded setup.");
+        console.error("Command input not found during DOMContentLoaded setup. Input will not work.");
     }
 
     if (!(await attemptSessionResume())) {

@@ -23,7 +23,11 @@ class MobTemplate(Base):
     
     xp_value: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     loot_table_ref: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, comment="Placeholder for loot table reference")
-
+    currency_drop: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSONB, 
+        nullable=True,
+        comment="Defines currency drop. E.g., {'p_chance': 1, 'p_min':0, 'p_max':1, 'g_chance': 10, 'g_min': 0, 'g_max': 2, 's_min': 5, 's_max': 20, 'c_min':10, 'c_max':100}"
+    )
     properties: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True, comment="e.g., {'faction': 'rats'}") # Removed aggression from here
     level: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     
