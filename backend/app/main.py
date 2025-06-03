@@ -3,99 +3,120 @@ import asyncio
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 import sys # For detailed print statements
+from app.core.config import settings
+import logging # Import logging
 
-print(f"--- DEBUG: main.py - Top of file, Python version: {sys.version} ---", flush=True)
+# --- Setup Logging First ---
+# This needs to happen before other modules that might use logging are imported,
+# or at least before they try to log.
+try:
+    from app.core.logging_config import setup_logging
+    setup_logging()
+    print("--- MAIN.PY: setup_logging() CALLED (no exception caught) ---", flush=True)
+except ImportError as e_log_setup:
+    print(f"--- CRITICAL: main.py - FAILED to import or run setup_logging: {e_log_setup} ---", flush=True)
+    sys.exit(1) # Exit if logging can't be set up, as it's crucial for debugging
+
+logger = logging.getLogger(__name__) # Get a logger for this module
+
+# --- Add these lines for immediate feedback on logger level ---
+print(f"--- MAIN.PY: settings.LOG_LEVEL = '{settings.LOG_LEVEL}' ---", flush=True)
+effective_level_main = logger.getEffectiveLevel()
+print(f"--- MAIN.PY: Effective log level for 'app.main' logger = {effective_level_main} ({logging.getLevelName(effective_level_main)}) ---", flush=True)
+logger.debug(f"--- MAIN.PY DEBUG LOG TEST: Top of file, Python version: {sys.version} ---") # Changed from logger.debug to ensure it prints if DEBUG is working
+logger.info(f"--- MAIN.PY INFO LOG TEST: Top of file, Python version: {sys.version} ---")
+# --- End of added lines ---
 
 from app.api.v1.api_router import api_router as v1_api_router
-print("--- DEBUG: main.py - Imported v1_api_router ---", flush=True)
+logger.debug("--- main.py - Imported v1_api_router ---")
 from app.websocket_router import router as ws_router
-print("--- DEBUG: main.py - Imported ws_router ---", flush=True)
+logger.debug("--- main.py - Imported ws_router ---")
 from app.db.session import engine, get_db
-print("--- DEBUG: main.py - Imported engine, get_db from app.db.session ---", flush=True)
+logger.debug("--- main.py - Imported engine, get_db from app.db.session ---")
 from app.db import base_class
-print("--- DEBUG: main.py - Imported base_class from app.db ---", flush=True)
+logger.debug("--- main.py - Imported base_class from app.db ---")
 from app.core.config import settings
-print(f"--- DEBUG: main.py - Imported settings. Project Name: {settings.PROJECT_NAME} ---", flush=True)
+logger.debug(f"--- main.py - Imported settings. Project Name: {settings.PROJECT_NAME} ---")
 from app.crud.crud_room import seed_initial_world
-print("--- DEBUG: main.py - Imported seed_initial_world ---", flush=True)
+logger.debug("--- main.py - Imported seed_initial_world ---")
 from app.crud.crud_item import seed_initial_items 
-print("--- DEBUG: main.py - Imported seed_initial_items ---", flush=True)
+logger.debug("--- main.py - Imported seed_initial_items ---")
 from app.crud.crud_mob import seed_initial_mob_templates
-print("--- DEBUG: main.py - Imported seed_initial_mob_templates ---", flush=True)
+logger.debug("--- main.py - Imported seed_initial_mob_templates ---")
 from app.game_logic.combat_manager import start_combat_ticker_task, stop_combat_ticker_task
-print("--- DEBUG: main.py - Imported combat_manager tasks ---", flush=True)
+logger.debug("--- main.py - Imported combat_manager tasks ---")
 from app.crud.crud_character_class import seed_initial_character_class_templates 
-print("--- DEBUG: main.py - Imported seed_initial_character_class_templates ---", flush=True)
+logger.debug("--- main.py - Imported seed_initial_character_class_templates ---")
 from app.crud.crud_skill import seed_initial_skill_templates 
-print("--- DEBUG: main.py - Imported seed_initial_skill_templates ---", flush=True)
+logger.debug("--- main.py - Imported seed_initial_skill_templates ---")
 from app.crud.crud_trait import seed_initial_trait_templates 
-print("--- DEBUG: main.py - Imported seed_initial_trait_templates ---", flush=True)
+logger.debug("--- main.py - Imported seed_initial_trait_templates ---")
 from app.game_logic.world_ticker import start_world_ticker_task, stop_world_ticker_task
-print("--- DEBUG: main.py - Imported world_ticker tasks ---", flush=True)
+logger.debug("--- main.py - Imported world_ticker tasks ---")
 from app.crud.crud_mob_spawn_definition import seed_initial_mob_spawn_definitions 
-print("--- DEBUG: main.py - Imported seed_initial_mob_spawn_definitions ---", flush=True)
+logger.debug("--- main.py - Imported seed_initial_mob_spawn_definitions ---")
 
-print("--- DEBUG: main.py - About to call Base.metadata.create_all(bind=engine) ---", flush=True)
+logger.debug("--- main.py - About to call Base.metadata.create_all(bind=engine) ---")
 try:
     base_class.Base.metadata.create_all(bind=engine)
-    print("--- DEBUG: main.py - Base.metadata.create_all(bind=engine) COMPLETED ---", flush=True)
+    logger.info("--- main.py - Base.metadata.create_all(bind=engine) COMPLETED ---")
 except Exception as e:
-    print(f"--- DEBUG: main.py - ERROR during Base.metadata.create_all: {e} ---", flush=True)
+    logger.error(f"--- main.py - ERROR during Base.metadata.create_all: {e} ---", exc_info=True)
     # Depending on the severity, you might want to sys.exit() here
 
-print("--- DEBUG: main.py - Creating FastAPI app instance ---", flush=True)
+logger.debug("--- main.py - Creating FastAPI app instance ---")
 app = FastAPI(title=settings.PROJECT_NAME)
-print("--- DEBUG: main.py - FastAPI app instance CREATED ---", flush=True)
+logger.info("--- main.py - FastAPI app instance CREATED ---")
 
 @app.on_event("startup")
 def on_startup_sync(): # Renamed to avoid clash if we make it async later
-    print("--- DEBUG: main.py - START of on_startup_sync event ---", flush=True)
+    logger.info("--- main.py - START of on_startup_sync event ---")
     db: Session = next(get_db())
-    print("--- DEBUG: main.py - on_startup_sync: Acquired DB session ---", flush=True)
+    logger.debug("--- main.py - on_startup_sync: Acquired DB session ---")
     try:
-        print("--- DEBUG: main.py - on_startup_sync: Running startup event: Seeding initial world... ---", flush=True)
+        logger.info("--- main.py - on_startup_sync: Running startup event: Seeding initial world... ---")
         seed_initial_world(db)        
-        print("--- DEBUG: main.py - on_startup_sync: seed_initial_world COMPLETED ---", flush=True)
+        logger.debug("--- main.py - on_startup_sync: seed_initial_world COMPLETED ---")
         seed_initial_mob_templates(db)        
-        print("--- DEBUG: main.py - on_startup_sync: seed_initial_mob_templates COMPLETED ---", flush=True)
+        logger.debug("--- main.py - on_startup_sync: seed_initial_mob_templates COMPLETED ---")
         seed_initial_items(db)
-        print("--- DEBUG: main.py - on_startup_sync: seed_initial_items COMPLETED ---", flush=True)
+        logger.debug("--- main.py - on_startup_sync: seed_initial_items COMPLETED ---")
         seed_initial_character_class_templates(db)
-        print("--- DEBUG: main.py - on_startup_sync: seed_initial_character_class_templates COMPLETED ---", flush=True)
+        logger.debug("--- main.py - on_startup_sync: seed_initial_character_class_templates COMPLETED ---")
         seed_initial_skill_templates(db)
-        print("--- DEBUG: main.py - on_startup_sync: seed_initial_skill_templates COMPLETED ---", flush=True)
+        logger.debug("--- main.py - on_startup_sync: seed_initial_skill_templates COMPLETED ---")
         seed_initial_trait_templates(db) # Make sure this is imported if you uncomment it
-        print("--- DEBUG: main.py - on_startup_sync: seed_initial_trait_templates COMPLETED ---", flush=True)
+        logger.debug("--- main.py - on_startup_sync: seed_initial_trait_templates COMPLETED ---")
         seed_initial_mob_spawn_definitions(db)
-        print("--- DEBUG: main.py - on_startup_sync: seed_initial_mob_spawn_definitions COMPLETED ---", flush=True)
+        logger.debug("--- main.py - on_startup_sync: seed_initial_mob_spawn_definitions COMPLETED ---")
         
-        print("--- DEBUG: main.py - on_startup_sync: Starting combat ticker... ---", flush=True)
+        logger.info("--- main.py - on_startup_sync: Starting combat ticker... ---")
         start_combat_ticker_task()
-        print("--- DEBUG: main.py - on_startup_sync: Combat ticker STARTED ---", flush=True)      
+        logger.debug("--- main.py - on_startup_sync: Combat ticker STARTED ---")      
 
-        print("--- DEBUG: main.py - on_startup_sync: Starting world ticker... ---", flush=True) 
+        logger.info("--- main.py - on_startup_sync: Starting world ticker... ---") 
         start_world_ticker_task()    
-        print("--- DEBUG: main.py - on_startup_sync: World ticker STARTED ---", flush=True)     
-        print("--- DEBUG: main.py - on_startup_sync: Startup event processing FINISHED ---", flush=True)
+        logger.debug("--- main.py - on_startup_sync: World ticker STARTED ---")     
+        logger.info("--- main.py - on_startup_sync: Startup event processing FINISHED ---")
     except Exception as e_startup:
-        print(f"--- DEBUG: main.py - ERROR during on_startup_sync: {e_startup} ---", flush=True)
+        logger.error(f"--- main.py - ERROR during on_startup_sync: {e_startup} ---", exc_info=True)
     finally:
-        print("--- DEBUG: main.py - on_startup_sync: Closing DB session ---", flush=True)
+        logger.debug("--- main.py - on_startup_sync: Closing DB session ---")
         db.close()
-        print("--- DEBUG: main.py - on_startup_sync: DB session CLOSED ---", flush=True)
-    print("--- DEBUG: main.py - END of on_startup_sync event ---", flush=True)
+        logger.debug("--- main.py - on_startup_sync: DB session CLOSED ---")
+    logger.info("--- main.py - END of on_startup_sync event ---")
 
-print("--- DEBUG: main.py - About to include v1_api_router ---", flush=True)
+logger.debug("--- main.py - About to include v1_api_router ---")
 app.include_router(v1_api_router, prefix=settings.API_V1_STR)
-print("--- DEBUG: main.py - v1_api_router INCLUDED ---", flush=True)
+logger.debug("--- main.py - v1_api_router INCLUDED ---")
 
-print("--- DEBUG: main.py - About to include ws_router ---", flush=True)
+logger.debug("--- main.py - About to include ws_router ---")
 app.include_router(ws_router)
-print("--- DEBUG: main.py - ws_router INCLUDED ---", flush=True)
+logger.debug("--- main.py - ws_router INCLUDED ---")
 
 @app.get("/")
 async def root():
-    print("--- DEBUG: main.py - GET / request received ---")
+    logger.debug("--- main.py - GET / request received ---")
     return {"message": f"Welcome to {settings.PROJECT_NAME}. Now with a World Ticker humming in the background!"}
 
-print("--- DEBUG: main.py - FastAPI app instance configured. End of file. ---", flush=True)
+logger.info("--- main.py - FastAPI app instance configured. End of file. ---")

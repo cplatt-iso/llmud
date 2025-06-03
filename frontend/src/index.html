@@ -57,6 +57,8 @@
         }
 
         .mud-container {
+            position: relative;
+            /* Needed for absolute positioning of the copy button */
             /* flex-grow: 1; /* Allow mud-container to take up remaining space if map has fixed width */
             /* Or set a specific width/max-width */
             width: 100%;
@@ -65,6 +67,39 @@
             flex-direction: column;
             border: 1px solid #005500;
             /* position: relative; /* No longer needed for map */
+        }
+
+        #copy-output-button {
+            position: absolute;
+            /* top: 36px; */ /* Adjust this value if needed after testing */
+            /* A more precise calculation:
+               #character-info-bar has padding: 6px top/bottom, border-bottom: 1px.
+               Assuming font-size 0.9em leads to a line height of ~17px.
+               Total height ~ 6 + 17 + 6 + 1 = 30px.
+               Let's place the button 5px below that.
+            */
+            top: 35px;
+            /* Position from the top of mud-container */
+            right: 5px;
+            /* Position from the right of mud-container */
+            padding: 8px 12px;
+            background-color: #333;
+            color: #0f0;
+            border: 1px solid #0f0;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+            z-index: 100;
+            /* Ensure it's above other elements if necessary */
+        }
+
+        #copy-output-button:hover {
+            background-color: #444;
+        }
+
+        #copy-output-button:active {
+            background-color: #222;
         }
 
         .terminal-output {
@@ -499,6 +534,9 @@
                 <span>Level: <span id="char-info-level">1</span></span>
             </div>
             <div id="output" class="terminal-output"></div>
+            
+            <button id="copy-output-button" title="Copy output to clipboard">Copy Log</button> <!-- NEW BUTTON -->
+
             <div id="bottom-info-bar">
                 <div id="exits-display-container">
                     <b>Exits:</b> <span id="exits-text"></span>

@@ -1,8 +1,9 @@
 # backend/app/game_logic/combat_manager.py
-import asyncio
-import uuid
-import random
 from typing import Dict, List, Set, Optional, Any, Tuple
+import asyncio # Ensure asyncio is imported
+import random # Ensure random is imported
+import uuid # Ensure uuid is imported
+import logging # Import logging
 
 from sqlalchemy.orm import Session, joinedload 
 
@@ -11,6 +12,8 @@ from app import crud, models, schemas
 from app.websocket_manager import connection_manager as ws_manager # Ensure ws_manager is imported
 from app.commands.utils import roll_dice, format_room_mobs_for_player_message, format_room_items_for_player_message 
 from app.game_state import is_character_resting, set_character_resting_status 
+
+logger = logging.getLogger(__name__) # Get a logger for this module
 
 direction_map = {"n": "north", "s": "south", "e": "east", "w": "west", "u": "up", "d": "down"}
 
@@ -41,11 +44,11 @@ async def _handle_mob_death_loot_and_cleanup(
     mob_template = killed_mob_instance.mob_template 
     character_after_loot = character # Start with the incoming character
 
-    print(f"DEBUG_LOOT: Handling death of {mob_template.name if mob_template else 'Unknown Mob'}")
+    logger.debug(f"LOOT: Handling death of {mob_template.name if mob_template else 'Unknown Mob'}")
 
     # 1. Award XP
     if mob_template and mob_template.xp_value > 0:
-        print(f"DEBUG_LOOT: Awarding {mob_template.xp_value} XP.")
+        logger.debug(f"LOOT: Awarding {mob_template.xp_value} XP.")
         updated_char_for_xp, xp_messages = crud.crud_character.add_experience(
             db, character_after_loot.id, mob_template.xp_value
         )
@@ -53,7 +56,7 @@ async def _handle_mob_death_loot_and_cleanup(
             character_after_loot = updated_char_for_xp 
         log_messages_list.extend(xp_messages)
     elif not mob_template:
-        print(f"DEBUG_LOOT: No mob_template found for killed_mob_instance {killed_mob_instance.id}")
+        logger.warning(f"LOOT: No mob_template found for killed_mob_instance {killed_mob_instance.id}")
 
 
     # 2. Award Currency
@@ -61,7 +64,7 @@ async def _handle_mob_death_loot_and_cleanup(
 
     if mob_template and mob_template.currency_drop: # Check if mob_template itself is not None
         cd = mob_template.currency_drop 
-        print(f"DEBUG_LOOT: Mob has currency_drop definition: {cd}")
+        logger.debug(f"LOOT: Mob has currency_drop definition: {cd}")
         
         copper_dropped = random.randint(cd.get("c_min", 0), cd.get("c_max", 0))
         
@@ -72,25 +75,27 @@ async def _handle_mob_death_loot_and_cleanup(
         if random.randint(1, 100) <= cd.get("p_chance", 0): # Assuming you added platinum (p_ fields)
             platinum_dropped = random.randint(cd.get("p_min", 0), cd.get("p_max", 0))
         
-        print(f"DEBUG_LOOT: Rolled drops - P:{platinum_dropped}, G:{gold_dropped}, S:{silver_dropped}, C:{copper_dropped}")
+        logger.debug(f"LOOT: Rolled drops - P:{platinum_dropped}, G:{gold_dropped}, S:{silver_dropped}, C:{copper_dropped}")
 
     else:
         if not mob_template:
-             print(f"DEBUG_LOOT: No mob_template, so no currency_drop check.")
-        else:
-             print(f"DEBUG_LOOT: Mob template {mob_template.name} has no currency_drop definition.")
+             logger.debug(f"LOOT: No mob_template, so no currency_drop check.")
+        elif mob_template: # Check if mob_template exists before accessing its name
+             logger.debug(f"LOOT: Mob template {mob_template.name} has no currency_drop definition.")
+        else: # Should not happen if the outer 'if mob_template' was false
+             logger.debug(f"LOOT: Mob template is None, no currency_drop definition.")
 
 
     if platinum_dropped > 0 or gold_dropped > 0 or silver_dropped > 0 or copper_dropped > 0:
-        print(f"DEBUG_LOOT: Attempting to update character currency...")
+        logger.debug(f"LOOT: Attempting to update character currency...")
         updated_char_for_currency, currency_message = crud.crud_character.update_character_currency(
             db, character_after_loot.id, platinum_dropped, gold_dropped, silver_dropped, copper_dropped
         )
         if updated_char_for_currency:
              character_after_loot = updated_char_for_currency
-             print(f"DEBUG_LOOT: Currency updated. Message: {currency_message}")
+             logger.debug(f"LOOT: Currency updated. Message: {currency_message}")
         else:
-            print(f"DEBUG_LOOT: crud.update_character_currency returned None for character.")
+            logger.warning(f"LOOT: crud.update_character_currency returned None for character.")
 
         
         drop_messages_parts = []
@@ -104,14 +109,14 @@ async def _handle_mob_death_loot_and_cleanup(
              log_messages_list.append(f"The {mob_template.name} drops: {', '.join(drop_messages_parts)}.")
              log_messages_list.append(currency_message) 
     elif mob_template and mob_template.currency_drop: # Only log this if there was a currency_drop table but rolls were 0
-        print(f"DEBUG_LOOT: All currency drop rolls were zero.")
+        logger.debug(f"LOOT: All currency drop rolls were zero.")
 
 
     # 3. Item Loot (Placeholder for future)
     # ...
 
     # 4. Despawn and Cleanup Combat State
-    print(f"DEBUG_LOOT: Despawning mob {killed_mob_instance.id} and cleaning combat state.")
+    logger.debug(f"LOOT: Despawning mob {killed_mob_instance.id} and cleaning combat state.")
     crud.crud_mob.despawn_mob_from_room(db, killed_mob_instance.id) # This commits
     active_combats.get(character_after_loot.id, set()).discard(killed_mob_instance.id) # Use character_after_loot.id
     mob_targets.pop(killed_mob_instance.id, None)
@@ -257,7 +262,7 @@ async def mob_initiates_combat(db: Session, mob_instance: models.RoomMobInstance
     if not mob_instance or mob_instance.current_health <= 0: return
     if not target_character or target_character.current_health <= 0: return
     if target_character.id in active_combats and mob_instance.id in active_combats[target_character.id]: return 
-    print(f"COMBAT: {mob_instance.mob_template.name} initiates combat with {target_character.name}!")
+    logger.info(f"COMBAT: {mob_instance.mob_template.name} initiates combat with {target_character.name}!")
     active_combats.setdefault(target_character.id, set()).add(mob_instance.id)
     mob_targets[mob_instance.id] = target_character.id  
     mob_name_html = f"<span class='inv-item-name'>{mob_instance.mob_template.name}</span>"
@@ -366,38 +371,52 @@ async def initiate_combat_session(
 async def combat_ticker_loop():
     while True:
         await asyncio.sleep(COMBAT_ROUND_INTERVAL)
+        # logger.debug("Combat ticker loop iteration starting...") # Can be very verbose
         with db_session_for_task_sync() as db:
+            # Create a copy of player_ids to iterate over, as the original dict might change
+            # if players disconnect during the loop.
             player_ids_to_process = list(ws_manager.active_player_connections.keys())
+            
             for player_id in player_ids_to_process:
-                character_id = ws_manager.get_character_id(player_id) 
-                if character_id and character_id in active_combats: # Only process if char is in active_combats
-                    char_check = crud.crud_character.get_character(db, character_id=character_id)
-                    if char_check and char_check.current_health > 0:
+                character_id = ws_manager.get_character_id(player_id) # Get char_id for this player
+                
+                # Check if player is still connected and has a character_id
+                if not character_id:
+                    # logger.debug(f"Player {player_id} has no character_id or disconnected, skipping combat processing.")
+                    continue
+
+                if character_id in active_combats:
+                    # logger.debug(f"Processing combat round for Character ID: {character_id} (Player ID: {player_id})")
+                    try:
                         await process_combat_round(db, character_id, player_id)
-                    elif char_check and char_check.current_health <= 0: 
-                        if character_id in active_combats: 
-                            end_combat_for_character(character_id, reason="char_dead_in_ticker_check")
-                            # print(f"Cleaned up combat state for dead char {character_id} in ticker loop (pre-process_combat_round).") # Verbose
-                    elif not char_check: 
-                        end_combat_for_character(character_id, reason="char_deleted_in_ticker_check")
-                        # print(f"Cleaned up combat state for deleted char {character_id} in ticker loop.") # Verbose
+                    except Exception as e_combat_round:
+                        logger.error(f"Error during process_combat_round for char {character_id}: {e_combat_round}", exc_info=True)
+                        # Decide if combat should be ended for this character due to error
+                        end_combat_for_character(character_id, reason=f"error_in_round: {e_combat_round}")
+                        try:
+                            await send_combat_log(player_id, ["A server error occurred during combat. Combat has ended."], combat_ended=True)
+                        except Exception as e_send_err:
+                            logger.error(f"Failed to send combat error log to player {player_id}: {e_send_err}")
+                # else:
+                    # logger.debug(f"Character ID: {character_id} (Player ID: {player_id}) not in active_combats.")
+        # logger.debug("Combat ticker loop iteration finished.")
 
 _combat_ticker_task = None
 def start_combat_ticker_task():
     global _combat_ticker_task
     if _combat_ticker_task is None:
-        print("Starting combat ticker task...")
+        logger.info("Starting combat ticker task...")
         _combat_ticker_task = asyncio.create_task(combat_ticker_loop())
-        print("Combat ticker task created. God help us all.")
+        logger.info("Combat ticker task created.")
     else:
-        print("Combat ticker task already running or requested. Don't get greedy.")
+        logger.info("Combat ticker task already running or requested.")
 def stop_combat_ticker_task():
     global _combat_ticker_task
     if _combat_ticker_task and not _combat_ticker_task.done():
-        print("Stopping combat ticker task...")
+        logger.info("Stopping combat ticker task...")
         _combat_ticker_task.cancel()
         _combat_ticker_task = None
-        print("Combat ticker task cancelled. Probably for the best.")
+        logger.info("Combat ticker task cancelled.")
 
 
 async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: uuid.UUID):
@@ -416,7 +435,7 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
         mobs_to_clear_target = [mid for mid, cid in mob_targets.items() if cid == character_id]
         for mid in mobs_to_clear_target: mob_targets.pop(mid, None)
         character_queued_actions.pop(character_id, None)
-        print(f"CRITICAL: Character {character_id} not found during combat round processing.")
+        logger.critical(f"Character {character_id} not found during combat round processing.")
         return
 
     if character.current_health <= 0:

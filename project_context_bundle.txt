@@ -1,60 +1,129 @@
 --- SCRIPT START --- Creating bundle: project_context_bundle.txt ---
-Timestamp: Mon Jun  2 02:54:21 PM UTC 2025
+Timestamp: Tue Jun  3 07:30:07 PM UTC 2025
 
 --- START OF FILE backend/app/main.py ---
 # backend/app/main.py
 import asyncio
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
+import sys # For detailed print statements
+from app.core.config import settings
+import logging # Import logging
+
+# --- Setup Logging First ---
+# This needs to happen before other modules that might use logging are imported,
+# or at least before they try to log.
+try:
+    from app.core.logging_config import setup_logging
+    setup_logging()
+    print("--- MAIN.PY: setup_logging() CALLED (no exception caught) ---", flush=True)
+except ImportError as e_log_setup:
+    print(f"--- CRITICAL: main.py - FAILED to import or run setup_logging: {e_log_setup} ---", flush=True)
+    sys.exit(1) # Exit if logging can't be set up, as it's crucial for debugging
+
+logger = logging.getLogger(__name__) # Get a logger for this module
+
+# --- Add these lines for immediate feedback on logger level ---
+print(f"--- MAIN.PY: settings.LOG_LEVEL = '{settings.LOG_LEVEL}' ---", flush=True)
+effective_level_main = logger.getEffectiveLevel()
+print(f"--- MAIN.PY: Effective log level for 'app.main' logger = {effective_level_main} ({logging.getLevelName(effective_level_main)}) ---", flush=True)
+logger.debug(f"--- MAIN.PY DEBUG LOG TEST: Top of file, Python version: {sys.version} ---") # Changed from logger.debug to ensure it prints if DEBUG is working
+logger.info(f"--- MAIN.PY INFO LOG TEST: Top of file, Python version: {sys.version} ---")
+# --- End of added lines ---
 
 from app.api.v1.api_router import api_router as v1_api_router
-from app.websocket_router import router as ws_router # <<< NEW
+logger.debug("--- main.py - Imported v1_api_router ---")
+from app.websocket_router import router as ws_router
+logger.debug("--- main.py - Imported ws_router ---")
 from app.db.session import engine, get_db
+logger.debug("--- main.py - Imported engine, get_db from app.db.session ---")
 from app.db import base_class
+logger.debug("--- main.py - Imported base_class from app.db ---")
 from app.core.config import settings
+logger.debug(f"--- main.py - Imported settings. Project Name: {settings.PROJECT_NAME} ---")
 from app.crud.crud_room import seed_initial_world
+logger.debug("--- main.py - Imported seed_initial_world ---")
 from app.crud.crud_item import seed_initial_items 
+logger.debug("--- main.py - Imported seed_initial_items ---")
 from app.crud.crud_mob import seed_initial_mob_templates
+logger.debug("--- main.py - Imported seed_initial_mob_templates ---")
 from app.game_logic.combat_manager import start_combat_ticker_task, stop_combat_ticker_task
+logger.debug("--- main.py - Imported combat_manager tasks ---")
 from app.crud.crud_character_class import seed_initial_character_class_templates 
-from app.crud.crud_skill import seed_initial_skill_templates # <<< NEW
-from app.crud.crud_trait import seed_initial_trait_templates # <<< NEW
+logger.debug("--- main.py - Imported seed_initial_character_class_templates ---")
+from app.crud.crud_skill import seed_initial_skill_templates 
+logger.debug("--- main.py - Imported seed_initial_skill_templates ---")
+from app.crud.crud_trait import seed_initial_trait_templates 
+logger.debug("--- main.py - Imported seed_initial_trait_templates ---")
 from app.game_logic.world_ticker import start_world_ticker_task, stop_world_ticker_task
+logger.debug("--- main.py - Imported world_ticker tasks ---")
 from app.crud.crud_mob_spawn_definition import seed_initial_mob_spawn_definitions 
+logger.debug("--- main.py - Imported seed_initial_mob_spawn_definitions ---")
 
-base_class.Base.metadata.create_all(bind=engine)
+logger.debug("--- main.py - About to call Base.metadata.create_all(bind=engine) ---")
+try:
+    base_class.Base.metadata.create_all(bind=engine)
+    logger.info("--- main.py - Base.metadata.create_all(bind=engine) COMPLETED ---")
+except Exception as e:
+    logger.error(f"--- main.py - ERROR during Base.metadata.create_all: {e} ---", exc_info=True)
+    # Depending on the severity, you might want to sys.exit() here
+
+logger.debug("--- main.py - Creating FastAPI app instance ---")
 app = FastAPI(title=settings.PROJECT_NAME)
+logger.info("--- main.py - FastAPI app instance CREATED ---")
 
 @app.on_event("startup")
 def on_startup_sync(): # Renamed to avoid clash if we make it async later
+    logger.info("--- main.py - START of on_startup_sync event ---")
     db: Session = next(get_db())
+    logger.debug("--- main.py - on_startup_sync: Acquired DB session ---")
     try:
-        print("Running startup event: Seeding initial world...")
+        logger.info("--- main.py - on_startup_sync: Running startup event: Seeding initial world... ---")
         seed_initial_world(db)        
+        logger.debug("--- main.py - on_startup_sync: seed_initial_world COMPLETED ---")
         seed_initial_mob_templates(db)        
+        logger.debug("--- main.py - on_startup_sync: seed_initial_mob_templates COMPLETED ---")
         seed_initial_items(db)
+        logger.debug("--- main.py - on_startup_sync: seed_initial_items COMPLETED ---")
         seed_initial_character_class_templates(db)
+        logger.debug("--- main.py - on_startup_sync: seed_initial_character_class_templates COMPLETED ---")
         seed_initial_skill_templates(db)
+        logger.debug("--- main.py - on_startup_sync: seed_initial_skill_templates COMPLETED ---")
+        seed_initial_trait_templates(db) # Make sure this is imported if you uncomment it
+        logger.debug("--- main.py - on_startup_sync: seed_initial_trait_templates COMPLETED ---")
         seed_initial_mob_spawn_definitions(db)
+        logger.debug("--- main.py - on_startup_sync: seed_initial_mob_spawn_definitions COMPLETED ---")
         
-        print("Starting combat ticker...")
+        logger.info("--- main.py - on_startup_sync: Starting combat ticker... ---")
         start_combat_ticker_task()
-        print("Startup event finished.")        
+        logger.debug("--- main.py - on_startup_sync: Combat ticker STARTED ---")      
 
-        print("Starting world ticker...") 
+        logger.info("--- main.py - on_startup_sync: Starting world ticker... ---") 
         start_world_ticker_task()    
-        print("Startup event finished.")     
+        logger.debug("--- main.py - on_startup_sync: World ticker STARTED ---")     
+        logger.info("--- main.py - on_startup_sync: Startup event processing FINISHED ---")
+    except Exception as e_startup:
+        logger.error(f"--- main.py - ERROR during on_startup_sync: {e_startup} ---", exc_info=True)
     finally:
+        logger.debug("--- main.py - on_startup_sync: Closing DB session ---")
         db.close()
+        logger.debug("--- main.py - on_startup_sync: DB session CLOSED ---")
+    logger.info("--- main.py - END of on_startup_sync event ---")
 
+logger.debug("--- main.py - About to include v1_api_router ---")
 app.include_router(v1_api_router, prefix=settings.API_V1_STR)
+logger.debug("--- main.py - v1_api_router INCLUDED ---")
+
+logger.debug("--- main.py - About to include ws_router ---")
 app.include_router(ws_router)
+logger.debug("--- main.py - ws_router INCLUDED ---")
 
 @app.get("/")
 async def root():
+    logger.debug("--- main.py - GET / request received ---")
     return {"message": f"Welcome to {settings.PROJECT_NAME}. Now with a World Ticker humming in the background!"}
 
-print("FastAPI app instance created.")
+logger.info("--- main.py - FastAPI app instance configured. End of file. ---")
 --- END OF FILE backend/app/main.py ---
 
 --- START OF FILE backend/app/core/config.py ---
@@ -72,24 +141,27 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "MUD Project - Backend"
     API_V1_STR: str = "/api/v1"
     
-    DATABASE_URL: Optional[str] = "postgresql://dummy_user:dummy_password@dummy_host:5432/dummy_db" if IS_ALEMBIC_ENV_PY_CONTEXT else None
+    DATABASE_URL: Optional[str] = "postgresql://dummy_user:dummy_password@dummy_host:5432/dummy_db" if IS_ALEMBIC_ENV_PY_CONTEXT else os.getenv("DATABASE_URL", "postgresql://user:password@db/llmud_db") # Added os.getenv for normal case
     SECRET_KEY: str = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7" # CHANGE THIS IN PRODUCTION!
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7 # Token expires in 7 days
+
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper() # Default to INFO
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding='utf-8', extra='ignore')
 
 settings = Settings() 
 
 # After instantiation, if it was a dummy, ensure it's overridden if not in Alembic context
-# and the real env var is available. This is getting complex.
-if IS_ALEMBIC_ENV_PY_CONTEXT and settings.DATABASE_URL is not None and settings.DATABASE_URL.startswith("postgresql://dummy_user"):
+# and the real env var is available.
+if IS_ALEMBIC_ENV_PY_CONTEXT and settings.DATABASE_URL is not None and "dummy_user" in settings.DATABASE_URL:
+    # logger.info("Settings initialized with dummy DATABASE_URL for Alembic env.py import phase.") # Can't use logger before setup
     print("INFO: Settings initialized with dummy DATABASE_URL for Alembic env.py import phase.")
-elif settings.DATABASE_URL is not None and not settings.DATABASE_URL.startswith("postgresql://dummy_user") and os.getenv("DATABASE_URL"):
-     # This would be the normal app run, where env var should override any default
-     pass
+elif not IS_ALEMBIC_ENV_PY_CONTEXT and os.getenv("DATABASE_URL"):
+    settings.DATABASE_URL = os.getenv("DATABASE_URL") # Ensure it's set from env if not in alembic context
 elif not IS_ALEMBIC_ENV_PY_CONTEXT and not os.getenv("DATABASE_URL"):
     # This will have already failed in Settings() if '...' was used and no env var
+    # logger.warning("DATABASE_URL not found in environment for normal app run!") # Can't use logger before setup
     print("WARNING: DATABASE_URL not found in environment for normal app run!")
 --- END OF FILE backend/app/core/config.py ---
 
@@ -188,27 +260,41 @@ Base = declarative_base()
 --- START OF FILE backend/app/websocket_router.py ---
 # backend/app/websocket_router.py
 import uuid
-from typing import Optional, Any, Generator # Added Generator for type hint
+from typing import Optional, Any, Generator, List, Tuple
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query, status
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
-from contextlib import contextmanager # For synchronous context manager
+from contextlib import contextmanager
+import logging
 
-from app.db.session import SessionLocal # For WS DB sessions
-from app import crud, models, schemas # General app imports
-from app.core.config import settings # Corrected settings import
-from app.websocket_manager import connection_manager # Global connection manager instance
-from app.game_logic import combat_manager # For initiating combat, sending structured messages
-from app.commands.utils import ( # Ensure all formatters are imported
-    format_room_items_for_player_message, 
-    format_room_mobs_for_player_message, 
-    format_room_characters_for_player_message, 
+# Import settings to check LOG_LEVEL if needed, though it should be set by main
+from app.core.config import settings
+
+from app.db.session import SessionLocal
+from app import crud, models, schemas
+from app.core.config import settings
+from app.websocket_manager import connection_manager
+from app.game_logic import combat_manager
+from app.commands.utils import (
+    format_room_items_for_player_message,
+    format_room_mobs_for_player_message,
+    format_room_characters_for_player_message,
     resolve_mob_target
 )
+from app.game_state import is_character_resting, set_character_resting_status
+
+
+logger = logging.getLogger(__name__)
+# --- Add these lines for immediate feedback on logger level ---
+print(f"--- WEBSOCKET_ROUTER.PY: settings.LOG_LEVEL = '{settings.LOG_LEVEL}' ---", flush=True) # Check settings value at import time
+effective_level_ws = logger.getEffectiveLevel()
+print(f"--- WEBSOCKET_ROUTER.PY: Effective log level for '{logger.name}' logger = {effective_level_ws} ({logging.getLevelName(effective_level_ws)}) ---", flush=True)
+logger.debug("--- WEBSOCKET_ROUTER.PY DEBUG LOG TEST: Module loaded ---")
+logger.info("--- WEBSOCKET_ROUTER.PY INFO LOG TEST: Module loaded ---")
+# --- End of added lines ---
 
 router = APIRouter()
 
-# --- Synchronous DB Session Context Manager for WebSocket Handlers ---
 @contextmanager
 def get_db_sync() -> Generator[Session, None, None]:
     db = SessionLocal()
@@ -218,7 +304,6 @@ def get_db_sync() -> Generator[Session, None, None]:
         db.close()
 
 async def get_player_from_token(token: Optional[str], db: Session) -> Optional[models.Player]:
-    """Helper to authenticate a player from a JWT token."""
     if not token: 
         return None
     try:
@@ -231,32 +316,126 @@ async def get_player_from_token(token: Optional[str], db: Session) -> Optional[m
     except (JWTError, ValueError):
         return None
 
-@router.websocket("/ws") # Main WebSocket endpoint
+async def _handle_websocket_move_if_not_in_combat(
+    db: Session,
+    player: models.Player,
+    character_state: models.Character,
+    command_verb: str, 
+    command_args_str: str 
+) -> None:
+    """
+    Handles actual movement logic IF THE PLAYER IS NOT IN COMBAT.
+    Updates character location, broadcasts, and sends new room state.
+    """
+    message_to_player_on_move: Optional[str] = None # Not used here, as combat breaking msgs are handled before calling this
+    moved_successfully = False
+    target_room_orm_for_move: Optional[models.Room] = None
+    
+    direction_map = combat_manager.direction_map # Use shared map
+    
+    raw_direction_input = ""
+    if command_verb == "go":
+        if command_args_str:
+            raw_direction_input = command_args_str.split(" ", 1)[0].lower()
+        else:
+            # This assumes current_room_schema_for_command is available or fetched
+            room_schema = schemas.RoomInDB.from_orm(crud.crud_room.get_room_by_id(db, character_state.current_room_id)) if character_state.current_room_id else None
+            await combat_manager.send_combat_log(player.id, ["Go where?"], room_data=room_schema)
+            return
+    else:
+        raw_direction_input = command_verb.lower()
+
+    target_direction_canonical = direction_map.get(raw_direction_input, raw_direction_input)
+
+    current_room_schema_for_fail = schemas.RoomInDB.from_orm(crud.crud_room.get_room_by_id(db, character_state.current_room_id)) if character_state.current_room_id else None
+
+    if target_direction_canonical not in direction_map.values():
+        await combat_manager.send_combat_log(player.id, ["That's not a valid direction."], room_data=current_room_schema_for_fail)
+        return
+
+    old_room_id = character_state.current_room_id
+    current_room_orm_before_move = crud.crud_room.get_room_by_id(db, room_id=old_room_id) 
+    
+    if current_room_orm_before_move:
+        current_exits = current_room_orm_before_move.exits or {}
+        if target_direction_canonical in current_exits:
+            next_room_uuid_str = current_exits.get(target_direction_canonical)
+            if next_room_uuid_str:
+                try:
+                    target_room_uuid = uuid.UUID(hex=next_room_uuid_str)
+                    potential_target_room_orm = crud.crud_room.get_room_by_id(db, room_id=target_room_uuid)
+                    if potential_target_room_orm:
+                        target_room_orm_for_move = potential_target_room_orm
+                        moved_successfully = True
+                    else: message_to_player_on_move = "The path ahead seems to vanish."
+                except ValueError: message_to_player_on_move = "The exit appears corrupted."
+            else: message_to_player_on_move = "The way is unclear."
+        else: message_to_player_on_move = "You can't go that way."
+    else: message_to_player_on_move = "Error: Current room data not found."
+
+
+    if moved_successfully and target_room_orm_for_move:
+        crud.crud_character.update_character_room(db, character_id=character_state.id, new_room_id=target_room_orm_for_move.id)
+        new_room_schema = schemas.RoomInDB.from_orm(target_room_orm_for_move)
+        
+        player_ids_in_old_room = [char.player_id for char in crud.crud_character.get_characters_in_room(db, room_id=old_room_id, exclude_character_id=character_state.id) if connection_manager.is_player_connected(char.player_id)]
+        if player_ids_in_old_room:
+            leave_msg = f"<span class='char-name'>{character_state.name}</span> leaves, heading {target_direction_canonical}."
+            await connection_manager.broadcast_to_players({"type": "game_event", "message": leave_msg}, player_ids_in_old_room)
+
+        player_ids_in_new_room_others = [char.player_id for char in crud.crud_character.get_characters_in_room(db, room_id=target_room_orm_for_move.id, exclude_character_id=character_state.id) if connection_manager.is_player_connected(char.player_id)]
+        if player_ids_in_new_room_others:
+            arrival_direction = combat_manager.get_opposite_direction(target_direction_canonical)
+            arrive_msg = f"<span class='char-name'>{character_state.name}</span> arrives from the {arrival_direction}."
+            await connection_manager.broadcast_to_players({"type": "game_event", "message": arrive_msg}, player_ids_in_new_room_others)
+        
+        arrival_message_parts: List[str] = []
+        # message_to_player_on_move is for failure or pre-move messages; success is new room desc
+        
+        items_in_new_room = crud.crud_room_item.get_items_in_room(db, room_id=target_room_orm_for_move.id)
+        ground_items_text, _ = format_room_items_for_player_message(items_in_new_room)
+        if ground_items_text: arrival_message_parts.append(ground_items_text)
+            
+        mobs_in_new_room = crud.crud_mob.get_mobs_in_room(db, room_id=target_room_orm_for_move.id)
+        mobs_text, _ = format_room_mobs_for_player_message(mobs_in_new_room)
+        if mobs_text: arrival_message_parts.append(mobs_text)
+
+        other_chars_in_new_room = crud.crud_character.get_characters_in_room(db, room_id=target_room_orm_for_move.id, exclude_character_id=character_state.id)
+        chars_text_mover = format_room_characters_for_player_message(other_chars_in_new_room)
+        if chars_text_mover: arrival_message_parts.append(chars_text_mover)
+        
+        final_arrival_message_str = "\n".join(filter(None, arrival_message_parts)).strip()
+        
+        await combat_manager.send_combat_log(player.id, [final_arrival_message_str] if final_arrival_message_str else [], room_data=new_room_schema, combat_ended=False)
+    else: 
+        await combat_manager.send_combat_log(player.id, [message_to_player_on_move] if message_to_player_on_move else ["You cannot move that way."], room_data=current_room_schema_for_fail, combat_ended=False)
+
+
+@router.websocket("/ws") 
 async def websocket_game_endpoint(
     websocket: WebSocket,
     token: str = Query(..., description="Player's JWT authentication token"),
     character_id: uuid.UUID = Query(..., description="UUID of the character connecting")
 ):
     player: Optional[models.Player] = None
-    character: Optional[models.Character] = None
+    character: Optional[models.Character] = None 
 
-    # --- Authentication and Character Validation (uses one DB session) ---
-    with get_db_sync() as db: # Use synchronous context manager
+    with get_db_sync() as db: 
         player = await get_player_from_token(token, db)
         if not player:
+            logger.warning(f"WebSocket connection attempt with invalid token for char_id: {character_id}")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid authentication token")
             return
-
-        character = crud.crud_character.get_character(db, character_id=character_id)
-        if not character or character.player_id != player.id:
+        character_orm_initial = crud.crud_character.get_character(db, character_id=character_id)
+        if not character_orm_initial or character_orm_initial.player_id != player.id:
+            logger.warning(f"WebSocket connection attempt for invalid char_id: {character_id} by player: {player.id}")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid character ID or not owned by player")
             return
-    # --- End Authentication and Character Validation ---
-
-    # If successful, connect to the manager
-    await connection_manager.connect(websocket, player.id, character.id)
+        character = character_orm_initial 
     
-    # --- Send Initial Game State ---
+    await connection_manager.connect(websocket, player.id, character.id)
+    logger.info(f"Player {player.id} (Character {character.id}) connected via WebSocket.")
+    
     initial_messages = [f"Welcome {character.name}! You are connected."]
     initial_room_schema: Optional[schemas.RoomInDB] = None
     with get_db_sync() as db: 
@@ -264,176 +443,407 @@ async def websocket_game_endpoint(
         if initial_room_orm:
             initial_room_schema = schemas.RoomInDB.from_orm(initial_room_orm)
             initial_messages.insert(1, f"You are in {initial_room_orm.name}.")
-
             items_on_ground = crud.crud_room_item.get_items_in_room(db, room_id=initial_room_orm.id)
             items_text, _ = format_room_items_for_player_message(items_on_ground)
             if items_text: initial_messages.append(items_text)
-            
             mobs_in_room = crud.crud_mob.get_mobs_in_room(db, room_id=initial_room_orm.id)
             mobs_text, _ = format_room_mobs_for_player_message(mobs_in_room)
             if mobs_text: initial_messages.append(mobs_text)
-
-            # <<< NEW: Add other characters to initial message
-            other_chars_in_room = crud.crud_character.get_characters_in_room(
-                db, room_id=initial_room_orm.id, exclude_character_id=character.id
-            )
+            other_chars_in_room = crud.crud_character.get_characters_in_room(db, room_id=initial_room_orm.id, exclude_character_id=character.id)
             chars_text_initial = format_room_characters_for_player_message(other_chars_in_room)
             if chars_text_initial: initial_messages.append(chars_text_initial)
     
-    await combat_manager.send_combat_log( 
-        player_id=player.id, 
-        messages=initial_messages,
-        room_data=initial_room_schema 
-    )
-    # --- End Initial Game State ---
+    xp_for_next_level = crud.crud_character.get_xp_for_level(character.level + 1)
+
+    welcome_payload = {
+        "type": "welcome_package",
+        "log": initial_messages,
+        "room_data": initial_room_schema.model_dump() if initial_room_schema else None,
+        "character_vitals": { # Nesting them under a key is good practice
+            "current_hp": character.current_health,
+            "max_hp": character.max_health,
+            "current_mp": character.current_mana,
+            "max_mp": character.max_mana,
+            "current_xp": character.experience_points,
+            "next_level_xp": int(xp_for_next_level) if xp_for_next_level != float('inf') else -1,
+            "level": character.level,
+            "platinum": character.platinum_coins, # <<< NEW
+            "gold": character.gold_coins,     # <<< NEW
+            "silver": character.silver_coins, # <<< NEW
+            "copper": character.copper_coins  # <<< NEW
+            # For more advanced XP bar:
+            # "xp_at_start_of_current_level": int(xp_at_start_of_current_level) if xp_at_start_of_current_level != float('inf') else 0,
+        }
+    }
+    await connection_manager.send_personal_message(welcome_payload, player.id)
+
 
     try:
         while True:
-            # Expect JSON messages from client: {"type": "command", "command_text": "..."}
             received_data = await websocket.receive_json()
-            
             message_type = received_data.get("type")
             command_text = received_data.get("command_text", "").strip()
 
-            with get_db_sync() as db_loop: # New DB session for each incoming message
-                # Refresh character ORM object for current state in this session
-                # This is important if character state (like room_id) can change via HTTP commands too
+            with get_db_sync() as db_loop: 
                 current_char_state = crud.crud_character.get_character(db_loop, character_id=character.id)
-                if not current_char_state: # Should not happen if connected
+                if not current_char_state: 
+                    logger.error(f"Character state lost for char_id: {character.id} during WebSocket loop.")
                     await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="Character state lost")
                     break 
                 
-                current_room_for_command = crud.crud_room.get_room_by_id(db_loop, current_char_state.current_room_id)
-                current_room_schema_for_command = schemas.RoomInDB.from_orm(current_room_for_command) if current_room_for_command else None
+                current_room_for_command_orm = crud.crud_room.get_room_by_id(db_loop, current_char_state.current_room_id)
+                current_room_schema_for_command = schemas.RoomInDB.from_orm(current_room_for_command_orm) if current_room_for_command_orm else None
 
-                print(f"WS command from Player {player.id} (Char {character.id}): '{command_text}' in room {current_char_state.current_room_id}")
+                logger.debug(f"WS command from Player {player.id} (Char {character.id}): '{command_text}' in room {current_char_state.current_room_id}")
+
+                verb_for_rest_check = command_text.split(" ", 1)[0].lower() if command_text else ""
+                
+                non_breaking_verbs = [
+                    "rest", "look", "l", "score", "sc", "status", "st", 
+                    "help", "?", "skills", "sk", "traits", "tr", 
+                    "inventory", "i", "ooc", "say", "'", "emote", ":" 
+                ]
+                movement_verbs = ["north", "south", "east", "west", "up", "down", "n", "s", "e", "w", "u", "d", "go"]
+
+                if verb_for_rest_check and verb_for_rest_check not in non_breaking_verbs and is_character_resting(current_char_state.id):
+                    set_character_resting_status(current_char_state.id, False)
+                    await combat_manager.send_combat_log(player.id, ["You stop resting."], room_data=current_room_schema_for_command)
 
                 if message_type == "command" and command_text:
-                    verb = command_text.split(" ", 1)[0].lower()
+                    verb = verb_for_rest_check 
                     args_str = command_text.split(" ", 1)[1].strip() if " " in command_text else ""
 
-                    if verb in ["attack", "atk", "kill", "k"]:
-                        if not args_str: # No target specified for attack
-                            await combat_manager.send_combat_log(
-                                player.id, 
-                                ["Attack what? (e.g., 'attack Giant Rat' or 'attack 1')"], 
-                                room_data=current_room_schema_for_command
-                            )
-                            continue # Skip to the next WebSocket message
+                    # --- NEW DEBUG PRINT ---
+                    logger.debug(f"ROUTER: Processing verb='{verb}', args='{args_str}'")
 
-                        # Fetch mobs in the character's current room for target resolution
-                        mobs_in_char_room = crud.crud_mob.get_mobs_in_room(db_loop, room_id=current_char_state.current_room_id)
+                    if verb == "rest":
+                        if current_char_state.id in combat_manager.active_combats:
+                            await combat_manager.send_combat_log(player.id, ["You cannot rest while in combat."], room_data=current_room_schema_for_command)
+                        elif is_character_resting(current_char_state.id):
+                            await combat_manager.send_combat_log(player.id, ["You are already resting."], room_data=current_room_schema_for_command)
+                        elif current_char_state.current_health == current_char_state.max_health and \
+                             current_char_state.current_mana == current_char_state.max_mana:
+                            await combat_manager.send_combat_log(player.id, ["You are already fully rejuvenated."], room_data=current_room_schema_for_command)
+                        else:
+                            set_character_resting_status(current_char_state.id, True)
+                            await combat_manager.send_combat_log(player.id, ["You sit down and begin to rest."], room_data=current_room_schema_for_command)
+                            if current_room_for_command_orm: 
+                                await combat_manager._broadcast_combat_event( 
+                                    db_loop, current_room_for_command_orm.id, player.id, 
+                                    f"<span class='char-name'>{current_char_state.name}</span> sits down to rest."
+                                )
+                        continue # Assuming rest command should end processing for this message                    
+                    elif verb in movement_verbs: # e.g., "n", "s", "e", "w", "u", "d", "go"
+                        # --- NEW DEBUG PRINT ---
+                        logger.debug(f"ROUTER: ENTERED movement_verbs block for verb='{verb}'")
+                        # --- DEBUG PRINTS START (These are the ones you said were not printing) ---
+                        logger.debug(f"MOVEMENT: CharID: {current_char_state.id}, Verb: '{verb}', Args: '{args_str}'")
+                        is_in_active_combats = current_char_state.id in combat_manager.active_combats
+                        logger.debug(f"MOVEMENT: Is CharID in active_combats? {is_in_active_combats}")
+                        targets_for_char = None
+                        if is_in_active_combats:
+                            targets_for_char = combat_manager.active_combats.get(current_char_state.id)
+                            logger.debug(f"MOVEMENT: Targets for char from active_combats: {targets_for_char}")
                         
-                        if not mobs_in_char_room:
+                        condition_to_block = is_in_active_combats and bool(targets_for_char) # Explicitly check boolean of targets
+                        logger.debug(f"MOVEMENT: Condition to block movement: {condition_to_block}")
+                        # --- DEBUG PRINTS END ---
+
+                        # Check for combat BEFORE attempting movement
+                        if condition_to_block: # Use the debugged condition
+                            logger.debug(f"MOVEMENT: BLOCKED movement for CharID: {current_char_state.id}") # DEBUG
+                            current_room_for_msg = crud.crud_room.get_room_by_id(db_loop, current_char_state.current_room_id)
+                            room_schema_for_msg = schemas.RoomInDB.from_orm(current_room_for_msg) if current_room_for_msg else None
                             await combat_manager.send_combat_log(
-                                player.id, 
-                                ["There is nothing here to attack."], 
-                                room_data=current_room_schema_for_command
+                                player.id,
+                                ["You cannot move while in combat! Try 'flee <direction>' or 'flee'."],
+                                room_data=room_schema_for_msg,
+                                transient=True 
                             )
+                            continue # Skip movement logic
+                        else:
+                            logger.debug(f"MOVEMENT: ALLOWED movement for CharID: {current_char_state.id}") # DEBUG
+
+                        # If "go", parse direction from args_str
+                        direction_to_move_verb = verb 
+                        direction_to_move_args = args_str
+
+                        if verb == "go":
+                            if not args_str:
+                                current_room_for_msg = crud.crud_room.get_room_by_id(db_loop, current_char_state.current_room_id)
+                                room_schema_for_msg = schemas.RoomInDB.from_orm(current_room_for_msg) if current_room_for_msg else None
+                                await combat_manager.send_combat_log(player.id, ["Go where?"], room_data=room_schema_for_msg, transient=True)
+                                continue
+                            # For "go", the verb is "go" and args_str is the direction
+                        
+                        # Player is NOT in combat, proceed with movement
+                        await _handle_websocket_move_if_not_in_combat(
+                            db_loop, player, current_char_state, direction_to_move_verb, direction_to_move_args
+                        )
+                        continue
+                    
+                    elif verb == "flee":
+                        if current_char_state.id in combat_manager.active_combats and combat_manager.active_combats.get(current_char_state.id):
+                            flee_direction_arg = args_str.split(" ", 1)[0].lower() if args_str else "random"
+                            
+                            canonical_flee_dir = "random"
+                            if flee_direction_arg != "random":
+                                canonical_flee_dir = combat_manager.direction_map.get(flee_direction_arg, flee_direction_arg)
+                                if canonical_flee_dir not in combat_manager.direction_map.values():
+                                    current_room_for_msg = crud.crud_room.get_room_by_id(db_loop, current_char_state.current_room_id)
+                                    room_schema_for_msg = schemas.RoomInDB.from_orm(current_room_for_msg) if current_room_for_msg else None
+                                    await combat_manager.send_combat_log(player.id, [f"Invalid flee direction '{flee_direction_arg}'. Try 'flee' or 'flee <direction>'."], room_data=room_schema_for_msg, transient=True)
+                                    continue 
+
+                            combat_manager.character_queued_actions[current_char_state.id] = f"flee {canonical_flee_dir}"
+                            await combat_manager.send_combat_log(player.id, [f"You prepare to flee {canonical_flee_dir if canonical_flee_dir != 'random' else '...'}"]) # No room_data needed, not a room state change yet
+                        else:
+                            current_room_for_msg = crud.crud_room.get_room_by_id(db_loop, current_char_state.current_room_id)
+                            room_schema_for_msg = schemas.RoomInDB.from_orm(current_room_for_msg) if current_room_for_msg else None
+                            await combat_manager.send_combat_log(player.id, ["You are not in combat."], room_data=room_schema_for_msg, transient=True)
+                        continue
+                    elif verb in ["attack", "atk", "kill", "k"]:
+                        if not args_str: 
+                            await combat_manager.send_combat_log(player.id, ["Attack what?"], room_data=current_room_schema_for_command)
+                        elif not current_room_for_command_orm: 
+                             await combat_manager.send_combat_log(player.id, ["Error: Current room unknown for attack."], room_data=None)
+                        else:
+                            mobs_in_char_room = crud.crud_mob.get_mobs_in_room(db_loop, room_id=current_char_state.current_room_id)
+                            if not mobs_in_char_room:
+                                await combat_manager.send_combat_log(player.id, ["There is nothing here to attack."], room_data=current_room_schema_for_command)
+                            else:
+                                target_mob_instance, error_or_prompt = resolve_mob_target(args_str, mobs_in_char_room)
+                                if error_or_prompt:
+                                    await combat_manager.send_combat_log(player.id, [error_or_prompt], room_data=current_room_schema_for_command)
+                                elif target_mob_instance:
+                                    is_already_in_any_combat = current_char_state.id in combat_manager.active_combats
+                                    is_already_targeting_this_specific_mob = False
+                                    if is_already_in_any_combat and target_mob_instance.id in combat_manager.active_combats.get(current_char_state.id, set()):
+                                        is_already_targeting_this_specific_mob = True
+                                    if not is_already_in_any_combat:
+                                        await combat_manager.initiate_combat_session(db_loop, player.id, current_char_state.id, current_char_state.name, target_mob_instance.id)
+                                    elif not is_already_targeting_this_specific_mob: 
+                                        combat_manager.active_combats.setdefault(current_char_state.id, set()).add(target_mob_instance.id)
+                                        combat_manager.mob_targets[target_mob_instance.id] = current_char_state.id 
+                                        combat_manager.character_queued_actions[current_char_state.id] = f"attack {target_mob_instance.id}"
+                                        await combat_manager.send_combat_log(player.id, [f"You switch your attack to the <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span>!"], room_data=current_room_schema_for_command)
+                                    else: 
+                                        combat_manager.character_queued_actions[current_char_state.id] = f"attack {target_mob_instance.id}"
+                    elif verb == "use": # Handle 'use <skill_name> [target_ref]'
+                        if not args_str:
+                            await combat_manager.send_combat_log(player.id, ["Use what skill? (And on whom/what, if applicable?)"], room_data=current_room_schema_for_command)
                             continue
 
-                        # Use the utility function to resolve the target reference
-                        target_mob_instance, error_or_prompt = resolve_mob_target(args_str, mobs_in_char_room)
-                        
-                        if error_or_prompt:
-                            # This covers "not found" or ambiguity prompts
-                            await combat_manager.send_combat_log(
-                                player.id, 
-                                [error_or_prompt], 
-                                room_data=current_room_schema_for_command
-                            )
-                        elif target_mob_instance:
-                            # Successfully resolved target, now initiate or queue combat
-                            # Check if character is already in any combat session
-                            is_already_in_any_combat = character.id in combat_manager.active_combats
-                            
-                            # Check if specifically targeting an already engaged mob (by this character)
-                            is_already_targeting_this_specific_mob = False
-                            if is_already_in_any_combat:
-                                if target_mob_instance.id in combat_manager.active_combats.get(character.id, set()):
-                                    is_already_targeting_this_specific_mob = True
-                            
-                            if not is_already_in_any_combat:
-                                # Not in combat, so initiate with this target
-                                await combat_manager.initiate_combat_session(
-                                    db_loop, player.id, character.id, character.name, target_mob_instance.id
-                                )
-                            elif not is_already_targeting_this_specific_mob:
-                                # In combat, but switching to a new valid target (or adding a new one)
-                                # Ensure initiate_combat_session or a similar function correctly adds
-                                # this new target to the existing combat session if that's the desired logic,
-                                # or if it always starts a "new" combat context against this mob.
-                                # For now, let's assume initiate_combat_session can handle adding a new target.
-                                # Or, more simply, just update the queued action to this new target.
-                                combat_manager.active_combats.setdefault(character.id, set()).add(target_mob_instance.id)
-                                combat_manager.mob_targets[target_mob_instance.id] = character.id # Ensure mob targets player
-                                combat_manager.character_queued_actions[character.id] = f"attack {target_mob_instance.id}"
-                                await combat_manager.send_combat_log(
-                                    player.id, 
-                                    [f"You switch your attack to the <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span>!"], 
-                                    room_data=current_room_schema_for_command
-                                )
-                            else: 
-                                # Already in combat and already targeting this mob (or re-affirming).
-                                # Queue the attack action for the ticker.
-                                combat_manager.character_queued_actions[character.id] = f"attack {target_mob_instance.id}"
-                                # Optional: Send a minor confirmation, or let the ticker show the next round's action.
-                                # await combat_manager.send_combat_log(player.id, [f"Continuing attack on {target_mob_instance.mob_template.name}."], room_data=current_room_schema_for_command)
-                                # No 'else' needed for target_mob_instance here, as resolve_mob_target's error_or_prompt covers it.
+                        args_list = args_str.split() # Define args_list from args_str
 
+                        # Split input into potential skill name part and potential target part
+                        # e.g., "ba giant rat" -> skill_input_part = "ba", potential_target_str = "giant rat"
+                        # e.g., "basic punch" -> skill_input_part = "basic punch", potential_target_str = ""
+                        # e.g., "ba"          -> skill_input_part = "ba", potential_target_str = ""
+                        
+                        # Try to intelligently split skill from target.
+                        # This is a simple approach; more complex parsing might be needed for multi-word skill names AND multi-word targets.
+                        # For now, we assume the first "word(s)" could be the skill, and the rest is the target.
+                        # We'll iterate to find the longest skill name match.
+
+                        learned_skill_tags = current_char_state.learned_skills or []
+                        if not learned_skill_tags:
+                            await combat_manager.send_combat_log(player.id, ["You haven't learned any skills."], room_data=current_room_schema_for_command)
+                            continue
+
+                        possible_skill_matches: List[Tuple[models.SkillTemplate, str]] = [] # (SkillTemplate, remaining_args_for_target)
+
+                        for i in range(len(args_list), 0, -1): # Try matching 1 word, then 2 words, etc. from args_list for skill name
+                            current_skill_input_part = " ".join(args_list[:i]).lower()
+                            current_potential_target_str = " ".join(args_list[i:]).strip()
+
+                            for skill_tag in learned_skill_tags:
+                                skill_template_db = crud.crud_skill.get_skill_template_by_tag(db_loop, skill_id_tag=skill_tag)
+                                if not skill_template_db:
+                                    continue
+                                
+                                # Match against skill_id_tag OR player-facing name
+                                if skill_template_db.skill_id_tag.lower().startswith(current_skill_input_part) or \
+                                   skill_template_db.name.lower().startswith(current_skill_input_part):
+                                    # Check if this exact skill_template is already found with a shorter target string (prefer longer skill match)
+                                    already_found_better_match = False
+                                    for existing_match, _ in possible_skill_matches:
+                                        if existing_match.id == skill_template_db.id:
+                                            already_found_better_match = True
+                                            break
+                                    if not already_found_better_match:
+                                        possible_skill_matches.append((skill_template_db, current_potential_target_str))
+                            
+                            if possible_skill_matches and len(current_skill_input_part.split()) > 0 : # If we found matches with current_skill_input_part, break to prefer longer skill name matches
+                                break # This prioritizes matching "basic punch" over "basic" if both are typed for "basic punch some target"
+
+
+                        selected_skill_template: Optional[models.SkillTemplate] = None
+                        remaining_args_for_target_str: str = ""
+
+                        if not possible_skill_matches:
+                            await combat_manager.send_combat_log(player.id, [f"No skill found matching '{args_list[0].lower() if args_list else args_str}'."], room_data=current_room_schema_for_command) # Added check for empty args_list
+                            continue
+                        elif len(possible_skill_matches) == 1:
+                            selected_skill_template = possible_skill_matches[0][0]
+                            remaining_args_for_target_str = possible_skill_matches[0][1]
+                        else: # Multiple partial matches
+                            # Refine matches: if an exact match for skill_input_part exists, prefer it.
+                            exact_match_skill = None
+                            skill_input_first_part_lower = args_list[0].lower() if args_list else "" # Added check for empty args_list
+                            for sm_template, sm_target_args in possible_skill_matches:
+                                if sm_template.name.lower() == skill_input_first_part_lower or sm_template.skill_id_tag.lower() == skill_input_first_part_lower:
+                                    exact_match_skill = sm_template
+                                    remaining_args_for_target_str = sm_target_args
+                                    break
+                            
+                            if exact_match_skill:
+                                selected_skill_template = exact_match_skill
+                            else:
+                                skill_names = list(set([st.name for st, _ in possible_skill_matches])) # Use set to avoid duplicates if tag and name both matched
+                                await combat_manager.send_combat_log(player.id, [f"Multiple skills match. Be more specific: {', '.join(skill_names)}"], room_data=current_room_schema_for_command)
+                                continue
+                        
+                        # At this point, selected_skill_template is the uniquely matched skill
+                        target_mob_id_for_skill_queue: Optional[str] = "None" 
+                        resolved_mob_target_for_skill: Optional[models.RoomMobInstance] = None
+
+                        if selected_skill_template.target_type in ["ENEMY_MOB", "FRIENDLY_CHAR"]: # Skills requiring a mob/char target
+                            mobs_in_char_room = crud.crud_mob.get_mobs_in_room(db_loop, room_id=current_char_state.current_room_id)
+                            # TODO: Add other players to mobs_in_char_room if target_type can be FRIENDLY_CHAR
+
+                            if remaining_args_for_target_str: # User specified a target string
+                                resolved_mob_target_for_skill, error_or_prompt = resolve_mob_target(remaining_args_for_target_str, mobs_in_char_room)
+                                if error_or_prompt:
+                                    await combat_manager.send_combat_log(player.id, [error_or_prompt], room_data=current_room_schema_for_command)
+                                    continue
+                                if not resolved_mob_target_for_skill:
+                                    await combat_manager.send_combat_log(player.id, [f"Could not find target '{remaining_args_for_target_str}'."], room_data=current_room_schema_for_command)
+                                    continue
+                                target_mob_id_for_skill_queue = str(resolved_mob_target_for_skill.id)
+                            else: # No target specified by user for a skill that needs one
+                                current_combat_targets = combat_manager.active_combats.get(current_char_state.id)
+                                if current_combat_targets: # Character is in combat
+                                    if len(current_combat_targets) == 1:
+                                        implicit_target_id = list(current_combat_targets)[0]
+                                        # Fetch mob instance to check health and for name in prep message
+                                        resolved_mob_target_for_skill = crud.crud_mob.get_room_mob_instance(db_loop, room_mob_instance_id=implicit_target_id) # Changed to get_room_mob_instance
+                                        if resolved_mob_target_for_skill and resolved_mob_target_for_skill.current_health > 0:
+                                            target_mob_id_for_skill_queue = str(implicit_target_id)
+                                        else:
+                                            await combat_manager.send_combat_log(player.id, ["Your current combat target is invalid or already defeated."], room_data=current_room_schema_for_command)
+                                            continue
+                                    else: # In combat with multiple targets
+                                        await combat_manager.send_combat_log(player.id, [f"The skill '{selected_skill_template.name}' requires a target. You are fighting multiple enemies, please specify one."], room_data=current_room_schema_for_command)
+                                        continue
+                                else: # Not in combat, no target specified, skill needs one
+                                    await combat_manager.send_combat_log(player.id, [f"The skill '{selected_skill_template.name}' requires a target. Who do you want to use it on?"], room_data=current_room_schema_for_command)
+                                    continue
+                        
+                        # --- Initiate combat if necessary (out of combat, valid target for skill, skill is offensive) ---
+                        is_offensive_skill = selected_skill_template.skill_type == "COMBAT_ACTIVE" and selected_skill_template.target_type == "ENEMY_MOB" # Add more conditions if needed
+                        
+                        if is_offensive_skill and \
+                           resolved_mob_target_for_skill and \
+                           resolved_mob_target_for_skill.id not in combat_manager.active_combats.get(current_char_state.id, set()):
+                            
+                            await combat_manager.initiate_combat_session(
+                                db_loop, player.id, current_char_state.id, current_char_state.name, resolved_mob_target_for_skill.id
+                            )
+                            # Combat is initiated, the skill will be queued against this target.
+
+                        # --- Queue the skill action ---
+                        combat_manager.character_queued_actions[current_char_state.id] = f"use_skill {selected_skill_template.skill_id_tag} {target_mob_id_for_skill_queue}"
+                        
+                        target_name_for_prep_msg = ""
+                        if target_mob_id_for_skill_queue != "None":
+                            # Try to get name from resolved_mob_target_for_skill if it was set (e.g. new target or implicit single combat target)
+                            mob_for_name = resolved_mob_target_for_skill
+                            if not mob_for_name and target_mob_id_for_skill_queue and target_mob_id_for_skill_queue.lower() != "none": # Added check for "none"
+                                try:
+                                    mob_for_name = crud.crud_mob.get_room_mob_instance(db_loop, room_mob_instance_id=uuid.UUID(target_mob_id_for_skill_queue)) # Changed to get_room_mob_instance
+                                except ValueError: # Should not happen if ID is valid UUID string
+                                    pass
+                            if mob_for_name:
+                                target_name_for_prep_msg = f" on <span class='inv-item-name'>{mob_for_name.mob_template.name}</span>"
+                            else: # Fallback if name couldn't be fetched
+                                target_name_for_prep_msg = " on the specified target"
+
+
+                        await combat_manager.send_combat_log(
+                            player.id,
+                            [f"You prepare to use <span class='skill-name'>{selected_skill_template.name}</span>{target_name_for_prep_msg}."],
+                            room_data=current_room_schema_for_command
+                        )
+                        continue # End of 'use' command processing for this message
+                    # Remove or comment out the old 'use_skill' block that started with:
+                    # elif command_verb == "use_skill": 
+                    # (This was likely a direct command from HTTP or an older system)
                     elif verb == "flee":
-                        if character.id in combat_manager.active_combats:
-                            combat_manager.character_queued_actions[character.id] = "flee"
+                        if current_char_state.id in combat_manager.active_combats:
+                            flee_direction_arg = args_str.split(" ", 1)[0].lower() if args_str else "random"
+                            
+                            # Validate flee_direction_arg against canonical directions or "random"
+                            # combat_manager.direction_map includes short versions. We need canonical for the action string.
+                            canonical_flee_dir = "random"
+                            if flee_direction_arg != "random":
+                                canonical_flee_dir = combat_manager.direction_map.get(flee_direction_arg, flee_direction_arg)
+                                if canonical_flee_dir not in combat_manager.direction_map.values(): # Check against full direction names
+                                    await combat_manager.send_combat_log(player.id, [f"Invalid flee direction '{flee_direction_arg}'. Try 'flee' or 'flee <direction>'."], room_data=current_room_schema_for_command)
+                                    continue # Skip queueing invalid flee
+
+                            combat_manager.character_queued_actions[current_char_state.id] = f"flee {canonical_flee_dir}"
                             await combat_manager.send_combat_log(player.id, ["You prepare to flee..."], room_data=current_room_schema_for_command)
                         else:
-                            await combat_manager.send_combat_log(player.id, ["You are not in combat."], room_data=current_room_schema_for_command)
-                    
-                    elif verb in ["look", "l"]: # Handle 'look' via WebSocket
+                            await combat_manager.send_combat_log(player.id, ["You are not in combat."], room_data=current_room_schema_for_command, transient=True)
+                        continue
+                    elif verb in ["look", "l"]: 
                         look_messages = []
-                        # Room name/desc will be in room_data part of send_combat_log
-                        items_on_ground = crud.crud_room_item.get_items_in_room(db_loop, current_char_state.current_room_id)
-                        items_text, _ = format_room_items_for_player_message(items_on_ground)
-                        if items_text: look_messages.append(items_text)
-                         
-                        mobs_in_current_room = crud.crud_mob.get_mobs_in_room(db_loop, current_char_state.current_room_id)
-                        mobs_text, _ = format_room_mobs_for_player_message(mobs_in_current_room)
-                        if mobs_text: look_messages.append(mobs_text)
-
-                        other_chars_look = crud.crud_character.get_characters_in_room(
-                            db_loop, room_id=current_char_state.current_room_id, exclude_character_id=character.id
-                        )
-                        chars_text_look = format_room_characters_for_player_message(other_chars_look)
-                        if chars_text_look: look_messages.append(chars_text_look)
-
+                        if current_room_for_command_orm: 
+                            items_on_ground = crud.crud_room_item.get_items_in_room(db_loop, current_room_for_command_orm.id)
+                            items_text, _ = format_room_items_for_player_message(items_on_ground)
+                            if items_text: look_messages.append(items_text)
+                            mobs_in_current_room = crud.crud_mob.get_mobs_in_room(db_loop, current_room_for_command_orm.id)
+                            mobs_text, _ = format_room_mobs_for_player_message(mobs_in_current_room)
+                            if mobs_text: look_messages.append(mobs_text)
+                            other_chars_look = crud.crud_character.get_characters_in_room(db_loop, room_id=current_room_for_command_orm.id, exclude_character_id=current_char_state.id)
+                            chars_text_look = format_room_characters_for_player_message(other_chars_look)
+                            if chars_text_look: look_messages.append(chars_text_look)
                         await combat_manager.send_combat_log(player.id, look_messages, room_data=current_room_schema_for_command)
-                    
-                    # TODO: Add more WebSocket command handlers (move, inventory, etc.) or a dispatcher
-                    # For commands not handled here, the client would still use HTTP
-                    else:
-                        await combat_manager.send_combat_log(player.id, [f"Command '{verb}' not yet supported over WebSocket. Try HTTP or combat actions."], room_data=current_room_schema_for_command)
-                else: # Unrecognized message type or empty command
-                    await combat_manager.send_combat_log(player.id, [f"Unrecognized message type: {message_type} or empty command."], room_data=current_room_schema_for_command)
+                        continue # Add this if missing
+                    elif verb not in ["rest"] + movement_verbs + ["attack", "atk", "kill", "k", "flee", "look", "l"]:
+                         await combat_manager.send_combat_log(
+                            player.id, 
+                            [f"Command '{verb}' not supported over WebSocket here. Try 'help' or HTTP commands."], 
+                            room_data=current_room_schema_for_command
+                        )
+                elif message_type != "command": 
+                    await combat_manager.send_combat_log(player.id, [f"Unrecognized message type: {message_type}."], room_data=current_room_schema_for_command)
+                elif message_type == "command" and not command_text:
+                     await combat_manager.send_combat_log(player.id, ["Empty command received."], room_data=current_room_schema_for_command)
 
     except WebSocketDisconnect:
-        print(f"WebSocket disconnected for Player {player.id} (Character {character.id})")
-        # Clean up combat state for this character
-        if character.id in combat_manager.active_combats:
-            combat_manager.active_combats.pop(character.id, None)
-            mobs_to_clear = [mid for mid, cid_target in combat_manager.mob_targets.items() if cid_target == character.id]
-            for mid in mobs_to_clear: combat_manager.mob_targets.pop(mid, None)
-        combat_manager.character_queued_actions.pop(character.id, None)
+        logger.info(f"WebSocket disconnected for Player {player.id if player else 'N/A'} (Character {character.id if character else 'N/A'})")
+        if character and character.id: 
+            combat_manager.end_combat_for_character(character.id, reason="websocket_disconnect")
+            if is_character_resting(character.id):
+                set_character_resting_status(character.id, False)
     except Exception as e:
-        print(f"Error in WebSocket for Player {player.id} (Character {character.id}): {e}")
-        # Attempt to send an error to client if possible, then close
+        err_player_id = player.id if player else "Unknown Player"
+        err_char_id = character.id if character else "Unknown Character"
+        logger.error(f"Error in WebSocket for Player {err_player_id} (Character {err_char_id}): {e}", exc_info=True)
         try:
             await websocket.send_json({"type": "error", "detail": "An unexpected server error occurred."})
-        except Exception:
-            pass # Ignore if send fails (connection likely already broken)
+        except Exception as send_err: # Catch error during sending error
+            logger.error(f"Failed to send error to WebSocket for Player {err_player_id} (Character {err_char_id}): {send_err}")
     finally:
-        # This ensures disconnect is called even if an error occurs within the try block
-        # before WebSocketDisconnect is raised.
-        connection_manager.disconnect(player.id) 
-        print(f"Cleaned up WebSocket resources for Player {player.id} (Character {character.id})")
+        if player and player.id: 
+            connection_manager.disconnect(player.id) 
+            if character and character.id and is_character_resting(character.id): 
+                set_character_resting_status(character.id, False)
+        char_id_for_log = character.id if character else "N/A"
+        player_id_for_log = player.id if player else "N/A"
+        logger.info(f"WebSocket connection for Player {player_id_for_log} (Character {char_id_for_log}) fully closed.")
 --- END OF FILE backend/app/websocket_router.py ---
 
 --- START OF FILE backend/app/websocket_manager.py ---
@@ -521,17 +931,24 @@ connection_manager = ConnectionManager()
 
 --- START OF FILE backend/app/game_logic/combat_manager.py ---
 # backend/app/game_logic/combat_manager.py
-import asyncio
-import uuid
-import random
-from typing import Dict, List, Set, Optional, Any
+from typing import Dict, List, Set, Optional, Any, Tuple
+import asyncio # Ensure asyncio is imported
+import random # Ensure random is imported
+import uuid # Ensure uuid is imported
+import logging # Import logging
 
-from sqlalchemy.orm import Session 
+from sqlalchemy.orm import Session, joinedload 
 
 from app.db.session import SessionLocal 
-from app import crud, models, schemas # Ensure all are available
-from app.websocket_manager import connection_manager as ws_manager
+from app import crud, models, schemas 
+from app.websocket_manager import connection_manager as ws_manager # Ensure ws_manager is imported
 from app.commands.utils import roll_dice, format_room_mobs_for_player_message, format_room_items_for_player_message 
+from app.game_state import is_character_resting, set_character_resting_status 
+
+logger = logging.getLogger(__name__) # Get a logger for this module
+
+direction_map = {"n": "north", "s": "south", "e": "east", "w": "west", "u": "up", "d": "down"}
+
 
 from contextlib import contextmanager
 @contextmanager
@@ -542,174 +959,485 @@ def db_session_for_task_sync():
     finally:
         db.close()
 
-active_combats: Dict[uuid.UUID, Set[uuid.UUID]] = {}
-mob_targets: Dict[uuid.UUID, uuid.UUID] = {}
-character_queued_actions: Dict[uuid.UUID, Optional[str]] = {}
+active_combats: Dict[uuid.UUID, Set[uuid.UUID]] = {} 
+mob_targets: Dict[uuid.UUID, uuid.UUID] = {} 
+character_queued_actions: Dict[uuid.UUID, Optional[str]] = {} 
 
 COMBAT_ROUND_INTERVAL = 3.0
 
-async def send_combat_log(player_id: uuid.UUID, messages: List[str], combat_ended: bool = False, room_data: Optional[schemas.RoomInDB] = None):
+async def _handle_mob_death_loot_and_cleanup(
+    db: Session,
+    character: models.Character, 
+    killed_mob_instance: models.RoomMobInstance,
+    log_messages_list: List[str], 
+    player_id: uuid.UUID, 
+    current_room_id_for_broadcast: uuid.UUID
+) -> models.Character: # Return type is just models.Character now
+    mob_template = killed_mob_instance.mob_template 
+    character_after_loot = character # Start with the incoming character
+
+    logger.debug(f"LOOT: Handling death of {mob_template.name if mob_template else 'Unknown Mob'}")
+
+    # 1. Award XP
+    if mob_template and mob_template.xp_value > 0:
+        logger.debug(f"LOOT: Awarding {mob_template.xp_value} XP.")
+        updated_char_for_xp, xp_messages = crud.crud_character.add_experience(
+            db, character_after_loot.id, mob_template.xp_value
+        )
+        if updated_char_for_xp:
+            character_after_loot = updated_char_for_xp 
+        log_messages_list.extend(xp_messages)
+    elif not mob_template:
+        logger.warning(f"LOOT: No mob_template found for killed_mob_instance {killed_mob_instance.id}")
+
+
+    # 2. Award Currency
+    platinum_dropped, gold_dropped, silver_dropped, copper_dropped = 0, 0, 0, 0
+
+    if mob_template and mob_template.currency_drop: # Check if mob_template itself is not None
+        cd = mob_template.currency_drop 
+        logger.debug(f"LOOT: Mob has currency_drop definition: {cd}")
+        
+        copper_dropped = random.randint(cd.get("c_min", 0), cd.get("c_max", 0))
+        
+        if random.randint(1, 100) <= cd.get("s_chance", 0):
+            silver_dropped = random.randint(cd.get("s_min", 0), cd.get("s_max", 0))
+        if random.randint(1, 100) <= cd.get("g_chance", 0):
+            gold_dropped = random.randint(cd.get("g_min", 0), cd.get("g_max", 0))
+        if random.randint(1, 100) <= cd.get("p_chance", 0): # Assuming you added platinum (p_ fields)
+            platinum_dropped = random.randint(cd.get("p_min", 0), cd.get("p_max", 0))
+        
+        logger.debug(f"LOOT: Rolled drops - P:{platinum_dropped}, G:{gold_dropped}, S:{silver_dropped}, C:{copper_dropped}")
+
+    else:
+        if not mob_template:
+             logger.debug(f"LOOT: No mob_template, so no currency_drop check.")
+        elif mob_template: # Check if mob_template exists before accessing its name
+             logger.debug(f"LOOT: Mob template {mob_template.name} has no currency_drop definition.")
+        else: # Should not happen if the outer 'if mob_template' was false
+             logger.debug(f"LOOT: Mob template is None, no currency_drop definition.")
+
+
+    if platinum_dropped > 0 or gold_dropped > 0 or silver_dropped > 0 or copper_dropped > 0:
+        logger.debug(f"LOOT: Attempting to update character currency...")
+        updated_char_for_currency, currency_message = crud.crud_character.update_character_currency(
+            db, character_after_loot.id, platinum_dropped, gold_dropped, silver_dropped, copper_dropped
+        )
+        if updated_char_for_currency:
+             character_after_loot = updated_char_for_currency
+             logger.debug(f"LOOT: Currency updated. Message: {currency_message}")
+        else:
+            logger.warning(f"LOOT: crud.update_character_currency returned None for character.")
+
+        
+        drop_messages_parts = []
+        # Use the actual dropped amounts for the message    
+        if platinum_dropped > 0: drop_messages_parts.append(f"{platinum_dropped}p")
+        if gold_dropped > 0: drop_messages_parts.append(f"{gold_dropped}g")
+        if silver_dropped > 0: drop_messages_parts.append(f"{silver_dropped}s")
+        if copper_dropped > 0: drop_messages_parts.append(f"{copper_dropped}c")
+        
+        if drop_messages_parts:
+             log_messages_list.append(f"The {mob_template.name} drops: {', '.join(drop_messages_parts)}.")
+             log_messages_list.append(currency_message) 
+    elif mob_template and mob_template.currency_drop: # Only log this if there was a currency_drop table but rolls were 0
+        logger.debug(f"LOOT: All currency drop rolls were zero.")
+
+
+    # 3. Item Loot (Placeholder for future)
+    # ...
+
+    # 4. Despawn and Cleanup Combat State
+    logger.debug(f"LOOT: Despawning mob {killed_mob_instance.id} and cleaning combat state.")
+    crud.crud_mob.despawn_mob_from_room(db, killed_mob_instance.id) # This commits
+    active_combats.get(character_after_loot.id, set()).discard(killed_mob_instance.id) # Use character_after_loot.id
+    mob_targets.pop(killed_mob_instance.id, None)
+    
+    return character_after_loot # Return the potentially updated character object
+
+
+async def resolve_skill_effect(
+    db: Session,
+    character: models.Character,
+    skill_template: models.SkillTemplate,
+    target_mob_instance: Optional[models.RoomMobInstance], # Target can be None for self-buffs etc.
+    player_id: uuid.UUID, # For sending logs
+    current_room_id_for_broadcast: uuid.UUID # For broadcasting echoes
+) -> Tuple[List[str], bool, Optional[models.Character]]: # Returns (log_messages, was_successful_and_action_taken, updated_character_obj)
+    """
+    Resolves the effects of a used skill.
+    Returns a list of log messages for the player, a boolean indicating if an action was taken,
+    and the potentially updated character object (e.g., after XP gain from a kill).
+    """
+    skill_log: List[str] = []
+    action_taken = False
+    char_combat_stats = character.calculate_combat_stats() # Get fresh stats
+    # This character object might be updated by _handle_mob_death_loot_and_cleanup, so we'll return it.
+    character_after_skill = character 
+
+    # 1. Check Mana Cost
+    mana_cost = skill_template.effects_data.get("mana_cost", 0)
+    if character.current_mana < mana_cost:
+        skill_log.append(f"You don't have enough mana to use {skill_template.name} (needs {mana_cost}, have {character.current_mana}).")
+        return skill_log, False, character_after_skill
+
+    # 2. Pay Mana Cost (if any)
+    if mana_cost > 0:
+        # Ensure character object is the one from the current DB session if passed around
+        # For this function, 'character' is the one passed in.
+        character.current_mana -= mana_cost 
+        db.add(character) # Mark for commit by the main process_combat_round
+        skill_log.append(f"You spend {mana_cost} mana.")
+
+    # 3. Apply Effects based on skill_id_tag
+    action_taken = True # Assume action taken if mana paid, can be set to False if other checks fail
+
+    if skill_template.skill_id_tag == "basic_punch":
+        if not target_mob_instance or target_mob_instance.current_health <= 0:
+            skill_log.append(f"Your target for {skill_template.name} is invalid or already defeated.")
+            return skill_log, False, character_after_skill
+
+        mob_ac = target_mob_instance.mob_template.base_defense if target_mob_instance.mob_template.base_defense is not None else 10
+        unarmed_attack_bonus = char_combat_stats["attack_bonus"]
+        unarmed_damage_dice = "1d2" 
+        unarmed_damage_bonus = char_combat_stats["damage_bonus"]
+
+        to_hit_roll = roll_dice("1d20")
+        if (to_hit_roll + unarmed_attack_bonus) >= mob_ac:
+            damage = max(1, roll_dice(unarmed_damage_dice) + unarmed_damage_bonus)
+            skill_log.append(f"<span class='char-name'>{character.name}</span> <span class='combat-success'>PUNCHES</span> <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span> for <span class='combat-hit'>{damage}</span> damage.")
+            await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
+                                          f"<span class='char-name'>{character.name}</span> PUNCHES <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span> for {damage} damage!")
+            
+            updated_mob = crud.crud_mob.update_mob_instance_health(db, target_mob_instance.id, -damage) # This commits
+            if updated_mob and updated_mob.current_health <= 0:
+                skill_log.append(f"<span class='combat-death'>The {target_mob_instance.mob_template.name} DIES! Good punch, champ.</span>")
+                await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
+                                              f"The <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span> DIES!")
+                # Call helper for XP, loot, despawn, and combat state cleanup
+                character_after_skill = await _handle_mob_death_loot_and_cleanup(
+                    db, character, updated_mob, skill_log, player_id, current_room_id_for_broadcast
+                )
+            elif updated_mob:
+                 skill_log.append(f"  {target_mob_instance.mob_template.name} HP: <span class='combat-hp'>{updated_mob.current_health}/{target_mob_instance.mob_template.base_health}</span>.")
+        else: # Punch misses
+            skill_log.append(f"<span class='char-name'>{character.name}</span> <span class='combat-miss'>MISSES</span> the <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span> with a punch.")
+            await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
+                                          f"<span class='char-name'>{character.name}</span> MISSES the <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span> with a punch.")
+
+    elif skill_template.skill_id_tag == "power_attack_melee":
+        if not target_mob_instance or target_mob_instance.current_health <= 0:
+            skill_log.append(f"Your target for {skill_template.name} is invalid or already defeated.")
+            return skill_log, False, character_after_skill
+
+        mob_ac = target_mob_instance.mob_template.base_defense if target_mob_instance.mob_template.base_defense is not None else 10
+        skill_effects = skill_template.effects_data
+        attack_roll_modifier = skill_effects.get("attack_roll_modifier", 0)
+        damage_modifier_flat = skill_effects.get("damage_modifier_flat", 0)
+        # uses_equipped_weapon = skill_effects.get("uses_equipped_weapon", True) # Assumed for Power Attack
+
+        player_attack_bonus = char_combat_stats["attack_bonus"]
+        player_damage_dice = char_combat_stats["damage_dice"]
+        player_damage_bonus = char_combat_stats["damage_bonus"]
+        final_attack_bonus = player_attack_bonus + attack_roll_modifier
+        
+        to_hit_roll = roll_dice("1d20")
+        if (to_hit_roll + final_attack_bonus) >= mob_ac:
+            base_weapon_damage = roll_dice(player_damage_dice)
+            total_damage = max(1, base_weapon_damage + player_damage_bonus + damage_modifier_flat)
+            
+            skill_log.append(f"<span class='char-name'>{character.name}</span> unleashes a <span class='combat-success'>POWER ATTACK</span> on <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span>, hitting for <span class='combat-hit'>{total_damage}</span> damage!")
+            await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
+                                          f"<span class='char-name'>{character.name}</span> POWER ATTACKS <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span> for {total_damage} damage!")
+            
+            updated_mob = crud.crud_mob.update_mob_instance_health(db, target_mob_instance.id, -total_damage) # This commits
+            if updated_mob and updated_mob.current_health <= 0:
+                skill_log.append(f"<span class='combat-death'>The {target_mob_instance.mob_template.name} is OBLITERATED by the Power Attack!</span>")
+                await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
+                                              f"The <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span> DIES from a mighty blow!")
+                # Call helper for XP, loot, despawn, and combat state cleanup
+                character_after_skill = await _handle_mob_death_loot_and_cleanup(
+                    db, character, updated_mob, skill_log, player_id, current_room_id_for_broadcast
+                )
+            elif updated_mob:
+                 skill_log.append(f"  {target_mob_instance.mob_template.name} HP: <span class='combat-hp'>{updated_mob.current_health}/{target_mob_instance.mob_template.base_health}</span>.")
+        else: # Power Attack misses
+            skill_log.append(f"<span class='char-name'>{character.name}</span>'s <span class='combat-miss'>Power Attack</span> against <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span> goes wide!")
+            await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
+                                          f"<span class='char-name'>{character.name}</span> misses a Power Attack on <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span>.")
+    else:
+        skill_log.append(f"The skill '{skill_template.name}' is not fully implemented yet. Nothing happens except you waste a turn, dummy.")
+        action_taken = False 
+
+    # 4. TODO: Handle Cooldowns
+    # if action_taken and skill_template.cooldown and skill_template.cooldown > 0:
+    #    # ...
+    #    skill_log.append(f"{skill_template.name} is now on cooldown.")
+
+    return skill_log, action_taken, character_after_skill
+
+def end_combat_for_character(character_id: uuid.UUID, reason: str = "unknown"):
+    if character_id in active_combats:
+        mobs_character_was_fighting = list(active_combats.pop(character_id, set()))
+        for mob_id in mobs_character_was_fighting:
+            if mob_id in mob_targets and mob_targets[mob_id] == character_id:
+                mob_targets.pop(mob_id, None)
+        # print(f"Combat ended for character {character_id}. Reason: {reason}. Active mobs for char cleared.") # Verbose
+    else: 
+        mobs_to_clear_target_for = [mid for mid, cid_target in mob_targets.items() if cid_target == character_id]
+        for mid_clear in mobs_to_clear_target_for:
+            mob_targets.pop(mid_clear, None)
+    character_queued_actions.pop(character_id, None)
+
+
+async def mob_initiates_combat(db: Session, mob_instance: models.RoomMobInstance, target_character: models.Character):
+    if not mob_instance or mob_instance.current_health <= 0: return
+    if not target_character or target_character.current_health <= 0: return
+    if target_character.id in active_combats and mob_instance.id in active_combats[target_character.id]: return 
+    logger.info(f"COMBAT: {mob_instance.mob_template.name} initiates combat with {target_character.name}!")
+    active_combats.setdefault(target_character.id, set()).add(mob_instance.id)
+    mob_targets[mob_instance.id] = target_character.id  
+    mob_name_html = f"<span class='inv-item-name'>{mob_instance.mob_template.name}</span>"
+    char_name_html = f"<span class='char-name'>{target_character.name}</span>"
+    initiation_message_to_player_parts = []
+    if is_character_resting(target_character.id): 
+        set_character_resting_status(target_character.id, False)
+        initiation_message_to_player_parts.append("<span class='combat-warning'>You are startled from your rest!</span>")
+    initiation_message_to_player_parts.append(f"{mob_name_html} turns its baleful gaze upon you and <span class='combat-hit-player'>attacks!</span>")
+    player_room_orm = crud.crud_room.get_room_by_id(db, room_id=target_character.current_room_id)
+    player_room_schema = schemas.RoomInDB.from_orm(player_room_orm) if player_room_orm else None
+    await send_combat_log(player_id=target_character.player_id, messages=initiation_message_to_player_parts, room_data=player_room_schema)
+    broadcast_message = f"{mob_name_html} shrieks and <span class='combat-hit-player'>attacks</span> {char_name_html}!"
+    if "<span class='combat-warning'>You are startled from your rest!</span>" in " ".join(initiation_message_to_player_parts):
+         broadcast_message = f"{char_name_html} is startled from their rest as {mob_name_html} <span class='combat-hit-player'>attacks</span>!"
+    await _broadcast_combat_event(db, mob_instance.room_id, target_character.player_id, broadcast_message)
+
+def is_mob_in_any_player_combat(mob_id: uuid.UUID) -> bool:
+    for _character_id, targeted_mob_ids in active_combats.items():
+        if mob_id in targeted_mob_ids:
+            return True
+    return False
+
+async def send_combat_log(
+    player_id: uuid.UUID, 
+    messages: List[str], 
+    combat_ended: bool = False, 
+    room_data: Optional[schemas.RoomInDB] = None,
+    character_vitals: Optional[Dict[str, Any]] = None,
+    transient: bool = False # <<< NEW
+):
     if not messages and not combat_ended and not room_data:
         return
-
     payload = {
-        "type": "combat_update",
+        "type": "combat_update", # or "transient_message" if transient else "combat_update"
         "log": messages,
         "combat_over": combat_ended,
-        "room_data": room_data.model_dump() if room_data else None
+        "room_data": room_data.model_dump() if room_data else None,
+        "character_vitals": character_vitals,
+        "is_transient_log": transient # <<< NEW
     }
     await ws_manager.send_personal_message(payload, player_id)
 
-async def _broadcast_combat_event(db: Session, room_id: uuid.UUID, acting_player_id: uuid.UUID, message: str):
-    """Helper to broadcast a simplified combat message to others in the room."""
-    # Get the character ID of the acting player to exclude their character model from the room query
-    acting_char_id: Optional[uuid.UUID] = ws_manager.get_character_id(acting_player_id)
+async def _broadcast_to_room_participants(
+    db: Session, 
+    room_id: uuid.UUID, 
+    message: str, 
+    exclude_player_id: Optional[uuid.UUID] = None
+):
+    """Broadcasts a message to all connected players in a room, optionally excluding the acting player."""
+    excluded_character_id: Optional[uuid.UUID] = None
+    if exclude_player_id:
+        excluded_character_id = ws_manager.get_character_id(exclude_player_id)
 
+    characters_to_notify = crud.crud_character.get_characters_in_room(
+        db, 
+        room_id=room_id, 
+        exclude_character_id=excluded_character_id
+    )
+    
+    player_ids_to_send_to = [
+        char.player_id for char in characters_to_notify 
+        if ws_manager.is_player_connected(char.player_id)
+    ]
+            
+    if player_ids_to_send_to:
+        await ws_manager.broadcast_to_players(
+            {"type": "game_event", "message": message}, 
+            player_ids_to_send_to
+        )
+
+async def _broadcast_combat_event(db: Session, room_id: uuid.UUID, acting_player_id: uuid.UUID, message: str):
+    acting_char_id: Optional[uuid.UUID] = ws_manager.get_character_id(acting_player_id)
     player_ids_to_notify = [
-        char.player_id for char in crud.crud_character.get_characters_in_room(
-            db, room_id=room_id, exclude_character_id=acting_char_id
-        ) if ws_manager.is_player_connected(char.player_id) and char.player_id != acting_player_id # Double ensure not sending to self
+        char.player_id for char in crud.crud_character.get_characters_in_room(db, room_id=room_id, exclude_character_id=acting_char_id)
+        if ws_manager.is_player_connected(char.player_id) and char.player_id != acting_player_id
     ]
     if player_ids_to_notify:
-        payload = {"type": "game_event", "message": message} # Using "game_event" for simplicity
-        await ws_manager.broadcast_to_players(payload, player_ids_to_notify)
+        await ws_manager.broadcast_to_players({"type": "game_event", "message": message}, player_ids_to_notify)
 
 async def initiate_combat_session(
-    db: Session, 
-    player_id: uuid.UUID, 
-    character_id: uuid.UUID, 
-    character_name: str, # Name can be fetched from character object if needed
-    target_mob_instance_id: uuid.UUID
+    db: Session, player_id: uuid.UUID, character_id: uuid.UUID, character_name: str, target_mob_instance_id: uuid.UUID
 ):
-    mob_instance = crud.crud_mob.get_room_mob_instance(db, room_mob_instance_id=target_mob_instance_id)
-    if not mob_instance or mob_instance.current_health <= 0:
+    mob_instance_check = crud.crud_mob.get_room_mob_instance(db, room_mob_instance_id=target_mob_instance_id)
+    if not mob_instance_check or mob_instance_check.current_health <= 0:
         await send_combat_log(player_id, ["Target is invalid or already dead."])
         return False
-
-    character = crud.crud_character.get_character(db, character_id=character_id)
-    if not character or character.current_health <= 0:
+    character_check = crud.crud_character.get_character(db, character_id=character_id)
+    if not character_check or character_check.current_health <= 0:
         await send_combat_log(player_id, ["You are too dead or incapacitated to start combat."])
         return False
-
+    personal_log_messages = []
+    if is_character_resting(character_check.id): 
+        set_character_resting_status(character_check.id, False)
+        personal_log_messages.append("You leap into action, abandoning your rest!")
     active_combats.setdefault(character_id, set()).add(target_mob_instance_id)
     mob_targets[target_mob_instance_id] = character_id 
     character_queued_actions[character_id] = f"attack {target_mob_instance_id}"
-
-    await send_combat_log(player_id, [f"<span class='char-name'>{character.name}</span> engages the <span class='inv-item-name'>{mob_instance.mob_template.name}</span>!"])
+    engagement_message = f"<span class='char-name'>{character_name}</span> engages the <span class='inv-item-name'>{mob_instance_check.mob_template.name}</span>!"
+    personal_log_messages.append(engagement_message)
+    current_room_orm = crud.crud_room.get_room_by_id(db, character_check.current_room_id)
+    current_room_schema = schemas.RoomInDB.from_orm(current_room_orm) if current_room_orm else None
+    await send_combat_log(player_id, personal_log_messages, room_data=current_room_schema)
     return True
 
 async def combat_ticker_loop():
     while True:
         await asyncio.sleep(COMBAT_ROUND_INTERVAL)
-        
+        # logger.debug("Combat ticker loop iteration starting...") # Can be very verbose
         with db_session_for_task_sync() as db:
+            # Create a copy of player_ids to iterate over, as the original dict might change
+            # if players disconnect during the loop.
             player_ids_to_process = list(ws_manager.active_player_connections.keys())
-
+            
             for player_id in player_ids_to_process:
-                character_id = ws_manager.get_character_id(player_id) 
-                if character_id and character_id in active_combats:
-                    # Double check character is still alive before processing round
-                    # This check might be redundant if process_combat_round handles it robustly.
-                    char_check = crud.crud_character.get_character(db, character_id=character_id)
-                    if char_check and char_check.current_health > 0:
+                character_id = ws_manager.get_character_id(player_id) # Get char_id for this player
+                
+                # Check if player is still connected and has a character_id
+                if not character_id:
+                    # logger.debug(f"Player {player_id} has no character_id or disconnected, skipping combat processing.")
+                    continue
+
+                if character_id in active_combats:
+                    # logger.debug(f"Processing combat round for Character ID: {character_id} (Player ID: {player_id})")
+                    try:
                         await process_combat_round(db, character_id, player_id)
-                    elif char_check and char_check.current_health <= 0 and character_id in active_combats:
-                        # Character died, but combat state wasn't cleaned up. Clean it.
-                        active_combats.pop(character_id, None)
-                        mobs_to_clear_target = [mid for mid, cid in mob_targets.items() if cid == character_id]
-                        for mid in mobs_to_clear_target: mob_targets.pop(mid, None)
-                        character_queued_actions.pop(character_id, None)
-                        # No need to send log here, process_combat_round or client disconnect handles it
-                        print(f"Cleaned up combat state for dead char {character_id} in ticker loop.")
-
-
-async def _get_other_connected_player_ids_in_room(db: Session, room_id: uuid.UUID, exclude_player_id: uuid.UUID) -> List[uuid.UUID]:
-    # First, get character_id of the excluded player
-    excluded_char_id: Optional[uuid.UUID] = None
-    excluded_player_char = ws_manager.get_character_id(exclude_player_id) # Assuming ws_manager stores current char for player
-    if excluded_player_char:
-        excluded_char_id = excluded_player_char
-    
-    # Now fetch other characters in the room
-    other_characters_in_room = crud.crud_character.get_characters_in_room(
-        db, room_id=room_id, exclude_character_id=excluded_char_id # Exclude the character object
-    )
-    
-    player_ids_to_broadcast = [
-        char.player_id for char in other_characters_in_room 
-        if ws_manager.is_player_connected(char.player_id) and char.player_id != exclude_player_id
-    ]
-    return player_ids_to_broadcast
+                    except Exception as e_combat_round:
+                        logger.error(f"Error during process_combat_round for char {character_id}: {e_combat_round}", exc_info=True)
+                        # Decide if combat should be ended for this character due to error
+                        end_combat_for_character(character_id, reason=f"error_in_round: {e_combat_round}")
+                        try:
+                            await send_combat_log(player_id, ["A server error occurred during combat. Combat has ended."], combat_ended=True)
+                        except Exception as e_send_err:
+                            logger.error(f"Failed to send combat error log to player {player_id}: {e_send_err}")
+                # else:
+                    # logger.debug(f"Character ID: {character_id} (Player ID: {player_id}) not in active_combats.")
+        # logger.debug("Combat ticker loop iteration finished.")
 
 _combat_ticker_task = None
-
 def start_combat_ticker_task():
     global _combat_ticker_task
     if _combat_ticker_task is None:
-        print("Starting combat ticker task...")
+        logger.info("Starting combat ticker task...")
         _combat_ticker_task = asyncio.create_task(combat_ticker_loop())
-        print("Combat ticker task created. God help us all.")
+        logger.info("Combat ticker task created.")
     else:
-        print("Combat ticker task already running or requested. Don't get greedy.")
-
-def stop_combat_ticker_task(): 
+        logger.info("Combat ticker task already running or requested.")
+def stop_combat_ticker_task():
     global _combat_ticker_task
     if _combat_ticker_task and not _combat_ticker_task.done():
-        print("Stopping combat ticker task...")
+        logger.info("Stopping combat ticker task...")
         _combat_ticker_task.cancel()
         _combat_ticker_task = None
-        print("Combat ticker task cancelled. Probably for the best.")
+        logger.info("Combat ticker task cancelled.")
+
 
 async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: uuid.UUID):
-    # --- Initial Checks ---
+    # --- Initial Character & Combat State Checks ---
     if character_id not in active_combats or not active_combats[character_id]:
-        return 
+        # Character is not in active combat or has no targets. Clean up if necessary.
+        if character_id in active_combats: active_combats.pop(character_id, None)
+        character_queued_actions.pop(character_id, None)
+        # No log needed here, as there's no "round" to process for this character.
+        return
 
     character = crud.crud_character.get_character(db, character_id=character_id)
     if not character: 
-        # ... (cleanup logic for invalid character, as before) ...
+        # Character data gone, critical error. Clean up combat states.
         active_combats.pop(character_id, None)
         mobs_to_clear_target = [mid for mid, cid in mob_targets.items() if cid == character_id]
         for mid in mobs_to_clear_target: mob_targets.pop(mid, None)
         character_queued_actions.pop(character_id, None)
+        logger.critical(f"Character {character_id} not found during combat round processing.")
         return
 
     if character.current_health <= 0:
-        # ... (cleanup logic for dead character, send final personal log, as before) ...
-        if character_id in active_combats:
-            round_log_dead_char = ["You are dead and cannot act."]
-            active_combats.pop(character_id, None)
-            # ... (cleanup mob_targets, character_queued_actions) ...
-            current_room_for_update = crud.crud_room.get_room_by_id(db, room_id=character.current_room_id)
+        # Character is dead. Send final message and clean up.
+        round_log_dead_char = ["You are dead and cannot act."]
+        active_combats.pop(character_id, None) # Remove from active combat
+        mobs_to_clear_target = [mid for mid, cid in mob_targets.items() if cid == character_id]
+        for mid in mobs_to_clear_target: mob_targets.pop(mid, None)
+        character_queued_actions.pop(character_id, None)
+        
+        # Fetch final state for vitals and room data for the log
+        final_char_state_for_vitals = crud.crud_character.get_character(db, character_id=character_id)
+        vitals_for_payload = None
+        current_room_schema_for_update = None
+        if final_char_state_for_vitals: # Should exist
+            current_room_for_update = crud.crud_room.get_room_by_id(db, room_id=final_char_state_for_vitals.current_room_id)
             current_room_schema_for_update = schemas.RoomInDB.from_orm(current_room_for_update) if current_room_for_update else None
-            await send_combat_log(player_id, round_log_dead_char, True, current_room_schema_for_update)
+            xp_for_next_lvl = crud.crud_character.get_xp_for_level(final_char_state_for_vitals.level + 1)
+            vitals_for_payload = {
+                "current_hp": final_char_state_for_vitals.current_health, "max_hp": final_char_state_for_vitals.max_health,
+                "current_mp": final_char_state_for_vitals.current_mana, "max_mp": final_char_state_for_vitals.max_mana,
+                "current_xp": final_char_state_for_vitals.experience_points,
+                "next_level_xp": int(xp_for_next_lvl) if xp_for_next_lvl != float('inf') else -1,
+                "level": final_char_state_for_vitals.level
+            }
+        await send_combat_log(player_id, round_log_dead_char, True, current_room_schema_for_update, character_vitals=vitals_for_payload)
         return
+    # --- End Initial Checks ---
 
-    # --- Setup for Round ---
+    # --- Round Setup ---
     char_combat_stats = character.calculate_combat_stats()
-    player_current_hp = character.current_health # Keep a local copy for this round's logic
-    player_max_hp = character.max_health
+    # player_current_hp is character.current_health, updated directly on character model
+    # player_max_hp is character.max_health
     player_ac = char_combat_stats["effective_ac"]
     
-    round_log: List[str] = [] # For this player's detailed log
-    combat_resolved_this_round = False
+    round_log: List[str] = [] 
+    combat_resolved_this_round = False # Flag if combat ends this round
     action_str = character_queued_actions.get(character_id)
-    character_queued_actions[character_id] = None # Consume action
-    current_room_id_for_broadcast = character.current_room_id # For broadcasting context
+    character_queued_actions[character_id] = None # Consume the action
+    current_room_id_for_broadcast = character.current_room_id
 
-    # --- Player's Action ---
-    if action_str == "flee":
-        if random.random() < 0.5: # Success
-            round_log.append("<span class='combat-success'>You successfully flee from combat!</span>")
-            combat_resolved_this_round = True
-            await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id, 
-                                          f"<span class='char-name'>{character.name}</span> flees from combat!")
-            # TODO: Actual movement logic if flee changes room
-        else: # Fail
-            round_log.append("<span class='combat-miss'>Your attempt to flee fails!</span>")
+    # --- Player's Action Processing ---
+    if action_str and action_str.startswith("flee"):
+        action_parts = action_str.split(" ", 1)
+        # command_verb_from_queue = action_parts[0] # "flee"
+        flee_direction_canonical = action_parts[1] if len(action_parts) > 1 and action_parts[1] else "random"
+
+        if random.random() < 0.6: # 60% chance to flee successfully (adjust as needed)
+            new_room_id, flee_departure_msg, flee_arrival_msg, _ = await _perform_server_side_move(
+                db, character, flee_direction_canonical, player_id
+            )
+
+            if new_room_id:
+                round_log.append(f"<span class='combat-success'>{flee_departure_msg}</span>")
+                if flee_arrival_msg: round_log.append(flee_arrival_msg) # Append arrival to personal log
+                
+                # Character object's current_room_id is updated by _perform_server_side_move
+                # The db.commit() and db.refresh(character) at the end of process_combat_round
+                # will persist this and ensure the final payload uses the new room.
+                combat_resolved_this_round = True # Combat ends for this player due to successful flee
+                # The general combat cleanup logic for combat_resolved_this_round will handle active_combats.pop etc.
+            else:
+                # Flee movement failed (e.g., no exit, tried random but stuck)
+                round_log.append(f"<span class='combat-miss'>You try to flee {flee_direction_canonical if flee_direction_canonical != 'random' else ''}, but there's nowhere to go!</span>")
+                # Combat continues, action consumed.
+        else: # Flee roll failed
+            round_log.append("<span class='combat-miss'>Your attempt to flee fails! You stumble.</span>")
             await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
-                                          f"<span class='char-name'>{character.name}</span> tries to flee, but fails!")
-
+                                          f"<span class='char-name'>{character.name}</span> tries to flee, but stumbles!")
+            # Combat continues, action consumed.
     elif action_str and action_str.startswith("attack"):
         try:
             target_mob_id_str = action_str.split(" ", 1)[1]
@@ -722,16 +1450,14 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
                 mob_template = mob_instance.mob_template
                 mob_ac = mob_template.base_defense if mob_template.base_defense is not None else 10
                 
-                # Player's attack stats from char_combat_stats
                 player_attack_bonus = char_combat_stats["attack_bonus"]
                 player_damage_dice = char_combat_stats["damage_dice"]
                 player_damage_bonus = char_combat_stats["damage_bonus"]
                 
                 to_hit_roll = roll_dice("1d20")
-                if (to_hit_roll + player_attack_bonus) >= mob_ac: # Player Hits
+                if (to_hit_roll + player_attack_bonus) >= mob_ac:
                     damage = max(1, roll_dice(player_damage_dice) + player_damage_bonus)
-                    is_crit = False # Replace with actual crit logic if desired
-                    damage_class = "combat-crit" if is_crit else "combat-hit"
+                    damage_class = "combat-hit" # Add crit logic later if desired
                     
                     round_log.append(f"<span class='char-name'>{character.name}</span> <span class='combat-success'>HITS</span> <span class='inv-item-name'>{mob_template.name}</span> for <span class='{damage_class}'>{damage}</span> damage.")
                     await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
@@ -743,115 +1469,321 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
                         await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
                                                       f"The <span class='inv-item-name'>{mob_template.name}</span> DIES!")
                         
-                        crud.crud_mob.despawn_mob_from_room(db, updated_mob.id) # This now handles spawn point timer reset
-                        active_combats.get(character_id, set()).discard(updated_mob.id)
-                        mob_targets.pop(updated_mob.id, None)
+                        # Call the centralized handler for XP, loot, despawn, and combat state cleanup
+                        # This will also update the character object if they level up, etc.
+                        character = await _handle_mob_death_loot_and_cleanup(
+                            db, character, updated_mob, round_log, player_id, current_room_id_for_broadcast
+                        )
+                        # The _handle_mob_death_loot_and_cleanup function now handles:
+                        # - XP award and adding messages to round_log
+                        # - Currency drop and adding messages to round_log
+                        # - Despawning the mob (crud.crud_mob.despawn_mob_from_room)
+                        # - Removing mob from active_combats and mob_targets
                         
-                        if mob_template.xp_value > 0:
-                            _, xp_messages = crud.crud_character.add_experience(db, character_id, mob_template.xp_value)
-                            round_log.extend(xp_messages) # add_experience now returns messages
-                            # No need to broadcast XP messages typically, it's personal.
                     elif updated_mob:
                         round_log.append(f"  {mob_template.name} HP: <span class='combat-hp'>{updated_mob.current_health}/{mob_template.base_health}</span>.")
                 else: # Player Misses
                     round_log.append(f"<span class='char-name'>{character.name}</span> <span class='combat-miss'>MISSES</span> the <span class='inv-item-name'>{mob_template.name}</span>.")
                     await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
                                                   f"<span class='char-name'>{character.name}</span> MISSES the <span class='inv-item-name'>{mob_template.name}</span>.")
-            else: 
-                active_combats.get(character_id, set()).discard(target_mob_id)
+            else: # Target mob is invalid or dead
+                if target_mob_id: active_combats.get(character_id, set()).discard(target_mob_id) # Clean from current combat
                 round_log.append(f"Your target seems to have vanished or was already dealt with.")
-        else: 
+        else: # Invalid target_mob_id or target not in this combat
              round_log.append("You swing wildly at nothing in particular. What a muppet.")
     
-    if not active_combats.get(character_id): 
-        if not combat_resolved_this_round: # Only add this if not already resolved by flee/all mobs dead
-            round_log.append("All targets are defeated or gone. You can stop flailing now.")
+    elif action_str and action_str.startswith("use_skill"):
+        parts = action_str.split(" ", 2) 
+        skill_id_tag = parts[1] if len(parts) > 1 else None
+        target_mob_id_str_from_queue = parts[2] if len(parts) > 2 and parts[2].lower() != "none" else None
+        
+        target_mob_instance_for_skill: Optional[models.RoomMobInstance] = None
+        if target_mob_id_str_from_queue:
+            try:
+                target_mob_uuid = uuid.UUID(target_mob_id_str_from_queue)
+                if target_mob_uuid in active_combats.get(character_id, set()): # Ensure target is part of current combat
+                    target_mob_instance_for_skill = crud.crud_mob.get_room_mob_instance(db, room_mob_instance_id=target_mob_uuid)
+                    if not target_mob_instance_for_skill or target_mob_instance_for_skill.current_health <=0:
+                        round_log.append("Your skill target is no longer valid.")
+                        target_mob_instance_for_skill = None # Invalidate if dead
+                else:
+                    round_log.append(f"You can't use that skill on something you're not fighting.")
+            except ValueError:
+                round_log.append(f"Invalid target ID for skill in queue.")
+        
+        skill_template = crud.crud_skill.get_skill_template_by_tag(db, skill_id_tag=skill_id_tag) if skill_id_tag else None
+
+        if skill_template and (skill_template.target_type == "NONE" or skill_template.target_type == "SELF" or target_mob_instance_for_skill):
+            # For targeted skills, ensure target_mob_instance_for_skill is valid
+            # For non-targeted (self/none), target_mob_instance_for_skill will be None, which is fine for resolve_skill_effect
+            if skill_template.target_type == "ENEMY_MOB" and not target_mob_instance_for_skill:
+                 round_log.append(f"The skill '{skill_template.name}' requires a valid enemy target.")
+            else:
+                skill_messages, action_successful, character_after_skill_attempt = await resolve_skill_effect(
+                    db, character, skill_template, target_mob_instance_for_skill, player_id, current_room_id_for_broadcast
+                )
+                round_log.extend(skill_messages)
+                if not action_successful and not any("don't have enough mana" in m.lower() for m in skill_messages):
+                     round_log.append(f"Your attempt to use {skill_template.name} fizzles.")
+        elif skill_template and skill_template.target_type == "ENEMY_MOB" and not target_mob_instance_for_skill:
+            round_log.append(f"You need a valid target to use '{skill_template.name}'.")
+        else:
+            round_log.append(f"You try to use a skill '{skill_id_tag}', but it's invalid or you can't find the target.")
+            
+    elif not action_str: # No action was queued (e.g. mob initiated, or player didn't input in time for a prior system)
+        round_log.append("You pause, unsure of your next move.")
+        # Or default to a very basic action, or just let mobs act. For now, just a pause.
+
+    # Check if all player's targets are defeated after player's action (e.g., skill killed last mob)
+    # This check needs to be robust: iterate all mob_ids in active_combats[character_id]
+    # and see if they are all dead or removed.
+    current_targets_for_player = list(active_combats.get(character_id, set()))
+    all_targets_down = True
+    if not current_targets_for_player: # No targets left in the set
+        all_targets_down = True
+    else:
+        for mob_target_id in current_targets_for_player:
+            mob_check = crud.crud_mob.get_room_mob_instance(db, room_mob_instance_id=mob_target_id)
+            if mob_check and mob_check.current_health > 0:
+                all_targets_down = False
+                break
+    
+    if all_targets_down:
+        if not combat_resolved_this_round: # Avoid double message if flee already resolved it
+            round_log.append("All your targets are defeated or gone. Combat ends.")
         combat_resolved_this_round = True
+
 
     # --- Mobs' Actions (Retaliation) ---
     if not combat_resolved_this_round and character.current_health > 0:
-        mobs_attacking_player = [mid for mid, cid_target in mob_targets.items() if cid_target == character_id and mid in active_combats.get(character_id, set())]
+        # Get mobs that are targeting this character AND are in this character's current combat session
+        mobs_attacking_this_round = []
+        for mob_id, target_char_id in mob_targets.items():
+            if target_char_id == character_id: # This mob is targeting the player
+                # Check if this mob is one the player is actively fighting
+                if mob_id in active_combats.get(character_id, set()):
+                    mob_instance_check = crud.crud_mob.get_room_mob_instance(db, room_mob_instance_id=mob_id)
+                    if mob_instance_check and mob_instance_check.current_health > 0:
+                        mobs_attacking_this_round.append(mob_instance_check)
         
-        for mob_instance_id in mobs_attacking_player:
-            if character.current_health <= 0: break # Player might have died from a previous mob this round
-
-            mob_instance = crud.crud_mob.get_room_mob_instance(db, room_mob_instance_id=mob_instance_id)
-            if not mob_instance or mob_instance.current_health <= 0: 
-                active_combats.get(character_id, set()).discard(mob_instance_id) 
-                mob_targets.pop(mob_instance_id, None)
-                continue
+        for mob_instance in mobs_attacking_this_round:
+            if character.current_health <= 0: break # Player died from a previous mob this round
 
             mob_template = mob_instance.mob_template
             mob_attack_bonus = mob_template.level or 1 
-            mob_damage_dice = mob_template.base_attack or "1d4"
+            mob_damage_dice = mob_template.base_attack or "1d4" # Ensure template has base_attack
             mob_to_hit = roll_dice("1d20")
 
-            if (mob_to_hit + mob_attack_bonus) >= player_ac: # Mob Hits
+            if (mob_to_hit + mob_attack_bonus) >= player_ac:
                 damage_to_player = max(1, roll_dice(mob_damage_dice))
                 round_log.append(f"<span class='inv-item-name'>{mob_template.name}</span> <span class='combat-success'>HITS</span> <span class='char-name'>{character.name}</span> for <span class='combat-hit-player'>{damage_to_player}</span> damage. Ouch, buttercup.")
                 await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
                                               f"<span class='inv-item-name'>{mob_template.name}</span> HITS <span class='char-name'>{character.name}</span> for {damage_to_player} damage!")
                 
-                updated_char_state = crud.crud_character.update_character_health(db, character_id, -damage_to_player)
-                if updated_char_state: player_current_hp = updated_char_state.current_health
+                # Update character health directly on the character object for this round's logic
+                character.current_health -= damage_to_player 
                 
-                round_log.append(f"  Your HP: <span class='combat-hp'>{player_current_hp}/{player_max_hp}</span>.")
+                round_log.append(f"  Your HP: <span class='combat-hp'>{character.current_health}/{character.max_health}</span>.")
                 
-                if player_current_hp <= 0: # Player Dies
+                if character.current_health <= 0:
+                    character.current_health = 0 # Ensure health doesn't go negative on the object
+                    
+                    # Persist the death state (health 0) by directly setting and staging
+                    # The crud.crud_character.update_character_health is relative, not absolute.
+                    db.add(character) # Stage the health change to 0
+
                     round_log.append("<span class='combat-death'>YOU HAVE DIED! How utterly predictable.</span>")
                     await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
                                                   f"<span class='char-name'>{character.name}</span> <span class='combat-death'>HAS DIED!</span>")
-                    combat_resolved_this_round = True
                     
-                    respawn_room_orm = crud.crud_room.get_room_by_coords(db, x=0, y=0, z=0) # Central Processing Unit
-                    if respawn_room_orm:
-                        crud.crud_character.update_character_room(db, character_id=character.id, new_room_id=respawn_room_orm.id)
-                        round_log.append(f"You have been teleported to {respawn_room_orm.name}.")
-                        # The room_data in the final send_combat_log will reflect this new room for the player.
-                    else:
-                        round_log.append("Error: Respawn room not found. You are now a very dead, very lost ghost.")
+                    combat_resolved_this_round = True # Combat ends for this player
 
-                    dead_char_for_heal = crud.crud_character.get_character(db, character_id) 
-                    if dead_char_for_heal: # Character should exist
-                         crud.crud_character.update_character_health(db, character.id, dead_char_for_heal.max_health)
-                         round_log.append("You feel a faint stirring of life, or maybe it's just indigestion.")
-                    break # Stop other mobs attacking if player died
+                    # --- Respawn Logic ---
+                    max_health_at_death = character.max_health # Store before potential changes
+
+                    respawn_room_orm = crud.crud_room.get_room_by_coords(db, x=0, y=0, z=0) # Central starting point
+                    if respawn_room_orm:
+                        # Update character's room in DB.
+                        updated_char_after_room_move = crud.crud_character.update_character_room(db, character_id=character.id, new_room_id=respawn_room_orm.id)
+                        if updated_char_after_room_move:
+                            character = updated_char_after_room_move # IMPORTANT: reassign character
+                            round_log.append(f"A mystical force whisks your fading spirit away. You awaken, gasping, in <span class='room-name'>{respawn_room_orm.name}</span>.")
+                        else:
+                            round_log.append("Error: Failed to update character room during respawn. Your soul is lost.")
+                            # active_combats, mob_targets, character_queued_actions are cleaned up by combat_resolved_this_round logic
+                            break # Critical error, stop processing for this player this round
+                    else:
+                        round_log.append("Error: Respawn room (0,0,0) not found. Your soul wanders aimlessly, still dead where you fell.")
+                        # Character remains in the death room. Health is already 0. No further healing.
+                        # active_combats, etc., cleaned up by combat_resolved_this_round logic
+                        break # Stop processing for this player this round
+
+                    # Full heal on respawn - directly set current_health to max_health_at_death
+                    character.current_health = max_health_at_death 
+                    db.add(character) # Stage the health change
+                    # The 'character' variable now refers to the ORM object, potentially in the new room, with full health staged.
+                    # The db.commit() and db.refresh(character) at the end of process_combat_round will save and refresh.
+                    round_log.append("You feel a surge of life, your wounds miraculously healed.")
+                    
+                    # Combat state cleanup (active_combats, mob_targets, character_queued_actions)
+                    # will be handled by the general 'if combat_resolved_this_round:' block later.
+                    
+                    break # Stop further mob attacks this round since player died and respawned/healed
+                else:
+                    # If player didn't die from this mob's attack, persist their health change
+                    # crud.crud_character.update_character_health expects a delta.
+                    # Since character.current_health was already reduced, we stage the character object.
+                    db.add(character) # Stage the health change from this mob's attack
             else: # Mob Misses
                 round_log.append(f"<span class='inv-item-name'>{mob_template.name}</span> <span class='combat-miss'>MISSES</span> <span class='char-name'>{character.name}</span>.")
                 await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
                                               f"<span class='inv-item-name'>{mob_template.name}</span> MISSES <span class='char-name'>{character.name}</span>.")
-
-    # --- End of Round Cleanup & Next Action ---
+    
+    # --- End of Round Cleanup & Next Action Queuing ---
     if combat_resolved_this_round:
-        active_combats.pop(character_id, None)
-        mobs_to_clear_target = [mid for mid, cid in mob_targets.items() if cid == character_id]
-        for mid in mobs_to_clear_target: mob_targets.pop(mid, None)
+        active_combats.pop(character_id, None) # Remove character from active combat
+        # Clear any mobs that were targeting this player
+        mobs_to_clear_target_for_player = [mid for mid, cid in mob_targets.items() if cid == character_id]
+        for mid in mobs_to_clear_target_for_player:
+            mob_targets.pop(mid, None)
         character_queued_actions.pop(character_id, None) 
     elif character_id in active_combats and character.current_health > 0 : 
-        remaining_targets = list(active_combats.get(character_id, [])) # Ensure list for empty set
-        if remaining_targets:
-            character_queued_actions[character_id] = f"attack {remaining_targets[0]}"
-        else: 
-            active_combats.pop(character_id, None)
-            character_queued_actions.pop(character_id, None)
-            combat_resolved_this_round = True 
-            if not round_log or not round_log[-1].startswith("All targets"): 
-                 round_log.append("No valid targets remain. Combat ends by default.")
+        # If player is still alive and combat is ongoing for them (not resolved by flee/all mobs dead)
+        # And their action was an attack (or no action, meaning they should default to attack)
+        # If they used a skill or failed to flee, they need to input a new command.
+        if not action_str or action_str.startswith("attack"):
+            remaining_targets_in_combat_list = list(active_combats.get(character_id, set()))
+            if remaining_targets_in_combat_list:
+                first_valid_target_id_for_next_round = None
+                for mob_id_check_next in remaining_targets_in_combat_list:
+                    mob_next_check = crud.crud_mob.get_room_mob_instance(db, room_mob_instance_id=mob_id_check_next)
+                    if mob_next_check and mob_next_check.current_health > 0:
+                        first_valid_target_id_for_next_round = mob_id_check_next
+                        break
+                
+                if first_valid_target_id_for_next_round:
+                    character_queued_actions[character_id] = f"attack {first_valid_target_id_for_next_round}"
+                else: # No valid (alive) targets left in their combat set
+                    active_combats.pop(character_id, None)
+                    # mobs targeting this player are cleaned up when combat_resolved_this_round is true
+                    character_queued_actions.pop(character_id, None)
+                    combat_resolved_this_round = True 
+                    if not any("All your targets are defeated" in m for m in round_log):
+                         round_log.append("No valid targets remain. Combat ends.")
+            else: # Player's target set was empty somehow
+                active_combats.pop(character_id, None)
+                character_queued_actions.pop(character_id, None)
+                combat_resolved_this_round = True 
+                if not any("All your targets are defeated" in m for m in round_log):
+                     round_log.append("No valid targets remain. Combat ends by default.")
+        # If action was "use_skill" or "flee" (and flee failed), no automatic re-queue. Player needs to act.
 
-    # --- Send Final Log to Player ---
-    final_char_state_for_room = crud.crud_character.get_character(db, character_id=character_id)
-    # If player died and respawned, their current_room_id is updated.
-    current_room_for_update = crud.crud_room.get_room_by_id(db, room_id=final_char_state_for_room.current_room_id) if final_char_state_for_room else None
-    current_room_schema_for_update = schemas.RoomInDB.from_orm(current_room_for_update) if current_room_for_update else None
+    # --- Final DB Commit for character changes this round (mana, health from mob attacks if not dead) ---
+    # Health changes from player attacks on mobs are handled in crud_mob.update_mob_instance_health
+    # XP gains are committed in crud_character.add_experience
+    # This commit primarily handles player's mana loss from skills, and health loss from mob attacks if they survived.
+    db.add(character) 
+    db.commit()
+    db.refresh(character) # Crucial to get the absolute latest state for the outgoing payload
+
+    # --- Send Final Log with Updated Vitals to Player ---
+    # Character object should be up-to-date from db.refresh(character) above.
+    # If character died and respawned, character.current_room_id is already updated.
+    final_room_orm_for_log = crud.crud_room.get_room_by_id(db, room_id=character.current_room_id)
+    final_room_schema_for_log = schemas.RoomInDB.from_orm(final_room_orm_for_log) if final_room_orm_for_log else None
     
-    # If combat ended and player is alive, add remaining room context to their personal log
-    if combat_resolved_this_round and current_room_for_update and final_char_state_for_room and final_char_state_for_room.current_health > 0 :
-        # ... (logic to append remaining mobs/items/characters to round_log for the player) ...
-        # This part might be redundant if the room_data itself is sufficient for the client to re-render.
-        # For now, let's keep it simple and rely on client re-rendering from room_data or a new 'look'
-        pass
+    xp_for_next_level_final = crud.crud_character.get_xp_for_level(character.level + 1)
+    vitals_payload_dict_key = "character_vitals" # or directly in final_vitals_payload
+    final_vitals_payload = {
+        "current_hp": character.current_health,
+        "max_hp": character.max_health,
+        "current_mp": character.current_mana,
+        "max_mp": character.max_mana,
+        "current_xp": character.experience_points,
+        "next_level_xp": int(xp_for_next_level_final) if xp_for_next_level_final != float('inf') else -1,
+        "level": character.level,
+        "platinum": character.platinum_coins,     # <<< NEW
+        "gold": character.gold_coins,     # <<< NEW
+        "silver": character.silver_coins, # <<< NEW
+        "copper": character.copper_coins  # <<< NEW
+    }
+    
+    await send_combat_log(
+        player_id, 
+        round_log, 
+        combat_resolved_this_round, 
+        final_room_schema_for_log,
+        character_vitals=final_vitals_payload
+    )
 
-    await send_combat_log(player_id, round_log, combat_resolved_this_round, current_room_schema_for_update)
+async def _perform_server_side_move(
+    db: Session,
+    character: models.Character, # The ORM instance
+    direction_canonical: str,
+    player_id_for_broadcast: uuid.UUID # For broadcasting leave/arrive
+) -> Tuple[Optional[uuid.UUID], str, str, Optional[models.Room]]: # (new_room_id, departure_msg, arrival_msg, new_room_orm)
+    """
+    Attempts to move a character server-side.
+    Updates character's room in DB.
+    Returns (new_room_id, departure_message, arrival_message, new_room_orm_object).
+    Broadcasts departure and arrival.
+    """
+    old_room_id = character.current_room_id
+    current_room_orm = crud.crud_room.get_room_by_id(db, room_id=old_room_id)
+    
+    departure_message = f"You flee {direction_canonical}."
+    arrival_message = "" # Will be constructed
+
+    if not current_room_orm:
+        return None, "You are in a void and cannot move.", "", None
+
+    actual_direction_moved = direction_canonical
+    if direction_canonical == "random":
+        available_exits = [d for d, r_id in (current_room_orm.exits or {}).items() if r_id]
+        if not available_exits:
+            return None, "You look around frantically, but there's no obvious way to flee!", "", None
+        actual_direction_moved = random.choice(available_exits)
+        departure_message = f"You scramble away, fleeing {actual_direction_moved}!"
+
+    target_room_uuid_str = (current_room_orm.exits or {}).get(actual_direction_moved)
+    if not target_room_uuid_str:
+        return None, f"You can't flee {actual_direction_moved} from here.", "", None
+
+    try:
+        target_room_uuid = uuid.UUID(hex=target_room_uuid_str)
+        target_room_orm = crud.crud_room.get_room_by_id(db, room_id=target_room_uuid)
+        if not target_room_orm:
+            return None, f"The path {actual_direction_moved} seems to vanish into nothingness.", "", None
+
+        # Broadcast departure from old room
+        await _broadcast_to_room_participants(db, old_room_id, f"<span class='char-name'>{character.name}</span> flees {actual_direction_moved}.", exclude_player_id=player_id_for_broadcast)
+
+        # Update character's location
+        updated_char = crud.crud_character.update_character_room(db, character_id=character.id, new_room_id=target_room_orm.id)
+        if not updated_char: return None, "A strange force prevents your escape.", "", None
+        
+        # Ensure the character object in the calling scope is updated
+        character.current_room_id = target_room_orm.id 
+        # db.add(character) # Staged for commit by the caller (process_combat_round)
+
+        arrival_message = f"You burst into <span class='room-name'>{target_room_orm.name}</span>."
+        
+        # Broadcast arrival to new room
+        opposite_direction = get_opposite_direction(actual_direction_moved)
+        await _broadcast_to_room_participants(db, target_room_orm.id, f"<span class='char-name'>{character.name}</span> arrives from the {opposite_direction}.", exclude_player_id=player_id_for_broadcast)
+        
+        return target_room_orm.id, departure_message, arrival_message, target_room_orm
+    except ValueError:
+        return None, "The way forward is distorted and unnavigable.", "", None
+
+OPPOSITE_DIRECTIONS_MAP = {
+    "north": "south", "south": "north", "east": "west", "west": "east",
+    "up": "down", "down": "up",
+    "northeast": "southwest", "southwest": "northeast",
+    "northwest": "southeast", "southeast": "northwest"
+}
+def get_opposite_direction(direction: str) -> str:
+    return OPPOSITE_DIRECTIONS_MAP.get(direction.lower(), "somewhere")
 --- END OF FILE backend/app/game_logic/combat_manager.py ---
 
 --- START OF FILE backend/app/game_logic/world_ticker.py ---
@@ -867,39 +1799,30 @@ from app.db.session import SessionLocal
 # but generally, tasks will import what they need.
 
 from app.game_logic.mob_respawner import manage_mob_populations_task 
+from app.game_logic.mob_ai_ticker import process_roaming_mobs_task, process_aggressive_mobs_task
+from app.game_logic.player_vital_regenerator import regenerate_player_vitals_task 
 
 # --- Configuration ---
-WORLD_TICK_INTERVAL_SECONDS = 30.0
+WORLD_TICK_INTERVAL_SECONDS = 10.0
 
 # --- Task Registry ---
 world_tick_tasks: Dict[str, Callable[[Session], Awaitable[None]]] = {}
 
 
 @contextmanager
-def db_session_for_world_tick() -> Iterator[Session]: # <<< CORRECTED RETURN TYPE HINT
+def db_session_for_world_tick() -> Iterator[Session]: 
     """Provides a DB session for the duration of a world tick's tasks."""
     db = SessionLocal()
     try:
-        yield db # Yields the Session object
+        yield db 
     finally:
         db.close()
 
-# --- Task Registration Function (defined once) ---
 def register_world_tick_task(task_name: str, task_func: Callable[[Session], Awaitable[None]]):
     if task_name in world_tick_tasks:
         print(f"Warning: World tick task '{task_name}' is being redefined.")
     world_tick_tasks[task_name] = task_func
-    # print(f"World Ticker: Registered task '{task_name}'.") # Moved to init summary
 
-
-# --- Import task functions from their respective modules ---
-from app.game_logic.mob_respawner import manage_mob_populations_task
-# Example for future tasks:
-# from app.game_logic.weather_system import update_weather_task
-# from app.game_logic.item_decay import process_item_decay_task
-
-
-# --- Centralized Initialization and Registration of All Tasks ---
 def _initialize_and_register_all_world_tasks():
     """
     This function is called once when this module is loaded.
@@ -908,18 +1831,16 @@ def _initialize_and_register_all_world_tasks():
     print("World Ticker: Initializing and registering world tick tasks...")
     
     register_world_tick_task("mob_population_manager", manage_mob_populations_task)
-    # register_world_tick_task("weather_updater", update_weather_task) # Example
-    # register_world_tick_task("item_decay_processor", process_item_decay_task) # Example
+    register_world_tick_task("roaming_mob_processor", process_roaming_mobs_task) # <<< NEW TASK
+    register_world_tick_task("aggressive_mob_processor", process_aggressive_mobs_task) # <<< NEW TASK
+    register_world_tick_task("player_vital_regenerator", regenerate_player_vitals_task)
     
     print(f"World Ticker: All tasks registered. Active tasks: {list(world_tick_tasks.keys())}")
 
-_initialize_and_register_all_world_tasks() # Execute registration when this module is first imported
+_initialize_and_register_all_world_tasks() 
 
 
-# --- Main Ticker Loop ---
 async def world_ticker_loop():
-    # Message moved to _initialize_and_register_all_world_tasks
-    # print(f"World Ticker: Loop starting. Tick interval: {WORLD_TICK_INTERVAL_SECONDS}s.")
     print(f"World Ticker: Loop now running with interval: {WORLD_TICK_INTERVAL_SECONDS}s.")
     while True:
         start_time = time.time()
@@ -930,14 +1851,18 @@ async def world_ticker_loop():
 
         try:
             with db_session_for_world_tick() as db:
-                for task_name, task_func in world_tick_tasks.items():
+                # Create a list of tasks to run to avoid issues if tasks modify the registry (not expected)
+                tasks_to_run = list(world_tick_tasks.items())
+                for task_name, task_func in tasks_to_run:
                     try:
+                        # print(f"World Ticker: Running task '{task_name}'...") # Verbose logging
                         await task_func(db)
+                        # print(f"World Ticker: Task '{task_name}' completed.") # Verbose logging
                     except Exception as e:
-                        print(f"ERROR in world_tick task '{task_name}': {e}") # Consider logging full traceback
+                        print(f"ERROR in world_tick task '{task_name}': {e}") 
                 db.commit() 
         except Exception as e:
-            print(f"CRITICAL ERROR in world_ticker_loop's DB session: {e}") # Consider logging full traceback
+            print(f"CRITICAL ERROR in world_ticker_loop's DB session: {e}") 
 
         end_time = time.time()
         processing_time = end_time - start_time
@@ -949,7 +1874,6 @@ async def world_ticker_loop():
         
         await asyncio.sleep(sleep_duration)
 
-# --- Control Functions ---
 _world_ticker_task_handle: Optional[asyncio.Task] = None
 
 def start_world_ticker_task():
@@ -1057,6 +1981,264 @@ async def manage_mob_populations_task(db: Session):
 
 --- END OF FILE backend/app/game_logic/mob_respawner.py ---
 
+--- START OF FILE backend/app/game_logic/mob_ai_ticker.py ---
+# backend/app/game_logic/mob_ai_ticker.py (NEW FILE)
+import asyncio
+import random
+from typing import Optional
+import uuid
+from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.dialects.postgresql import JSONB # For casting jsonb fields if needed, not used directly here
+
+from app import models, crud
+from app.game_logic import combat_manager # For initiating combat
+from app.websocket_manager import connection_manager as ws_manager # For broadcasts
+from app.db.session import SessionLocal # For standalone DB sessions if tasks run outside world_ticker context (not planned for now)
+
+async def _broadcast_to_room_participants(
+    db: Session, 
+    room_id: uuid.UUID, 
+    message_text: str, 
+    message_type: str = "game_event",
+    exclude_player_id: Optional[uuid.UUID] = None # If an action is caused by a player, exclude them from this echo
+):
+    """Helper to broadcast a message to all connected players in a room."""
+    # Get player_ids of characters in the room
+    player_ids_in_room = [
+        char.player_id for char in crud.crud_character.get_characters_in_room(
+            db, room_id=room_id 
+            # No exclude_character_id here, as this is a general room event.
+            # If an exclusion is needed based on player_id, it's handled by the caller.
+        ) if ws_manager.is_player_connected(char.player_id) and (exclude_player_id is None or char.player_id != exclude_player_id)
+    ]
+
+    if player_ids_in_room:
+        payload = {"type": message_type, "message": message_text}
+        # print(f"Mob AI Ticker: Broadcasting to room {room_id} (players: {player_ids_in_room}): {message_text}")
+        await ws_manager.broadcast_to_players(payload, player_ids_in_room)
+
+async def process_roaming_mobs_task(db: Session):
+    """
+    Handles random movement for mobs with 'random_adjacent' roaming behavior.
+    """
+    # print("Mob AI Ticker: Processing roaming mobs...")
+    
+    # Query for mob instances that might roam
+    # We need RoomMobInstance, its current Room, and its MobSpawnDefinition (and the spawn definition's Room)
+    # Using selectinload for related collections if they were lists, joinedload for one-to-one/many-to-one.
+    mobs_to_check_for_roaming = db.query(models.RoomMobInstance).options(
+        joinedload(models.RoomMobInstance.mob_template), # For name
+        joinedload(models.RoomMobInstance.room), # Mob's current room for exits and current coords
+        joinedload(models.RoomMobInstance.originating_spawn_definition).joinedload(models.MobSpawnDefinition.room) # Spawn def and its room for origin coords
+    ).filter(
+        models.RoomMobInstance.spawn_definition_id != None, # Must come from a spawn definition
+        models.RoomMobInstance.originating_spawn_definition.has(models.MobSpawnDefinition.is_active == True),
+        models.RoomMobInstance.originating_spawn_definition.has(models.MobSpawnDefinition.roaming_behavior != None),
+        # Using path expression for JSONB field 'type'
+        models.RoomMobInstance.originating_spawn_definition.has(models.MobSpawnDefinition.roaming_behavior['type'].astext == 'random_adjacent')
+    ).all()
+
+    for mob in mobs_to_check_for_roaming:
+        # Skip if mob is in combat.
+        # A mob is considered in combat if it's a target in combat_manager.mob_targets.
+        if mob.id in combat_manager.mob_targets:
+            # print(f"Mob AI Ticker: Mob {mob.mob_template.name} ({mob.id}) is in combat, skipping roam.")
+            continue
+
+        if not mob.room or not mob.originating_spawn_definition or not mob.originating_spawn_definition.room:
+            # print(f"Mob AI Ticker: Skipping mob {mob.id} due to missing room or spawn definition data.")
+            continue
+
+        roaming_config = mob.originating_spawn_definition.roaming_behavior
+        if not isinstance(roaming_config, dict): continue # Should be a dict
+
+        move_chance = roaming_config.get("move_chance_percent", 0)
+        max_dist = roaming_config.get("max_distance_from_spawn", 999) # Default large distance
+
+        if random.randint(1, 100) > move_chance:
+            continue # Didn't pass move chance
+
+        current_room_orm = mob.room
+        valid_exits = [direction for direction, target_room_id_str in (current_room_orm.exits or {}).items() if target_room_id_str]
+        
+        if not valid_exits:
+            continue # No way out
+
+        chosen_direction = random.choice(valid_exits)
+        next_room_id_str = (current_room_orm.exits or {}).get(chosen_direction)
+        if not next_room_id_str: continue
+
+        try:
+            next_room_id = uuid.UUID(hex=next_room_id_str)
+        except ValueError:
+            continue # Invalid UUID for exit
+
+        next_room_orm = crud.crud_room.get_room_by_id(db, room_id=next_room_id)
+        if not next_room_orm:
+            continue # Target room doesn't exist
+
+        # Check max distance from spawn point for the *next* room
+        spawn_room_coords = (mob.originating_spawn_definition.room.x, mob.originating_spawn_definition.room.y)
+        next_room_coords = (next_room_orm.x, next_room_orm.y)
+        
+        distance_from_spawn = abs(next_room_coords[0] - spawn_room_coords[0]) + abs(next_room_coords[1] - spawn_room_coords[1])
+
+        if distance_from_spawn > max_dist:
+            # print(f"Mob AI Ticker: Mob {mob.mob_template.name} ({mob.id}) wants to move to {next_room_orm.name} but it's too far ({distance_from_spawn} > {max_dist}).")
+            continue
+
+        # --- Perform Move ---
+        old_room_id = mob.room_id
+        old_room_name = current_room_orm.name
+        mob_name_html = f"<span class='inv-item-name'>{mob.mob_template.name}</span>" # Re-use style
+
+        mob.room_id = next_room_id
+        db.add(mob)
+        # db.commit() # Commit per mob or at end of task? World ticker commits at end.
+
+        print(f"Mob AI Ticker: Mob {mob.mob_template.name} ({mob.id}) roaming from {old_room_name} to {next_room_orm.name} via {chosen_direction}.")
+
+        # Broadcast leave message
+        await _broadcast_to_room_participants(db, old_room_id, f"{mob_name_html} shuffles off, heading {chosen_direction}.")
+        
+        # Broadcast arrive message
+        await _broadcast_to_room_participants(db, next_room_id, f"{mob_name_html} arrives from the {combat_manager.get_opposite_direction(chosen_direction)}.") # Need get_opposite_direction
+        # Let's add get_opposite_direction to combat_manager or a general util file.
+        # For now, simplified arrival:
+        # await _broadcast_to_room_participants(db, next_room_id, f"{mob_name_html} arrives.")
+
+
+async def process_aggressive_mobs_task(db: Session):
+    """
+    Handles mobs initiating combat based on their aggression type.
+    """
+    # print("Mob AI Ticker: Processing aggressive mobs...")
+    mobs_to_check_for_aggression = db.query(models.RoomMobInstance).options(
+        joinedload(models.RoomMobInstance.mob_template),
+        joinedload(models.RoomMobInstance.room)
+    ).filter(
+        models.RoomMobInstance.mob_template.has(models.MobTemplate.aggression_type == "AGGRESSIVE_ON_SIGHT"),
+        models.RoomMobInstance.current_health > 0 # Only live mobs
+    ).all()
+
+    for mob in mobs_to_check_for_aggression:
+        if not mob.room or not mob.mob_template: continue
+
+        # Check if mob is already in combat
+        if mob.id in combat_manager.mob_targets or combat_manager.is_mob_in_any_player_combat(mob.id):
+            # print(f"Mob AI Ticker: Aggro Mob {mob.mob_template.name} ({mob.id}) already in combat.")
+            continue
+        
+        # Find living characters in the same room
+        characters_in_room = crud.crud_character.get_characters_in_room(db, room_id=mob.room_id)
+        living_characters = [char for char in characters_in_room if char.current_health > 0 and ws_manager.is_player_connected(char.player_id)]
+
+        if not living_characters:
+            continue # No living, connected targets
+
+        target_character = random.choice(living_characters) # Pick a random living character
+
+        print(f"Mob AI Ticker: Aggro Mob {mob.mob_template.name} ({mob.id}) is attacking {target_character.name} ({target_character.id}) in room {mob.room.name}.")
+        
+        # Mob initiates combat
+        await combat_manager.mob_initiates_combat(db, mob, target_character)
+        
+        # Broadcast handled by mob_initiates_combat
+--- END OF FILE backend/app/game_logic/mob_ai_ticker.py ---
+
+--- START OF FILE backend/app/game_logic/player_vital_regenerator.py ---
+# backend/app/game_logic/player_vital_regenerator.py (NEW FILE)
+import asyncio
+import math
+import uuid
+from sqlalchemy.orm import Session
+
+from app import crud, models, schemas
+from app.websocket_manager import connection_manager as ws_manager
+from app.game_logic import combat_manager # To check if player is in combat
+from app.game_state import is_character_resting, set_character_resting_status
+
+async def regenerate_player_vitals_task(db: Session):
+    """
+    Handles natural and resting HP/MP regeneration for all connected players.
+    """
+    connected_player_ids = ws_manager.get_all_active_player_ids()
+
+    for player_id in connected_player_ids:
+        character_id = ws_manager.get_character_id(player_id)
+        if not character_id:
+            continue
+
+        character = crud.crud_character.get_character(db, character_id=character_id)
+        if not character or character.current_health <= 0: # Dead or invalid
+            continue
+
+        # Skip regeneration if character is in combat
+        if character.id in combat_manager.active_combats:
+            continue
+
+        hp_to_regen = 0
+        mp_to_regen = 0
+        
+        # Store pre-regen values to check if an update is needed
+        old_hp = character.current_health
+        old_mp = character.current_mana
+
+        if is_character_resting(character.id):
+            # Resting regeneration: full HP/MP in ~3 minutes (180s). Tick interval 10s -> 18 ticks.
+            hp_to_regen = math.ceil(character.max_health / 18)
+            mp_to_regen = math.ceil(character.max_mana / 18)
+        else:
+            # Natural passive regeneration
+            con_mod = character.get_attribute_modifier("constitution")
+            wis_mod = character.get_attribute_modifier("wisdom")
+            
+            # Regenerate ~1% of max + stat modifier, min 1.
+            hp_to_regen = max(1, math.floor(character.max_health * 0.01) + con_mod)
+            mp_to_regen = max(1, math.floor(character.max_mana * 0.01) + wis_mod)
+
+        # Apply HP regeneration
+        if character.current_health < character.max_health:
+            character.current_health = min(character.max_health, character.current_health + hp_to_regen)
+        
+        # Apply MP regeneration
+        if character.current_mana < character.max_mana:
+            character.current_mana = min(character.max_mana, character.current_mana + mp_to_regen)
+
+        vitals_changed = (character.current_health != old_hp) or \
+                         (character.current_mana != old_mp)
+
+        if vitals_changed: # Or always send vitals even if only XP changed if we separate XP updates
+            db.add(character) 
+            
+            xp_for_next_level = crud.crud_character.get_xp_for_level(character.level + 1)
+            
+            vitals_payload = {
+                "type": "vitals_update",
+                "current_hp": character.current_health,
+                "max_hp": character.max_health,
+                "current_mp": character.current_mana,
+                "max_mp": character.max_mana,
+                "current_xp": character.experience_points, # <<< ADDED
+                "next_level_xp": int(xp_for_next_level) if xp_for_next_level != float('inf') else -1, # <<< ADDED (-1 for max level)
+                "platinum": character.platinum_coins, # <<< NEW
+                "gold": character.gold_coins,     # <<< NEW
+                "silver": character.silver_coins, # <<< NEW
+                "copper": character.copper_coins  # <<< NEW
+            }
+            await ws_manager.send_personal_message(vitals_payload, player_id)
+            
+            if is_character_resting(character.id) and \
+               character.current_health == character.max_health and \
+               character.current_mana == character.max_mana:
+                set_character_resting_status(character.id, False)
+                await ws_manager.send_personal_message({
+                    "type": "game_event",
+                    "message": "You feel fully rested and refreshed."
+                }, player_id)
+    # DB commit is handled by the world_ticker_loop.
+--- END OF FILE backend/app/game_logic/player_vital_regenerator.py ---
+
 --- START OF FILE backend/app/commands/command_args.py ---
 # backend/app/commands/command_args.py
 from typing import List, Optional
@@ -1122,8 +2304,10 @@ def format_room_mobs_for_player_message(room_mobs: List[models.RoomMobInstance])
             mob_map[idx + 1] = mob_instance.id
     return "\n".join(lines), mob_map
 
-def format_inventory_for_player_message(inventory_display_schema: schemas.CharacterInventoryDisplay) -> str: # ... content from previous version ...
+def format_inventory_for_player_message(inventory_display_schema: schemas.CharacterInventoryDisplay) -> str:
     lines = []
+    
+    # --- Equipped Items ---
     equipped_item_parts = [] 
     max_visible_equipped_prefix_len = 0
     if inventory_display_schema.equipped_items:
@@ -1134,19 +2318,30 @@ def format_inventory_for_player_message(inventory_display_schema: schemas.Charac
             prefix_html = f"  [{slot_name_html}]"
             visible_prefix_len = get_visible_length(prefix_html)
             max_visible_equipped_prefix_len = max(max_visible_equipped_prefix_len, visible_prefix_len)
+            
             item_name_raw = inv_item_schema.item.name.strip() if inv_item_schema.item else "Unknown Item"
             item_name_html = f"<span class='inv-item-name'>{item_name_raw}</span>"
-            item_qty_html = f"<span class='inv-item-qty'>(Qty: {inv_item_schema.quantity})</span>"
+            item_qty_html = f"<span class='inv-item-qty'>(Qty: {inv_item_schema.quantity})</span>" # Quantity of this equipped instance
             suffix_html = f"{item_name_html} {item_qty_html}"
-            equipped_item_parts.append({'sort_key': display_slot_name_raw,'prefix_html': prefix_html,'visible_prefix_len': visible_prefix_len,'suffix_html': suffix_html})
+            equipped_item_parts.append({
+                'sort_key': display_slot_name_raw,
+                'prefix_html': prefix_html,
+                'visible_prefix_len': visible_prefix_len,
+                'suffix_html': suffix_html
+            })
+            
     lines.append(f"<span class='inv-section-header'>--- Equipped ---</span>")
     if equipped_item_parts:
         equipped_item_parts.sort(key=lambda x: x['sort_key'])
         for parts in equipped_item_parts:
-            padding_needed = (max_visible_equipped_prefix_len + 2) - parts['visible_prefix_len']
+            # Calculate padding based on the visible length of the prefix (excluding HTML tags)
+            padding_needed = max(0, (max_visible_equipped_prefix_len + 2) - parts['visible_prefix_len'])
             padding_spaces = " " * padding_needed
             lines.append(f"{parts['prefix_html']}{padding_spaces}{parts['suffix_html']}")
-    else: lines.append("  Nothing equipped.")
+    else:
+        lines.append("  Nothing equipped. You're practically naked, you degenerate.")
+
+    # --- Backpack Items ---
     backpack_item_parts = []
     max_visible_backpack_prefix_len = 0
     if inventory_display_schema.backpack_items:
@@ -1155,19 +2350,48 @@ def format_inventory_for_player_message(inventory_display_schema: schemas.Charac
             prefix_html = f"  {item_number_html}"
             visible_prefix_len = get_visible_length(prefix_html)
             max_visible_backpack_prefix_len = max(max_visible_backpack_prefix_len, visible_prefix_len)
+
             item_name_raw = inv_item_schema.item.name.strip() if inv_item_schema.item else "Unknown Item"
             item_name_html = f"<span class='inv-item-name'>{item_name_raw}</span>"
             item_qty_html = f"<span class='inv-item-qty'>(Qty: {inv_item_schema.quantity})</span>"
             suffix_html = f"{item_name_html} {item_qty_html}"
-            backpack_item_parts.append({'prefix_html': prefix_html,'visible_prefix_len': visible_prefix_len,'suffix_html': suffix_html})
+            backpack_item_parts.append({
+                'prefix_html': prefix_html,
+                'visible_prefix_len': visible_prefix_len,
+                'suffix_html': suffix_html
+            })
+
     lines.append(f"\n<span class='inv-section-header'>--- Backpack ---</span>")
     if backpack_item_parts:
         for parts in backpack_item_parts:
-            padding_needed = (max_visible_backpack_prefix_len + 1) - parts['visible_prefix_len']
+            padding_needed = max(0, (max_visible_backpack_prefix_len + 1) - parts['visible_prefix_len'])
             padding_spaces = " " * padding_needed
             lines.append(f"{parts['prefix_html']}{padding_spaces}{parts['suffix_html']}")
-    else: lines.append("  Your backpack is empty.")
+    else:
+        lines.append("  Your backpack is as empty as your skull.")
+
+    # --- Currency ---
+    lines.append(f"\n<span class='inv-section-header'>--- Currency ---</span>")
+    currency_parts = []
+    if inventory_display_schema.platinum > 0:
+        currency_parts.append(f"<span class='currency platinum'>{inventory_display_schema.platinum}p</span>")
+    if inventory_display_schema.gold > 0:
+        currency_parts.append(f"<span class='currency gold'>{inventory_display_schema.gold}g</span>")
+    if inventory_display_schema.silver > 0:
+        currency_parts.append(f"<span class='currency silver'>{inventory_display_schema.silver}s</span>")
+    
+    # Always show copper, even if 0, unless other currencies are present
+    if currency_parts or inventory_display_schema.copper > 0 :
+        currency_parts.append(f"<span class='currency copper'>{inventory_display_schema.copper}c</span>")
+
+    if currency_parts:
+        lines.append(f"  {' '.join(currency_parts)}")
+    else:
+        lines.append("  You are utterly destitute. Not a single coin to your pathetic name.")
+            
     return "\n".join(lines)
+
+
 
 def roll_dice(dice_str: str) -> int: # ... content ...
     if not dice_str: return 0
@@ -1232,14 +2456,50 @@ def resolve_mob_target(
     if len(exact_matches) == 1:
         return exact_matches[0], None # Unique exact match
     if len(exact_matches) > 1:
-        # Prefer exact match over partial if multiple exacts (unlikely for unique mob instances)
-        return exact_matches[0], "(Multiple exact name matches found, targeting first.)" 
+        # This case is unlikely if mob names are unique, but handle it.
+        # For simplicity, if multiple exact matches, prompt for ambiguity.
+        prompt_lines = [f"Multiple exact matches for '{target_ref}'. Which did you mean?"]
+        exact_matches.sort(key=lambda m: m.mob_template.name if m.mob_template else "")
+        for i, mob_match in enumerate(exact_matches):
+            mob_name = mob_match.mob_template.name if mob_match.mob_template else "Unknown Mob"
+            prompt_lines.append(f"  {i + 1}. {mob_name} (Exact)")
+        return None, "\n".join(prompt_lines)
 
-    # 3. Try partial name match (prefix, case-insensitive)
+    # 3. Try flexible partial name match (case-insensitive)
     partial_matches: List[models.RoomMobInstance] = []
+    # Use a set to ensure each mob instance is added to partial_matches only once
+    # even if it matches multiple criteria (e.g., prefix and word start).
+    matched_mob_ids_for_partial = set()
+
     for mob_instance in mobs_in_room:
-        if mob_instance.mob_template and mob_instance.mob_template.name.lower().startswith(target_ref_lower):
-            partial_matches.append(mob_instance)
+        if not (mob_instance.mob_template and mob_instance.mob_template.name):
+            continue
+
+        mob_name_lower = mob_instance.mob_template.name.lower()
+        mob_name_words = mob_name_lower.split()
+        
+        matched_this_instance = False
+
+        # Criterion a: Full mob name starts with target_ref_lower (e.g., "gia" for "Giant Rat")
+        if mob_name_lower.startswith(target_ref_lower):
+            matched_this_instance = True
+        
+        # Criterion b: Any word in the mob name starts with target_ref_lower (e.g., "ra" for "Giant Rat")
+        if not matched_this_instance:
+            for word in mob_name_words:
+                if word.startswith(target_ref_lower):
+                    matched_this_instance = True
+                    break
+        
+        # Criterion c: target_ref_lower is an exact match for any word in the mob name (e.g., "rat" for "Giant Rat")
+        if not matched_this_instance:
+            if target_ref_lower in mob_name_words:
+                matched_this_instance = True
+        
+        if matched_this_instance:
+            if mob_instance.id not in matched_mob_ids_for_partial:
+                partial_matches.append(mob_instance)
+                matched_mob_ids_for_partial.add(mob_instance.id)
 
     if len(partial_matches) == 1:
         return partial_matches[0], None # Unique partial match
@@ -1247,14 +2507,14 @@ def resolve_mob_target(
     if len(partial_matches) > 1:
         # Ambiguous partial match
         prompt_lines = [f"Which '{target_ref}' did you mean?"]
-        # Sort partial_matches by name for consistent numbering, if desired
+        # Sort partial_matches by name for consistent numbering
         partial_matches.sort(key=lambda m: m.mob_template.name if m.mob_template else "")
         for i, mob_match in enumerate(partial_matches):
             mob_name = mob_match.mob_template.name if mob_match.mob_template else "Unknown Mob"
             prompt_lines.append(f"  {i + 1}. {mob_name}")
         return None, "\n".join(prompt_lines)
 
-    # 4. No match found
+    # 4. No match found by any criteria
     return None, f"Cannot find anything called '{target_ref}' here to target."
 
 def format_room_characters_for_player_message(
@@ -2000,7 +3260,102 @@ async def handle_set_level(context: CommandContext) -> schemas.CommandResponse:
     context.db.refresh(character)
     
     messages.append(f"Character is now Level {character.level} with {character.experience_points} XP.")
-    return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player="\n".join(messages))    
+    return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player="\n".join(messages))   
+
+async def handle_set_money(context: CommandContext) -> schemas.CommandResponse:
+    """
+    Sets the character's currency.
+    Usage: setmoney <platinum> <gold> <silver> <copper>
+    Example: setmoney 0 10 50 120
+    """
+    if len(context.args) != 4:
+        return schemas.CommandResponse(
+            room_data=context.current_room_schema,
+            message_to_player="Usage: setmoney <plat_amt> <gold_amt> <silver_amt> <copper_amt>"
+        )
+
+    try:
+        plat = int(context.args[0])
+        gold = int(context.args[1])
+        silver = int(context.args[2])
+        copper = int(context.args[3])
+        
+        if any(c < 0 for c in [plat, gold, silver, copper]):
+            return schemas.CommandResponse(
+                room_data=context.current_room_schema,
+                message_to_player="Currency amounts cannot be negative for setmoney."
+            )
+
+    except ValueError:
+        return schemas.CommandResponse(
+            room_data=context.current_room_schema,
+            message_to_player="Invalid amount. All currency amounts must be integers."
+        )
+
+    character = context.active_character
+    character.platinum_coins = plat
+    character.gold_coins = gold
+    character.silver_coins = silver
+    character.copper_coins = copper
+
+    context.db.add(character)
+    context.db.commit()
+    context.db.refresh(character)
+    
+    message = f"Currency set to: {plat}p {gold}g {silver}s {copper}c."
+    return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message)
+
+
+async def handle_add_money(context: CommandContext) -> schemas.CommandResponse:
+    """
+    Adds or removes currency from the character.
+    Usage: addmoney <type> <amount>  (e.g., addmoney gold 100, addmoney copper -50)
+    Valid types: p, g, s, c (or platinum, gold, silver, copper)
+    """
+    if len(context.args) != 2:
+        return schemas.CommandResponse(
+            room_data=context.current_room_schema,
+            message_to_player="Usage: addmoney <type> <amount> (e.g., addmoney gold 100)"
+        )
+
+    currency_type_arg = context.args[0].lower()
+    try:
+        amount = int(context.args[1])
+    except ValueError:
+        return schemas.CommandResponse(
+            room_data=context.current_room_schema,
+            message_to_player="Invalid amount. Must be an integer."
+        )
+
+    plat_change, gold_change, silver_change, copper_change = 0, 0, 0, 0
+
+    if currency_type_arg in ["p", "plat", "platinum"]:
+        plat_change = amount
+    elif currency_type_arg in ["g", "gold"]:
+        gold_change = amount
+    elif currency_type_arg in ["s", "silv", "silver"]:
+        silver_change = amount
+    elif currency_type_arg in ["c", "cop", "copper"]:
+        copper_change = amount
+    else:
+        return schemas.CommandResponse(
+            room_data=context.current_room_schema,
+            message_to_player="Invalid currency type. Use p, g, s, or c."
+        )
+
+    updated_char, message = crud.crud_character.update_character_currency(
+        context.db,
+        character_id=context.active_character.id,
+        platinum_change=plat_change, # Pass platinum
+        gold_change=gold_change,
+        silver_change=silver_change,
+        copper_change=copper_change
+    )
+    
+    if not updated_char: # Should not happen if character exists
+        message = "Error updating currency."
+
+    return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message) 
 --- END OF FILE backend/app/commands/debug_parser.py ---
 
 --- START OF FILE backend/app/api/v1/endpoints/command.py ---
@@ -2073,6 +3428,8 @@ COMMAND_REGISTRY: Dict[str, CommandHandler] = {
     "set_hp": debug_parser.handle_set_hp,       # <<< NEW
     "mod_xp": debug_parser.handle_mod_xp,       # <<< NEW
     "set_level": debug_parser.handle_set_level, # <<< NEW
+    "setmoney": debug_parser.handle_set_money,     # <<< NEW
+    "addmoney": debug_parser.handle_add_money, 
 
     # Meta
     "score": meta_parser.handle_score, # <<< ADDED
@@ -2252,6 +3609,11 @@ class Character(Base):
     base_attack_bonus: Mapped[int] = mapped_column(Integer, default=0, nullable=False, comment="Base to-hit bonus")
     base_damage_dice: Mapped[str] = mapped_column(String(20), default="1d4", nullable=False, comment="e.g., 1d6")
     base_damage_bonus: Mapped[int] = mapped_column(Integer, default=0, nullable=False, comment="Base flat damage bonus")
+
+    platinum_coins: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    gold_coins: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    silver_coins: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    copper_coins: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     inventory_items: Mapped[List["CharacterInventoryItem"]] = relationship(
         back_populates="character",
@@ -2663,21 +4025,25 @@ class MobTemplate(Base):
     mob_type: Mapped[Optional[str]] = mapped_column(String(50), index=True, nullable=True, comment="e.g., beast, humanoid, undead")
     
     base_health: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
-    # For base_attack, simple string for now. Could be JSON for more complex attacks.
     base_attack: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, comment="e.g., 1d6") 
     base_defense: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=10, comment="e.g., Armor Class")
     
     xp_value: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    # loot_table_id: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("loot_tables.id"), nullable=True) # Future
     loot_table_ref: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, comment="Placeholder for loot table reference")
-
-    properties: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True, comment="e.g., {'aggression': 'neutral', 'faction': 'rats'}")
+    currency_drop: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSONB, 
+        nullable=True,
+        comment="Defines currency drop. E.g., {'p_chance': 1, 'p_min':0, 'p_max':1, 'g_chance': 10, 'g_min': 0, 'g_max': 2, 's_min': 5, 's_max': 20, 'c_min':10, 'c_max':100}"
+    )
+    properties: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True, comment="e.g., {'faction': 'rats'}") # Removed aggression from here
     level: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    
+    aggression_type: Mapped[Optional[str]] = mapped_column(String(50), default="NEUTRAL", nullable=True, index=True, comment="e.g., NEUTRAL, AGGRESSIVE_ON_SIGHT, AGGRESSIVE_IF_APPROACHED") # <<< NEW FIELD
 
     # room_instances: Mapped[List["RoomMobInstance"]] = relationship(back_populates="mob_template") # If needed
 
     def __repr__(self) -> str:
-        return f"<MobTemplate(id={self.id}, name='{self.name}')>"
+        return f"<MobTemplate(id={self.id}, name='{self.name}', aggression='{self.aggression_type}')>"
 --- END OF FILE backend/app/models/mob_template.py ---
 
 --- START OF FILE backend/app/models/room_mob_instance.py ---
@@ -2686,16 +4052,17 @@ import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any, TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, DateTime, func, String, Boolean # Added Boolean
+from sqlalchemy import ForeignKey, Integer, DateTime, func, String, Boolean 
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.base_class import Base
+# from .. import models # Let's remove this direct import from here
 
 if TYPE_CHECKING:
-    from .room import Room 
-    from .mob_template import MobTemplate 
-    from .mob_spawn_definition import MobSpawnDefinition # Changed from MobSpawnPoint
+    from .room import Room # Import specific model for type hinting
+    from .mob_template import MobTemplate
+    from .mob_spawn_definition import MobSpawnDefinition
 
 class RoomMobInstance(Base):
     __tablename__ = "room_mob_instances"
@@ -2705,20 +4072,13 @@ class RoomMobInstance(Base):
     room_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("rooms.id"), index=True, nullable=False)
     mob_template_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("mob_templates.id"), index=True, nullable=False)
     
-    # Links to the MobSpawnDefinition that created this instance, if any.
     spawn_definition_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True), 
-        ForeignKey("mob_spawn_definitions.id"), # <<< Will match new table name
+        ForeignKey("mob_spawn_definitions.id"),
         nullable=True, 
         index=True,
-        name="spawn_point_id" # Keep old column name in DB for now to simplify migration if needed, or rename
+        name="spawn_point_id" 
     ) 
-    # If you want to rename the DB column, the migration will be more complex.
-    # For now, let's assume we might keep the column name `spawn_point_id` in the DB for a bit
-    # but use `spawn_definition_id` in the ORM model. Or rename consistently.
-    # Let's be consistent and rename in ORM:
-    # spawn_definition_id: Mapped[Optional[uuid.UUID]] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("mob_spawn_definitions.id"), nullable=True, index=True)
-
 
     current_health: Mapped[int] = mapped_column(Integer, nullable=False)
     instance_properties_override: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
@@ -2729,11 +4089,16 @@ class RoomMobInstance(Base):
                                                       comment="True if this mob was placed specifically and should not be respawned by general systems.")
 
     # Relationships
+    # For the Mapped type hint, use the specific import from TYPE_CHECKING
+    # For the relationship string, use the class name directly if it's defined in another module
+    # or the fully qualified string if needed.
     room: Mapped["Room"] = relationship(back_populates="mobs_in_room")
-    mob_template: Mapped["MobTemplate"] = relationship(lazy="joined")
+    mob_template: Mapped["MobTemplate"] = relationship(lazy="joined") 
     
-    # Optional: Relationship to MobSpawnDefinition
-    # originating_spawn_definition: Mapped[Optional["MobSpawnDefinition"]] = relationship(foreign_keys=[spawn_definition_id])
+    originating_spawn_definition: Mapped[Optional["MobSpawnDefinition"]] = relationship(
+        foreign_keys=[spawn_definition_id], 
+        back_populates="spawned_mob_instances"
+    )
 
     def __repr__(self) -> str:
         return f"<RoomMobInstance(id={self.id}, room_id='{self.room_id}', template_id='{self.mob_template_id}', spawn_def_id='{self.spawn_definition_id}', hp={self.current_health})>"
@@ -2743,16 +4108,21 @@ class RoomMobInstance(Base):
 # backend/app/models/mob_spawn_definition.py
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, DateTime, func, String, Boolean # Added Boolean
+from sqlalchemy import ForeignKey, Integer, DateTime, func, String, Boolean 
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.base_class import Base
 
+if TYPE_CHECKING:
+    from .room import Room 
+    from .mob_template import MobTemplate
+    from .room_mob_instance import RoomMobInstance
+
 class MobSpawnDefinition(Base):
-    __tablename__ = "mob_spawn_definitions" # New table name
+    __tablename__ = "mob_spawn_definitions" 
 
     id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     
@@ -2768,7 +4138,7 @@ class MobSpawnDefinition(Base):
     quantity_max: Mapped[int] = mapped_column(Integer, default=1, nullable=False,
                                              comment="Spawner won't spawn more than this many from this definition if min is met.")
     
-    respawn_delay_seconds: Mapped[int] = mapped_column(Integer, default=300, nullable=False, # e.g., 5 minutes
+    respawn_delay_seconds: Mapped[int] = mapped_column(Integer, default=300, nullable=False, 
                                                       comment="Delay after population drops below min, or after individual kill.")
     
     chance_to_spawn_percent: Mapped[int] = mapped_column(Integer, default=100, nullable=False,
@@ -2777,20 +4147,19 @@ class MobSpawnDefinition(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False,
                                            comment="Whether this spawn definition is currently active.")
 
-    # Tracks when the next check for respawning for THIS definition should occur.
     next_respawn_check_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True,
                                                                    comment="Next time the ticker should evaluate this spawner.")
 
-    # For future roaming logic
     roaming_behavior: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True,
-                                                                    comment="e.g., patrol routes, random chance to move.")
-    # For future specific placement within a room
-    # spawn_area_details: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+                                                                    comment="e.g., {'type': 'random_adjacent', 'move_chance_percent': 25, 'max_distance_from_spawn': 5}")
+    
+    # Relationships
+    room: Mapped[Optional["Room"]] = relationship() 
+    mob_template: Mapped[Optional["MobTemplate"]] = relationship()
 
-
-    # Relationships (optional, if needed for direct access from definition object)
-    # room: Mapped["Room"] = relationship()
-    # mob_template: Mapped["MobTemplate"] = relationship()
+    spawned_mob_instances: Mapped[List["RoomMobInstance"]] = relationship( 
+        back_populates="originating_spawn_definition" 
+    )
 
     def __repr__(self) -> str:
         return f"<MobSpawnDefinition(id={self.id}, name='{self.definition_name}', mob='{self.mob_template_id}', room='{self.room_id}', qty='{self.quantity_min}-{self.quantity_max}')>"
@@ -2929,6 +4298,11 @@ class CharacterBase(BaseModel):
     charisma: int = Field(10, ge=1, le=100)
     luck: int = Field(5, ge=1, le=100)
 
+    # Currency: Optional at creation, with defaults
+    platinum_coins: Optional[int] = Field(0, description="Platinum coins owned by the character")
+    gold_coins: Optional[int] = Field(0, description="Gold coins owned by the character")
+    silver_coins: Optional[int] = Field(0, description="Silver coins owned by the character")
+    copper_coins: Optional[int] = Field(100, description="Copper coins owned by the character, default 100 for new chars")
 
 # Properties to receive on character creation
 class CharacterCreate(CharacterBase):
@@ -2944,7 +4318,7 @@ class CharacterUpdate(BaseModel):
 
 
 # Properties shared by models stored in DB
-class CharacterInDBBase(CharacterBase): # Now inherits cleanly from CharacterBase
+class CharacterInDBBase(CharacterBase):  # Inherits cleanly from CharacterBase
     id: uuid.UUID
     player_id: uuid.UUID
     current_room_id: uuid.UUID
@@ -2965,6 +4339,11 @@ class CharacterInDBBase(CharacterBase): # Now inherits cleanly from CharacterBas
     base_attack_bonus: int
     base_damage_dice: str
     base_damage_bonus: int
+
+    platinum_coins: int # type: ignore
+    gold_coins: int # type: ignore
+    silver_coins: int # type: ignore
+    copper_coins: int # type: ignore
 
     # --- Skills & Traits ---
     learned_skills: Optional[List[str]] = None 
@@ -3181,6 +4560,10 @@ class CharacterInventoryItem(CharacterInventoryItemInDBBase): # For returning to
 class CharacterInventoryDisplay(BaseModel):
     equipped_items: Dict[str, CharacterInventoryItem] = Field(default_factory=dict, description="Items currently equipped, keyed by their equipped_slot")
     backpack_items: List[CharacterInventoryItem] = Field(default_factory=list, description="Items in inventory but not equipped")
+    platinum: int = 0
+    gold: int = 0
+    silver: int = 0
+    copper: int = 0
     # Add more fields like total_weight, currency later
 
 class EquipRequest(BaseModel):
@@ -3246,8 +4629,10 @@ class MobTemplateBase(BaseModel):
     base_defense: Optional[int] = 10
     xp_value: int = 0
     loot_table_ref: Optional[str] = None
+    currency_drop: Optional[Dict[str, Any]] = None
     properties: Optional[Dict[str, Any]] = None
     level: Optional[int] = None
+    aggression_type: Optional[str] = Field("NEUTRAL", description="e.g., NEUTRAL, AGGRESSIVE_ON_SIGHT") # <<< NEW FIELD
 
 class MobTemplateCreate(MobTemplateBase):
     pass
@@ -3261,8 +4646,10 @@ class MobTemplateUpdate(BaseModel): # Allow partial updates
     base_defense: Optional[int] = None
     xp_value: Optional[int] = None
     loot_table_ref: Optional[str] = None
+    currency_drop: Optional[Dict[str, Any]] = None
     properties: Optional[Dict[str, Any]] = None
     level: Optional[int] = None
+    aggression_type: Optional[str] = None # <<< NEW FIELD
 
 class MobTemplateInDBBase(MobTemplateBase):
     id: uuid.UUID
@@ -3284,31 +4671,30 @@ class RoomMobInstanceCreate(BaseModel): # For service layer use
     mob_template_id: uuid.UUID
     # current_health typically set from template by service
     instance_properties_override: Optional[Dict[str, Any]] = None 
-    spawn_point_id: Optional[uuid.UUID] = None 
+    spawn_definition_id: Optional[uuid.UUID] = None # <<< RENAMED FROM spawn_point_id
     
 class RoomMobInstanceUpdate(BaseModel): # For combat updates
     current_health: Optional[int] = None
     instance_properties_override: Optional[Dict[str, Any]] = Field(None, description="Use with caution, replaces entire dict")
 
-class RoomMobInstanceInDBBase(BaseModel): # Note: Not inheriting from RoomMobInstanceBase to control field order for MobTemplate
+class RoomMobInstanceInDBBase(BaseModel): 
     id: uuid.UUID
     room_id: uuid.UUID
-    mob_template_id: uuid.UUID # Keep this for reference
+    mob_template_id: uuid.UUID 
     current_health: int
     instance_properties_override: Optional[Dict[str, Any]] = None
-    spawn_point_id: Optional[uuid.UUID] = None 
+    spawn_definition_id: Optional[uuid.UUID] = None # <<< RENAMED FROM spawn_point_id
     spawned_at: datetime
     last_action_at: Optional[datetime] = None
     
-    mob_template: MobTemplate # Include full mob template details
+    mob_template: MobTemplate 
 
     class Config:
         from_attributes = True
 
-class RoomMobInstance(RoomMobInstanceInDBBase): # For returning to client
+class RoomMobInstance(RoomMobInstanceInDBBase): 
     pass
 
-# Schema for displaying mobs in a room (could be part of a larger RoomDetail schema)
 class RoomMobsView(BaseModel):
     mobs_in_room: List[RoomMobInstance] = Field(default_factory=list)
 --- END OF FILE backend/app/schemas/mob.py ---
@@ -3509,12 +4895,95 @@ XP_THRESHOLDS = {
     # ... add more levels as needed
 }
 
+COPPER_PER_SILVER = 100
+SILVER_PER_GOLD = 100
+GOLD_PER_PLATINUM = 100
+
 CLASS_LEVEL_BONUSES = {
     "Warrior": {"hp_per_level": 5, "mp_per_level": 1, "base_attack_bonus_per_level": 0.5}, # BAB increases every 2 levels
     "Swindler": {"hp_per_level": 3, "mp_per_level": 2, "base_attack_bonus_per_level": 0.5},
     "Adventurer": {"hp_per_level": 4, "mp_per_level": 1, "base_attack_bonus_per_level": 0.5}, # Default
     # Add other seeded classes
 }
+
+def update_character_currency(
+    db: Session, 
+    character_id: uuid.UUID, 
+    platinum_change: int = 0,
+    gold_change: int = 0, 
+    silver_change: int = 0, 
+    copper_change: int = 0
+) -> Tuple[Optional[models.Character], str]: # Returns char and a message
+    """
+    Updates a character's currency. Handles negative changes by attempting to make change.
+    Returns the updated character and a status message.
+    """
+    character = get_character(db, character_id=character_id)
+    if not character:
+        return None, "Character not found."
+
+    # Convert all existing currency and changes to the smallest unit (copper)
+    current_total_copper = (character.platinum_coins * GOLD_PER_PLATINUM * SILVER_PER_GOLD * COPPER_PER_SILVER) + \
+                           (character.gold_coins * SILVER_PER_GOLD * COPPER_PER_SILVER) + \
+                           (character.silver_coins * COPPER_PER_SILVER) + \
+                            character.copper_coins
+    
+    change_total_copper = (platinum_change * GOLD_PER_PLATINUM * SILVER_PER_GOLD * COPPER_PER_SILVER) + \
+                          (gold_change * SILVER_PER_GOLD * COPPER_PER_SILVER) + \
+                          (silver_change * COPPER_PER_SILVER) + \
+                           copper_change
+
+    if current_total_copper + change_total_copper < 0:
+        return character, "Not enough funds for this transaction."
+
+    new_total_copper = current_total_copper + change_total_copper
+
+    # Convert back to platinum, gold, silver, copper
+    new_platinum = new_total_copper // (GOLD_PER_PLATINUM * SILVER_PER_GOLD * COPPER_PER_SILVER)
+    remainder_after_platinum = new_total_copper % (GOLD_PER_PLATINUM * SILVER_PER_GOLD * COPPER_PER_SILVER)
+    
+    new_gold = remainder_after_platinum // (SILVER_PER_GOLD * COPPER_PER_SILVER) 
+    remainder_after_gold = remainder_after_platinum % (SILVER_PER_GOLD * COPPER_PER_SILVER)    
+    
+    new_silver = remainder_after_gold // COPPER_PER_SILVER
+    new_copper = remainder_after_gold % COPPER_PER_SILVER
+
+    character.platinum_coins = new_platinum # Store platinum
+    character.gold_coins = new_gold
+    character.silver_coins = new_silver
+    character.copper_coins = new_copper
+
+    db.add(character)
+    db.commit()
+    db.refresh(character)
+    
+    # Construct a message about the change
+    change_parts = []
+    if platinum_change != 0: change_parts.append(f"{abs(platinum_change)}p") # Add platinum to change parts
+    if gold_change != 0: change_parts.append(f"{abs(gold_change)}g")
+    if silver_change != 0: change_parts.append(f"{abs(silver_change)}s")
+    if copper_change != 0: change_parts.append(f"{abs(copper_change)}c")
+    
+    action = "gained" if change_total_copper > 0 else "lost" if change_total_copper < 0 else "changed by"
+    
+    # Construct current balance string
+    balance_parts = []
+    if new_platinum > 0: balance_parts.append(f"{new_platinum}p")
+    if new_gold > 0: balance_parts.append(f"{new_gold}g")
+    if new_silver > 0: balance_parts.append(f"{new_silver}s")
+    # Always show copper if it's the only currency or if other denominations are zero
+    if new_copper > 0 or not balance_parts: balance_parts.append(f"{new_copper}c")
+    current_balance_str = " ".join(balance_parts) if balance_parts else "0c"
+
+
+    if not change_parts and change_total_copper == 0:
+        message = "Currency unchanged."
+    elif not change_parts and change_total_copper != 0: 
+         message = f"Currency updated. New total: {current_balance_str}"
+    else:
+        message = f"You {action} {' '.join(change_parts)}. Current balance: {current_balance_str}"
+
+    return character, message
 
 def get_xp_for_level(level: int) -> Union[int, float]: # <<< CHANGED RETURN TYPE
     """Returns the total XP required to attain the specified level."""
@@ -4691,14 +6160,22 @@ def update_mob_instance_health(
 # --- Seeding Initial Mob Templates ---
 INITIAL_MOB_TEMPLATES = [
     {
-        "name": "Giant Rat", "description": "A filthy rat, surprisingly large and aggressive.",
+        "name": "Giant Rat", "description": "A filthy rat...",
         "mob_type": "beast", "base_health": 8, "base_attack": "1d4", "base_defense": 11,
-        "xp_value": 5, "properties": {"aggression": "aggressive_if_approached"}, "level": 1
+        "xp_value": 5, 
+        "currency_drop": {"c_min": 1, "c_max": 5}, # Drops 1-5 copper
+        "aggression_type": "AGGRESSIVE_IF_APPROACHED", "level": 1
     },
     {
-        "name": "Goblin Scout", "description": "A small, green-skinned humanoid with beady eyes and a rusty dagger.",
+        "name": "Goblin Scout", "description": "A small, green-skinned humanoid...",
         "mob_type": "humanoid", "base_health": 12, "base_attack": "1d6", "base_defense": 13,
-        "xp_value": 10, "properties": {"aggression": "aggressive_on_sight", "faction": "goblins"}, "level": 1
+        "xp_value": 10, 
+        "currency_drop": { # Goblins are a bit richer
+            "c_min": 10, "c_max": 50, 
+            "s_chance": 25, "s_min": 1, "s_max": 3 # 25% chance for 1-3 silver
+        },
+        "properties": {"faction": "goblins"}, 
+        "aggression_type": "AGGRESSIVE_ON_SIGHT", "level": 1
     },
 ]
 
@@ -4707,16 +6184,24 @@ def seed_initial_mob_templates(db: Session):
     seeded_count = 0
     for template_data in INITIAL_MOB_TEMPLATES:
         existing = get_mob_template_by_name(db, name=template_data["name"])
+        template_schema = schemas.MobTemplateCreate(**template_data) # Convert to schema for validation
         if not existing:
-            print(f"  Creating mob template: {template_data['name']}")
-            create_mob_template(db, template_in=schemas.MobTemplateCreate(**template_data))
+            print(f"  Creating mob template: {template_schema.name}")
+            create_mob_template(db, template_in=template_schema)
             seeded_count += 1
         else:
-            print(f"  Mob template '{template_data['name']}' already exists.")
+            # Optionally update existing templates if their aggression_type or other fields changed
+            # For now, just log existence
+            print(f"  Mob template '{template_schema.name}' already exists. Current aggression: {existing.aggression_type}, Seeded: {template_schema.aggression_type}")
+            if existing.aggression_type != template_schema.aggression_type:
+                 print(f"    Updating aggression type for {existing.name} to {template_schema.aggression_type}")
+                 existing.aggression_type = template_schema.aggression_type
+                 db.add(existing)
+                 db.commit() # Commit update
+
     if seeded_count > 0:
         print(f"Seeded {seeded_count} new mob templates.")
     print("Mob template seeding complete.")
-
 --- END OF FILE backend/app/crud/crud_mob.py ---
 
 --- START OF FILE backend/app/crud/crud_mob_spawn_definition.py ---
@@ -4811,28 +6296,37 @@ def seed_initial_mob_spawn_definitions(db: Session):
     cpu_room = crud_room.get_room_by_coords(db, x=0, y=0, z=0)
     rat_template = crud_mob.get_mob_template_by_name(db, name="Giant Rat")
     goblin_template = crud_mob.get_mob_template_by_name(db, name="Goblin Scout")
-    personnel_room = crud_room.get_room_by_coords(db, x=2, y=0, z=0) # From your new world seed
+    personnel_room = crud_room.get_room_by_coords(db, x=2, y=0, z=0) 
     
     definitions_to_seed = []
     if cpu_room and rat_template:
         definitions_to_seed.append(schemas.MobSpawnDefinitionCreate(
             definition_name="CPURatsMain", room_id=cpu_room.id, mob_template_id=rat_template.id,
-            quantity_min=1, quantity_max=2, respawn_delay_seconds=60 # e.g. 1 minute
+            quantity_min=1, quantity_max=2, respawn_delay_seconds=60,
+            roaming_behavior={"type": "random_adjacent", "move_chance_percent": 40, "max_distance_from_spawn": 2} # <<< ADD ROAMING
         ))
     if personnel_room and goblin_template:
         definitions_to_seed.append(schemas.MobSpawnDefinitionCreate(
             definition_name="PersonnelIntakeGoblinSentry", room_id=personnel_room.id, mob_template_id=goblin_template.id,
-            quantity_min=1, quantity_max=1, respawn_delay_seconds=180 # e.g. 3 minutes
+            quantity_min=1, quantity_max=1, respawn_delay_seconds=180 
+            # Goblin is AGGRESSIVE_ON_SIGHT from its template, no specific roaming here.
         ))
 
     seeded_count = 0
     for def_in in definitions_to_seed:
-        if not get_mob_spawn_definition_by_name(db, definition_name=def_in.definition_name):
+        existing_def = get_mob_spawn_definition_by_name(db, definition_name=def_in.definition_name)
+        if not existing_def:
             create_mob_spawn_definition(db, definition_in=def_in)
             print(f"  Created mob spawn definition: {def_in.definition_name}")
             seeded_count += 1
         else:
-            print(f"  Mob spawn definition '{def_in.definition_name}' already exists.")
+            # Optionally update existing definitions
+            print(f"  Mob spawn definition '{def_in.definition_name}' already exists. Current roaming: {existing_def.roaming_behavior}, Seeded: {def_in.roaming_behavior}")
+            if existing_def.roaming_behavior != def_in.roaming_behavior: # Simple dict comparison
+                print(f"    Updating roaming behavior for {existing_def.definition_name}")
+                existing_def.roaming_behavior = def_in.roaming_behavior
+                db.add(existing_def)
+                db.commit() # Commit update
     
     if seeded_count > 0: print(f"Seeded {seeded_count} new mob spawn definitions.")
     print("Mob spawn definition seeding complete.")
@@ -5076,11 +6570,9 @@ async def get_current_player(
         try:
             player_uuid = uuid.UUID(username_or_player_id)
         except ValueError:
-            print(f"Error: Subject '{username_or_player_id}' in token is not a valid UUID.")
             raise credentials_exception
             
     except JWTError as e:
-        print(f"JWTError during token decode: {e}")
         raise credentials_exception
     
     player = crud.crud_player.get_player(db, player_id=player_uuid)
@@ -5088,7 +6580,7 @@ async def get_current_player(
         raise credentials_exception
     return player
 
-async def get_current_active_character( # <<< NEW DEPENDENCY
+async def get_current_active_character( 
     db: Session = Depends(get_db),
     current_player: models.Player = Depends(get_current_player)
 ) -> models.Character:
@@ -5102,28 +6594,24 @@ async def get_current_active_character( # <<< NEW DEPENDENCY
     
     character = crud.crud_character.get_character(db, character_id=character_id)
     if not character:
-        # This case implies data inconsistency or character deleted after selection.
-        # Clear stale entry from active_game_sessions.
         active_game_sessions.pop(current_player.id, None)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Active character with ID {character_id} not found. Session reset.",
         )
 
-    # This check is crucial for data integrity, though selection process should ensure it.
     if character.player_id != current_player.id:
-        active_game_sessions.pop(current_player.id, None) # Clear inconsistent state
+        active_game_sessions.pop(current_player.id, None) 
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="CRITICAL: Active character's player ID does not match authenticated player. Session reset.",
         )
-        
     return character
 --- END OF FILE backend/app/api/dependencies.py ---
 
 --- START OF FILE backend/app/api/v1/api_router.py ---
 from fastapi import APIRouter
-from .endpoints import room, command, user, character, inventory, map # This imports the router from endpoints/room.py
+from .endpoints import room, command, user, character, inventory, map, character_class # This imports the router from endpoints/room.py
 
 # This router will be included with a prefix like /api by main.py
 # So paths here are relative to that.
@@ -5137,6 +6625,7 @@ api_router.include_router(user.router, prefix="/users", tags=["Users"])
 api_router.include_router(character.router, prefix="/character", tags=["Characters"])
 api_router.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
 api_router.include_router(map.router, prefix="/map", tags=["Map"])
+api_router.include_router(character_class.router, prefix="/classes", tags=["Character Classes"]) 
 --- END OF FILE backend/app/api/v1/api_router.py ---
 
 --- FILE NOT FOUND: backend/app/api/v1/endpoints/users.py ---
@@ -5245,6 +6734,31 @@ def select_character_for_session(
     return current_room_orm # FastAPI will convert ORM to schemas.RoomInDB
 --- END OF FILE backend/app/api/v1/endpoints/character.py ---
 
+--- START OF FILE backend/app/api/v1/endpoints/character_class.py ---
+# backend/app/api/v1/endpoints/character_class.py (NEW FILE)
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from typing import List
+
+from app import schemas, crud, models # app.
+from app.db.session import get_db
+# No specific auth needed for listing public class templates usually
+
+router = APIRouter()
+
+@router.get("", response_model=List[schemas.CharacterClassTemplate])
+def read_available_character_classes(
+    db: Session = Depends(get_db),
+    skip: int = 0,
+    limit: int = 100 # Allow for future pagination if many classes
+):
+    """
+    Retrieve a list of all available character class templates.
+    """
+    class_templates = crud.crud_character_class.get_character_class_templates(db, skip=skip, limit=limit)
+    return class_templates
+--- END OF FILE backend/app/api/v1/endpoints/character_class.py ---
+
 --- START OF FILE backend/app/api/v1/endpoints/map.py ---
 # backend/app/api/v1/endpoints/map.py (NEW FILE)
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -5310,8 +6824,142 @@ def get_map_data_for_current_level(
     )
 --- END OF FILE backend/app/api/v1/endpoints/map.py ---
 
---- FILE NOT FOUND: /src/script.js ---
+--- START OF FILE backend/app/api/v1/endpoints/inventory.py ---
+# backend/app/api/v1/endpoints/inventory.py
+from fastapi import APIRouter, Depends, HTTPException, Body, status
+from sqlalchemy.orm import Session
+import uuid
+from typing import List
+
+from .... import schemas, models, crud
+from ....db.session import get_db
+from ....api.dependencies import get_current_active_character
+from ....models.item import EQUIPMENT_SLOTS # For constructing display
+
+router = APIRouter()
+
+def format_inventory_for_display(
+    inventory_items: List[models.CharacterInventoryItem]
+) -> schemas.CharacterInventoryDisplay:
+    """Helper function to format raw inventory items into the display schema."""
+    equipped_dict: dict[str, schemas.CharacterInventoryItem] = {}
+    backpack_list: list[schemas.CharacterInventoryItem] = []
+
+    for inv_item_orm in inventory_items:
+        # Convert ORM to Pydantic schema. The item sub-object should also be converted.
+        # schemas.CharacterInventoryItem.from_orm(inv_item_orm) should handle this due to nested Config.
+        item_schema = schemas.CharacterInventoryItem.from_orm(inv_item_orm)
+        if inv_item_orm.equipped and inv_item_orm.equipped_slot:
+            equipped_dict[inv_item_orm.equipped_slot] = item_schema
+        else:
+            backpack_list.append(item_schema)
+            
+    return schemas.CharacterInventoryDisplay(equipped_items=equipped_dict, backpack_items=backpack_list)
+
+
+@router.get("/mine", response_model=schemas.CharacterInventoryDisplay)
+def get_my_inventory(
+    db: Session = Depends(get_db),
+    current_character: models.Character = Depends(get_current_active_character),
+):
+    """
+    Retrieve the inventory for the currently active character.
+    """
+    inventory_items_orm = crud.crud_character_inventory.get_character_inventory(
+        db, character_id=current_character.id
+    )
+    return format_inventory_for_display(inventory_items_orm)
+
+
+@router.post("/equip/{inventory_item_id}", response_model=schemas.CommandResponse) # Using CommandResponse for feedback
+def equip_inventory_item_api(
+    inventory_item_id: uuid.UUID,
+    payload: schemas.EquipRequest = Body(None), # Payload can be optional if target_slot isn't always needed
+    db: Session = Depends(get_db),
+    current_character: models.Character = Depends(get_current_active_character),
+):
+    """
+    Equip an item from the character's inventory.
+    inventory_item_id is the UUID of the CharacterInventoryItem entry.
+    """
+    target_slot_from_payload = payload.target_slot if payload else None
+    
+    updated_inv_item, message = crud.crud_character_inventory.equip_item_from_inventory(
+        db=db,
+        character_id=current_character.id,
+        inventory_item_id=inventory_item_id,
+        target_slot=target_slot_from_payload
+    )
+
+    if not updated_inv_item and not message.lower().endswith("already equipped.") and not message.lower().startswith("item not found"): # Distinguish not found vs other errors
+        # A more robust error check is needed here. If equip_item_from_inventory returns None but a real error message,
+        # it's an issue. If it returns None and "item not found", it's a 404.
+        # For now, assume if updated_inv_item is None and it's not "already equipped", it's a failure.
+        # This logic needs refinement based on how crud function signals true errors vs valid "cannot equip" scenarios.
+         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+
+
+    # If successful or "already equipped", we could return the new inventory state or just the message.
+    # For now, let's just return the message. The client can re-fetch inventory if needed.
+    # To provide full context, we'd fetch the current room as well.
+    current_room_orm = crud.crud_room.get_room_by_id(db, room_id=current_character.current_room_id)
+    if not current_room_orm: # Should not happen if character is valid
+        current_room_schema = None
+    else:
+        current_room_schema = schemas.RoomInDB.from_orm(current_room_orm)
+        
+    return schemas.CommandResponse(
+        message_to_player=message,
+        room_data=current_room_schema # Provide current room context
+    )
+
+
+@router.post("/unequip/{inventory_item_id}", response_model=schemas.CommandResponse) # Using CommandResponse for feedback
+def unequip_inventory_item_api(
+    inventory_item_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_character: models.Character = Depends(get_current_active_character),
+):
+    """
+    Unequip an item, moving it back to the backpack.
+    inventory_item_id is the UUID of the CharacterInventoryItem entry.
+    """
+    updated_inv_item, message = crud.crud_character_inventory.unequip_item_to_inventory(
+        db=db,
+        character_id=current_character.id,
+        inventory_item_id=inventory_item_id
+    )
+
+    if not updated_inv_item and not message.lower().endswith("not currently equipped.") and not message.lower().startswith("item not found"):
+        # Similar to equip, needs better error handling from CRUD
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+
+    current_room_orm = crud.crud_room.get_room_by_id(db, room_id=current_character.current_room_id)
+    if not current_room_orm:
+        current_room_schema = None
+    else:
+        current_room_schema = schemas.RoomInDB.from_orm(current_room_orm)
+
+    return schemas.CommandResponse(
+        message_to_player=message,
+        room_data=current_room_schema
+    )
+--- END OF FILE backend/app/api/v1/endpoints/inventory.py ---
 
 --- FILE NOT FOUND: /src/index.html ---
+
+--- FILE NOT FOUND: /src/main.js ---
+
+--- FILE NOT FOUND: /src/ui.js ---
+
+--- FILE NOT FOUND: /src/api.js ---
+
+--- FILE NOT FOUND: /src/websocket.js ---
+
+--- FILE NOT FOUND: /src/map.js ---
+
+--- FILE NOT FOUND: /src/state.js ---
+
+--- FILE NOT FOUND: /src/config.js ---
 
 --- SCRIPT END --- Bundle complete: project_context_bundle.txt ---

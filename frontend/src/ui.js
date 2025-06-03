@@ -5,7 +5,8 @@ import { MAX_OUTPUT_LINES } from './config.js';
 // Declare all module-scoped UI element variables
 let outputDiv, commandInput, promptTextSpan, inputPromptLineDiv, 
     exitsTextSpan, currencyDisplayContainerDiv, characterInfoBarDiv,
-    mapViewportDiv, mapSvgElement, vitalsMonitorDiv, bottomInfoBarDiv;
+    mapViewportDiv, mapSvgElement, vitalsMonitorDiv, bottomInfoBarDiv,
+    copyOutputButton; // NEW: Declare copy button variable
 
 export const UI = {
     initializeElements: function () {     
@@ -24,20 +25,28 @@ export const UI = {
         mapViewportDiv = document.getElementById('map-viewport');
         mapSvgElement = document.getElementById('map-svg');
         vitalsMonitorDiv = document.getElementById('vitals-monitor');
+        copyOutputButton = document.getElementById('copy-output-button'); // NEW: Get copy button
 
         // Consolidate checks
         const elements = [
             outputDiv, commandInput, promptTextSpan, inputPromptLineDiv,
             exitsTextSpan, currencyDisplayContainerDiv, bottomInfoBarDiv,
-            characterInfoBarDiv, mapViewportDiv, mapSvgElement, vitalsMonitorDiv
+            characterInfoBarDiv, mapViewportDiv, mapSvgElement, vitalsMonitorDiv,
+            copyOutputButton // NEW: Add to check
         ];
 
         if (elements.some(el => !el)) {
-            const missing = elements.map((el, i) => el ? '' : ['outputDiv', 'commandInput', 'promptTextSpan', 'inputPromptLineDiv', 'exitsTextSpan', 'currencyDisplayContainerDiv', 'bottomInfoBarDiv', 'characterInfoBarDiv', 'mapViewportDiv', 'mapSvgElement', 'vitalsMonitorDiv'][i]).filter(Boolean);
+            const missing = elements.map((el, i) => el ? '' : ['outputDiv', 'commandInput', 'promptTextSpan', 'inputPromptLineDiv', 'exitsTextSpan', 'currencyDisplayContainerDiv', 'bottomInfoBarDiv', 'characterInfoBarDiv', 'mapViewportDiv', 'mapSvgElement', 'vitalsMonitorDiv', 'copyOutputButton'][i]).filter(Boolean);
             console.error("CRITICAL: One or more core UI elements not found during initialization!", missing);
             document.body.innerHTML = `Error: Core UI elements missing (${missing.join(', ')}). App cannot start.`;
             return false;
         }
+
+        // NEW: Add event listener for the copy button
+        if (copyOutputButton) {
+            copyOutputButton.addEventListener('click', UI.handleCopyOutputToClipboard);
+        }
+
         return true;
     },
 
@@ -108,6 +117,45 @@ export const UI = {
         bottomInfoBarDiv.style.display = showGameRelatedUI ? 'flex' : 'none'; // Parent of exits/currency
         
         inputPromptLineDiv.style.display = showInputPromptLine ? 'flex' : 'none';
+    },
+
+    handleCopyOutputToClipboard: function() {
+        if (!outputDiv || !copyOutputButton) return;
+
+        const lines = [];
+        // Output div has children added with insertBefore(..., outputDiv.firstChild)
+        // and CSS flex-direction: column-reverse.
+        // So, to get chronological order, we iterate children from last to first.
+        for (let i = outputDiv.children.length - 1; i >= 0; i--) {
+            lines.push(outputDiv.children[i].textContent || '');
+        }
+        const textToCopy = lines.join('\n');
+
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                const originalText = copyOutputButton.textContent;
+                copyOutputButton.textContent = 'Copied!';
+                setTimeout(() => {
+                    copyOutputButton.textContent = originalText;
+                }, 1500);
+            }).catch(err => {
+                console.error('Failed to copy text: ', err);
+                const originalText = copyOutputButton.textContent;
+                copyOutputButton.textContent = 'Error!';
+                setTimeout(() => {
+                    copyOutputButton.textContent = originalText;
+                }, 1500);
+            });
+        } else {
+            // Fallback for older browsers (less common now)
+            console.warn('Clipboard API not available. Manual copy might be needed.');
+            // You could implement a textarea-based fallback here if needed
+            const originalText = copyOutputButton.textContent;
+            copyOutputButton.textContent = 'No API!';
+            setTimeout(() => {
+                copyOutputButton.textContent = originalText;
+            }, 2000);
+        }
     },
 
     appendToOutput: function (htmlContent, options = {}) {

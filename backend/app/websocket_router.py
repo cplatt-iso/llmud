@@ -1,23 +1,37 @@
 # backend/app/websocket_router.py
 import uuid
-from typing import Optional, Any, Generator, List, Tuple 
+from typing import Optional, Any, Generator, List, Tuple
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query, status
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
-from contextlib import contextmanager 
+from contextlib import contextmanager
+import logging
 
-from app.db.session import SessionLocal 
-from app import crud, models, schemas 
-from app.core.config import settings 
-from app.websocket_manager import connection_manager 
-from app.game_logic import combat_manager 
-from app.commands.utils import ( 
-    format_room_items_for_player_message, 
-    format_room_mobs_for_player_message, 
-    format_room_characters_for_player_message, 
+# Import settings to check LOG_LEVEL if needed, though it should be set by main
+from app.core.config import settings
+
+from app.db.session import SessionLocal
+from app import crud, models, schemas
+from app.core.config import settings
+from app.websocket_manager import connection_manager
+from app.game_logic import combat_manager
+from app.commands.utils import (
+    format_room_items_for_player_message,
+    format_room_mobs_for_player_message,
+    format_room_characters_for_player_message,
     resolve_mob_target
 )
 from app.game_state import is_character_resting, set_character_resting_status
+
+
+logger = logging.getLogger(__name__)
+# --- Add these lines for immediate feedback on logger level ---
+print(f"--- WEBSOCKET_ROUTER.PY: settings.LOG_LEVEL = '{settings.LOG_LEVEL}' ---", flush=True) # Check settings value at import time
+effective_level_ws = logger.getEffectiveLevel()
+print(f"--- WEBSOCKET_ROUTER.PY: Effective log level for '{logger.name}' logger = {effective_level_ws} ({logging.getLevelName(effective_level_ws)}) ---", flush=True)
+logger.debug("--- WEBSOCKET_ROUTER.PY DEBUG LOG TEST: Module loaded ---")
+logger.info("--- WEBSOCKET_ROUTER.PY INFO LOG TEST: Module loaded ---")
+# --- End of added lines ---
 
 router = APIRouter()
 
@@ -149,15 +163,18 @@ async def websocket_game_endpoint(
     with get_db_sync() as db: 
         player = await get_player_from_token(token, db)
         if not player:
+            logger.warning(f"WebSocket connection attempt with invalid token for char_id: {character_id}")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid authentication token")
             return
         character_orm_initial = crud.crud_character.get_character(db, character_id=character_id)
         if not character_orm_initial or character_orm_initial.player_id != player.id:
+            logger.warning(f"WebSocket connection attempt for invalid char_id: {character_id} by player: {player.id}")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid character ID or not owned by player")
             return
         character = character_orm_initial 
     
     await connection_manager.connect(websocket, player.id, character.id)
+    logger.info(f"Player {player.id} (Character {character.id}) connected via WebSocket.")
     
     initial_messages = [f"Welcome {character.name}! You are connected."]
     initial_room_schema: Optional[schemas.RoomInDB] = None
@@ -210,13 +227,14 @@ async def websocket_game_endpoint(
             with get_db_sync() as db_loop: 
                 current_char_state = crud.crud_character.get_character(db_loop, character_id=character.id)
                 if not current_char_state: 
+                    logger.error(f"Character state lost for char_id: {character.id} during WebSocket loop.")
                     await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="Character state lost")
                     break 
                 
                 current_room_for_command_orm = crud.crud_room.get_room_by_id(db_loop, current_char_state.current_room_id)
                 current_room_schema_for_command = schemas.RoomInDB.from_orm(current_room_for_command_orm) if current_room_for_command_orm else None
 
-                print(f"WS command from Player {player.id} (Char {character.id}): '{command_text}' in room {current_char_state.current_room_id}")
+                logger.debug(f"WS command from Player {player.id} (Char {character.id}): '{command_text}' in room {current_char_state.current_room_id}")
 
                 verb_for_rest_check = command_text.split(" ", 1)[0].lower() if command_text else ""
                 
@@ -225,7 +243,7 @@ async def websocket_game_endpoint(
                     "help", "?", "skills", "sk", "traits", "tr", 
                     "inventory", "i", "ooc", "say", "'", "emote", ":" 
                 ]
-                movement_verbs = ["n", "s", "e", "w", "u", "d", "north", "south", "east", "west", "up", "down", "go"]
+                movement_verbs = ["north", "south", "east", "west", "up", "down", "n", "s", "e", "w", "u", "d", "go"]
 
                 if verb_for_rest_check and verb_for_rest_check not in non_breaking_verbs and is_character_resting(current_char_state.id):
                     set_character_resting_status(current_char_state.id, False)
@@ -234,6 +252,9 @@ async def websocket_game_endpoint(
                 if message_type == "command" and command_text:
                     verb = verb_for_rest_check 
                     args_str = command_text.split(" ", 1)[1].strip() if " " in command_text else ""
+
+                    # --- NEW DEBUG PRINT ---
+                    logger.debug(f"ROUTER: Processing verb='{verb}', args='{args_str}'")
 
                     if verb == "rest":
                         if current_char_state.id in combat_manager.active_combats:
@@ -251,20 +272,37 @@ async def websocket_game_endpoint(
                                     db_loop, current_room_for_command_orm.id, player.id, 
                                     f"<span class='char-name'>{current_char_state.name}</span> sits down to rest."
                                 )
-                    
+                        continue # Assuming rest command should end processing for this message                    
                     elif verb in movement_verbs: # e.g., "n", "s", "e", "w", "u", "d", "go"
+                        # --- NEW DEBUG PRINT ---
+                        logger.debug(f"ROUTER: ENTERED movement_verbs block for verb='{verb}'")
+                        # --- DEBUG PRINTS START (These are the ones you said were not printing) ---
+                        logger.debug(f"MOVEMENT: CharID: {current_char_state.id}, Verb: '{verb}', Args: '{args_str}'")
+                        is_in_active_combats = current_char_state.id in combat_manager.active_combats
+                        logger.debug(f"MOVEMENT: Is CharID in active_combats? {is_in_active_combats}")
+                        targets_for_char = None
+                        if is_in_active_combats:
+                            targets_for_char = combat_manager.active_combats.get(current_char_state.id)
+                            logger.debug(f"MOVEMENT: Targets for char from active_combats: {targets_for_char}")
+                        
+                        condition_to_block = is_in_active_combats and bool(targets_for_char) # Explicitly check boolean of targets
+                        logger.debug(f"MOVEMENT: Condition to block movement: {condition_to_block}")
+                        # --- DEBUG PRINTS END ---
+
                         # Check for combat BEFORE attempting movement
-                        if current_char_state.id in combat_manager.active_combats and combat_manager.active_combats.get(current_char_state.id):
-                            # Fetch current room for context in the message
+                        if condition_to_block: # Use the debugged condition
+                            logger.debug(f"MOVEMENT: BLOCKED movement for CharID: {current_char_state.id}") # DEBUG
                             current_room_for_msg = crud.crud_room.get_room_by_id(db_loop, current_char_state.current_room_id)
                             room_schema_for_msg = schemas.RoomInDB.from_orm(current_room_for_msg) if current_room_for_msg else None
                             await combat_manager.send_combat_log(
                                 player.id,
                                 ["You cannot move while in combat! Try 'flee <direction>' or 'flee'."],
                                 room_data=room_schema_for_msg,
-                                transient=True # This is a quick feedback message
+                                transient=True 
                             )
                             continue # Skip movement logic
+                        else:
+                            logger.debug(f"MOVEMENT: ALLOWED movement for CharID: {current_char_state.id}") # DEBUG
 
                         # If "go", parse direction from args_str
                         direction_to_move_verb = verb 
@@ -512,7 +550,7 @@ async def websocket_game_endpoint(
                             chars_text_look = format_room_characters_for_player_message(other_chars_look)
                             if chars_text_look: look_messages.append(chars_text_look)
                         await combat_manager.send_combat_log(player.id, look_messages, room_data=current_room_schema_for_command)
-                    
+                        continue # Add this if missing
                     elif verb not in ["rest"] + movement_verbs + ["attack", "atk", "kill", "k", "flee", "look", "l"]:
                          await combat_manager.send_combat_log(
                             player.id, 
@@ -525,7 +563,7 @@ async def websocket_game_endpoint(
                      await combat_manager.send_combat_log(player.id, ["Empty command received."], room_data=current_room_schema_for_command)
 
     except WebSocketDisconnect:
-        print(f"WebSocket disconnected for Player {player.id if player else 'N/A'} (Character {character.id if character else 'N/A'})")
+        logger.info(f"WebSocket disconnected for Player {player.id if player else 'N/A'} (Character {character.id if character else 'N/A'})")
         if character and character.id: 
             combat_manager.end_combat_for_character(character.id, reason="websocket_disconnect")
             if is_character_resting(character.id):
@@ -533,10 +571,11 @@ async def websocket_game_endpoint(
     except Exception as e:
         err_player_id = player.id if player else "Unknown Player"
         err_char_id = character.id if character else "Unknown Character"
-        print(f"Error in WebSocket for Player {err_player_id} (Character {err_char_id}): {e}")
+        logger.error(f"Error in WebSocket for Player {err_player_id} (Character {err_char_id}): {e}", exc_info=True)
         try:
             await websocket.send_json({"type": "error", "detail": "An unexpected server error occurred."})
-        except Exception: pass 
+        except Exception as send_err: # Catch error during sending error
+            logger.error(f"Failed to send error to WebSocket for Player {err_player_id} (Character {err_char_id}): {send_err}")
     finally:
         if player and player.id: 
             connection_manager.disconnect(player.id) 
@@ -544,4 +583,4 @@ async def websocket_game_endpoint(
                 set_character_resting_status(character.id, False)
         char_id_for_log = character.id if character else "N/A"
         player_id_for_log = player.id if player else "N/A"
-        print(f"WebSocket connection for Player {player_id_for_log} (Character {char_id_for_log}) fully closed.")
+        logger.info(f"WebSocket connection for Player {player_id_for_log} (Character {char_id_for_log}) fully closed.")
