@@ -37,9 +37,14 @@ export function handleWebSocketMessage(serverData) {
                 charVitals.level // Assumes 'level' is present in charVitals
             );
         }
-        if (typeof UI.updateCurrencyDisplay === 'function' && typeof charVitals.gold !== 'undefined') {
+        if (typeof UI.updateCurrencyDisplay === 'function' && charVitals && 
+            (typeof charVitals.platinum !== 'undefined' || 
+             typeof charVitals.gold !== 'undefined' || 
+             typeof charVitals.silver !== 'undefined' || 
+             typeof charVitals.copper !== 'undefined')
+        ) {
             UI.updateCurrencyDisplay(
-                charVitals.platinum, // Added platinum
+                charVitals.platinum,
                 charVitals.gold,
                 charVitals.silver,
                 charVitals.copper

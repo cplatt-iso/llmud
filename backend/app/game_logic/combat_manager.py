@@ -8,19 +8,9 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.db.session import SessionLocal 
 from app import crud, models, schemas 
-from app.websocket_manager import connection_manager as ws_manager
+from app.websocket_manager import connection_manager as ws_manager # Ensure ws_manager is imported
 from app.commands.utils import roll_dice, format_room_mobs_for_player_message, format_room_items_for_player_message 
 from app.game_state import is_character_resting, set_character_resting_status 
-
-_OPPOSITE_DIRECTIONS = {
-    "north": "south", "south": "north",
-    "east": "west", "west": "east",
-    "up": "down", "down": "up",
-    "northeast": "southwest", "southwest": "northeast",
-    "northwest": "southeast", "southeast": "northwest",
-}
-def get_opposite_direction(direction: str) -> str:
-    return _OPPOSITE_DIRECTIONS.get(direction.lower(), "somewhere")
 
 direction_map = {"n": "north", "s": "south", "e": "east", "w": "west", "u": "up", "d": "down"}
 
@@ -311,6 +301,34 @@ async def send_combat_log(
     }
     await ws_manager.send_personal_message(payload, player_id)
 
+async def _broadcast_to_room_participants(
+    db: Session, 
+    room_id: uuid.UUID, 
+    message: str, 
+    exclude_player_id: Optional[uuid.UUID] = None
+):
+    """Broadcasts a message to all connected players in a room, optionally excluding the acting player."""
+    excluded_character_id: Optional[uuid.UUID] = None
+    if exclude_player_id:
+        excluded_character_id = ws_manager.get_character_id(exclude_player_id)
+
+    characters_to_notify = crud.crud_character.get_characters_in_room(
+        db, 
+        room_id=room_id, 
+        exclude_character_id=excluded_character_id
+    )
+    
+    player_ids_to_send_to = [
+        char.player_id for char in characters_to_notify 
+        if ws_manager.is_player_connected(char.player_id)
+    ]
+            
+    if player_ids_to_send_to:
+        await ws_manager.broadcast_to_players(
+            {"type": "game_event", "message": message}, 
+            player_ids_to_send_to
+        )
+
 async def _broadcast_combat_event(db: Session, room_id: uuid.UUID, acting_player_id: uuid.UUID, message: str):
     acting_char_id: Optional[uuid.UUID] = ws_manager.get_character_id(acting_player_id)
     player_ids_to_notify = [
@@ -441,18 +459,34 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
     current_room_id_for_broadcast = character.current_room_id
 
     # --- Player's Action Processing ---
-    if action_str == "flee":
-        if random.random() < 0.5: # Success
-            round_log.append("<span class='combat-success'>You successfully flee from combat!</span>")
-            combat_resolved_this_round = True
-            await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id, 
-                                          f"<span class='char-name'>{character.name}</span> flees from combat!")
-            # TODO: Actual movement logic if flee changes room (currently just ends combat)
-        else: # Fail
-            round_log.append("<span class='combat-miss'>Your attempt to flee fails!</span>")
-            await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
-                                          f"<span class='char-name'>{character.name}</span> tries to flee, but fails!")
+    if action_str and action_str.startswith("flee"):
+        action_parts = action_str.split(" ", 1)
+        # command_verb_from_queue = action_parts[0] # "flee"
+        flee_direction_canonical = action_parts[1] if len(action_parts) > 1 and action_parts[1] else "random"
 
+        if random.random() < 0.6: # 60% chance to flee successfully (adjust as needed)
+            new_room_id, flee_departure_msg, flee_arrival_msg, _ = await _perform_server_side_move(
+                db, character, flee_direction_canonical, player_id
+            )
+
+            if new_room_id:
+                round_log.append(f"<span class='combat-success'>{flee_departure_msg}</span>")
+                if flee_arrival_msg: round_log.append(flee_arrival_msg) # Append arrival to personal log
+                
+                # Character object's current_room_id is updated by _perform_server_side_move
+                # The db.commit() and db.refresh(character) at the end of process_combat_round
+                # will persist this and ensure the final payload uses the new room.
+                combat_resolved_this_round = True # Combat ends for this player due to successful flee
+                # The general combat cleanup logic for combat_resolved_this_round will handle active_combats.pop etc.
+            else:
+                # Flee movement failed (e.g., no exit, tried random but stuck)
+                round_log.append(f"<span class='combat-miss'>You try to flee {flee_direction_canonical if flee_direction_canonical != 'random' else ''}, but there's nowhere to go!</span>")
+                # Combat continues, action consumed.
+        else: # Flee roll failed
+            round_log.append("<span class='combat-miss'>Your attempt to flee fails! You stumble.</span>")
+            await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
+                                          f"<span class='char-name'>{character.name}</span> tries to flee, but stumbles!")
+            # Combat continues, action consumed.
     elif action_str and action_str.startswith("attack"):
         try:
             target_mob_id_str = action_str.split(" ", 1)[1]
@@ -479,18 +513,22 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
                                                   f"<span class='char-name'>{character.name}</span> HITS <span class='inv-item-name'>{mob_template.name}</span> for {damage} damage!")
 
                     updated_mob = crud.crud_mob.update_mob_instance_health(db, mob_instance.id, -damage)
-                    if updated_mob and updated_mob.current_health <= 0:
+                    if updated_mob and updated_mob.current_health <= 0: # Mob Dies
                         round_log.append(f"<span class='combat-death'>The {mob_template.name} DIES! Fucking finally.</span>")
                         await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
                                                       f"The <span class='inv-item-name'>{mob_template.name}</span> DIES!")
                         
-                        crud.crud_mob.despawn_mob_from_room(db, updated_mob.id)
-                        active_combats.get(character_id, set()).discard(updated_mob.id)
-                        mob_targets.pop(updated_mob.id, None)
+                        # Call the centralized handler for XP, loot, despawn, and combat state cleanup
+                        # This will also update the character object if they level up, etc.
+                        character = await _handle_mob_death_loot_and_cleanup(
+                            db, character, updated_mob, round_log, player_id, current_room_id_for_broadcast
+                        )
+                        # The _handle_mob_death_loot_and_cleanup function now handles:
+                        # - XP award and adding messages to round_log
+                        # - Currency drop and adding messages to round_log
+                        # - Despawning the mob (crud.crud_mob.despawn_mob_from_room)
+                        # - Removing mob from active_combats and mob_targets
                         
-                        if mob_template.xp_value > 0:
-                            _, xp_messages = crud.crud_character.add_experience(db, character_id, mob_template.xp_value)
-                            round_log.extend(xp_messages)
                     elif updated_mob:
                         round_log.append(f"  {mob_template.name} HP: <span class='combat-hp'>{updated_mob.current_health}/{mob_template.base_health}</span>.")
                 else: # Player Misses
@@ -597,34 +635,54 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
                 round_log.append(f"  Your HP: <span class='combat-hp'>{character.current_health}/{character.max_health}</span>.")
                 
                 if character.current_health <= 0:
-                    character.current_health = 0 # Clamp at 0 before DB update
-                    # Persist the health change that led to death
-                    crud.crud_character.update_character_health(db, character_id, 0) # Sets to 0
+                    character.current_health = 0 # Ensure health doesn't go negative on the object
+                    
+                    # Persist the death state (health 0) by directly setting and staging
+                    # The crud.crud_character.update_character_health is relative, not absolute.
+                    db.add(character) # Stage the health change to 0
 
                     round_log.append("<span class='combat-death'>YOU HAVE DIED! How utterly predictable.</span>")
-                    if is_character_resting(character.id): set_character_resting_status(character.id, False)
                     await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
                                                   f"<span class='char-name'>{character.name}</span> <span class='combat-death'>HAS DIED!</span>")
-                    combat_resolved_this_round = True
                     
-                    respawn_room_orm = crud.crud_room.get_room_by_coords(db, x=0, y=0, z=0)
+                    combat_resolved_this_round = True # Combat ends for this player
+
+                    # --- Respawn Logic ---
+                    max_health_at_death = character.max_health # Store before potential changes
+
+                    respawn_room_orm = crud.crud_room.get_room_by_coords(db, x=0, y=0, z=0) # Central starting point
                     if respawn_room_orm:
-                        character.current_room_id = respawn_room_orm.id # Update current_room_id on the character object
-                        crud.crud_character.update_character_room(db, character_id=character.id, new_room_id=respawn_room_orm.id)
-                        round_log.append(f"You have been teleported to {respawn_room_orm.name}.")
+                        # Update character's room in DB.
+                        updated_char_after_room_move = crud.crud_character.update_character_room(db, character_id=character.id, new_room_id=respawn_room_orm.id)
+                        if updated_char_after_room_move:
+                            character = updated_char_after_room_move # IMPORTANT: reassign character
+                            round_log.append(f"A mystical force whisks your fading spirit away. You awaken, gasping, in <span class='room-name'>{respawn_room_orm.name}</span>.")
+                        else:
+                            round_log.append("Error: Failed to update character room during respawn. Your soul is lost.")
+                            # active_combats, mob_targets, character_queued_actions are cleaned up by combat_resolved_this_round logic
+                            break # Critical error, stop processing for this player this round
                     else:
-                        round_log.append("Error: Respawn room not found. You are now a very dead, very lost ghost.")
+                        round_log.append("Error: Respawn room (0,0,0) not found. Your soul wanders aimlessly, still dead where you fell.")
+                        # Character remains in the death room. Health is already 0. No further healing.
+                        # active_combats, etc., cleaned up by combat_resolved_this_round logic
+                        break # Stop processing for this player this round
 
-                    # Full heal on respawn (updates character object and DB)
-                    # This sets current_health to max_health
-                    crud.crud_character.update_character_health(db, character.id, character.max_health) 
-                    character.current_health = character.max_health # Ensure local character object reflects this for final vitals payload
-
-                    round_log.append("You feel a faint stirring of life, or maybe it's just indigestion.")
-                    break # Stop other mobs attacking if player died
+                    # Full heal on respawn - directly set current_health to max_health_at_death
+                    character.current_health = max_health_at_death 
+                    db.add(character) # Stage the health change
+                    # The 'character' variable now refers to the ORM object, potentially in the new room, with full health staged.
+                    # The db.commit() and db.refresh(character) at the end of process_combat_round will save and refresh.
+                    round_log.append("You feel a surge of life, your wounds miraculously healed.")
+                    
+                    # Combat state cleanup (active_combats, mob_targets, character_queued_actions)
+                    # will be handled by the general 'if combat_resolved_this_round:' block later.
+                    
+                    break # Stop further mob attacks this round since player died and respawned/healed
                 else:
-                    # If player didn't die, still need to persist their health change from this mob's attack
-                    crud.crud_character.update_character_health(db, character_id, -damage_to_player) # This is a relative change
+                    # If player didn't die from this mob's attack, persist their health change
+                    # crud.crud_character.update_character_health expects a delta.
+                    # Since character.current_health was already reduced, we stage the character object.
+                    db.add(character) # Stage the health change from this mob's attack
             else: # Mob Misses
                 round_log.append(f"<span class='inv-item-name'>{mob_template.name}</span> <span class='combat-miss'>MISSES</span> <span class='char-name'>{character.name}</span>.")
                 await _broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
@@ -632,8 +690,8 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
     
     # --- End of Round Cleanup & Next Action Queuing ---
     if combat_resolved_this_round:
-        active_combats.pop(character_id, None)
-        # Clear any mobs that were targeting this player if combat ended for them
+        active_combats.pop(character_id, None) # Remove character from active combat
+        # Clear any mobs that were targeting this player
         mobs_to_clear_target_for_player = [mid for mid, cid in mob_targets.items() if cid == character_id]
         for mid in mobs_to_clear_target_for_player:
             mob_targets.pop(mid, None)
@@ -673,9 +731,9 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
     # Health changes from player attacks on mobs are handled in crud_mob.update_mob_instance_health
     # XP gains are committed in crud_character.add_experience
     # This commit primarily handles player's mana loss from skills, and health loss from mob attacks if they survived.
-    db.add(character) # Ensure character object with its updated current_health/mana is staged
-    db.commit()       # Commit all DB changes for this round (character, mobs)
-    db.refresh(character) # Refresh character to get any DB-triggered changes (though less likely here)
+    db.add(character) 
+    db.commit()
+    db.refresh(character) # Crucial to get the absolute latest state for the outgoing payload
 
     # --- Send Final Log with Updated Vitals to Player ---
     # Character object should be up-to-date from db.refresh(character) above.
@@ -706,3 +764,72 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
         final_room_schema_for_log,
         character_vitals=final_vitals_payload
     )
+
+async def _perform_server_side_move(
+    db: Session,
+    character: models.Character, # The ORM instance
+    direction_canonical: str,
+    player_id_for_broadcast: uuid.UUID # For broadcasting leave/arrive
+) -> Tuple[Optional[uuid.UUID], str, str, Optional[models.Room]]: # (new_room_id, departure_msg, arrival_msg, new_room_orm)
+    """
+    Attempts to move a character server-side.
+    Updates character's room in DB.
+    Returns (new_room_id, departure_message, arrival_message, new_room_orm_object).
+    Broadcasts departure and arrival.
+    """
+    old_room_id = character.current_room_id
+    current_room_orm = crud.crud_room.get_room_by_id(db, room_id=old_room_id)
+    
+    departure_message = f"You flee {direction_canonical}."
+    arrival_message = "" # Will be constructed
+
+    if not current_room_orm:
+        return None, "You are in a void and cannot move.", "", None
+
+    actual_direction_moved = direction_canonical
+    if direction_canonical == "random":
+        available_exits = [d for d, r_id in (current_room_orm.exits or {}).items() if r_id]
+        if not available_exits:
+            return None, "You look around frantically, but there's no obvious way to flee!", "", None
+        actual_direction_moved = random.choice(available_exits)
+        departure_message = f"You scramble away, fleeing {actual_direction_moved}!"
+
+    target_room_uuid_str = (current_room_orm.exits or {}).get(actual_direction_moved)
+    if not target_room_uuid_str:
+        return None, f"You can't flee {actual_direction_moved} from here.", "", None
+
+    try:
+        target_room_uuid = uuid.UUID(hex=target_room_uuid_str)
+        target_room_orm = crud.crud_room.get_room_by_id(db, room_id=target_room_uuid)
+        if not target_room_orm:
+            return None, f"The path {actual_direction_moved} seems to vanish into nothingness.", "", None
+
+        # Broadcast departure from old room
+        await _broadcast_to_room_participants(db, old_room_id, f"<span class='char-name'>{character.name}</span> flees {actual_direction_moved}.", exclude_player_id=player_id_for_broadcast)
+
+        # Update character's location
+        updated_char = crud.crud_character.update_character_room(db, character_id=character.id, new_room_id=target_room_orm.id)
+        if not updated_char: return None, "A strange force prevents your escape.", "", None
+        
+        # Ensure the character object in the calling scope is updated
+        character.current_room_id = target_room_orm.id 
+        # db.add(character) # Staged for commit by the caller (process_combat_round)
+
+        arrival_message = f"You burst into <span class='room-name'>{target_room_orm.name}</span>."
+        
+        # Broadcast arrival to new room
+        opposite_direction = get_opposite_direction(actual_direction_moved)
+        await _broadcast_to_room_participants(db, target_room_orm.id, f"<span class='char-name'>{character.name}</span> arrives from the {opposite_direction}.", exclude_player_id=player_id_for_broadcast)
+        
+        return target_room_orm.id, departure_message, arrival_message, target_room_orm
+    except ValueError:
+        return None, "The way forward is distorted and unnavigable.", "", None
+
+OPPOSITE_DIRECTIONS_MAP = {
+    "north": "south", "south": "north", "east": "west", "west": "east",
+    "up": "down", "down": "up",
+    "northeast": "southwest", "southwest": "northeast",
+    "northwest": "southeast", "southeast": "northwest"
+}
+def get_opposite_direction(direction: str) -> str:
+    return OPPOSITE_DIRECTIONS_MAP.get(direction.lower(), "somewhere")

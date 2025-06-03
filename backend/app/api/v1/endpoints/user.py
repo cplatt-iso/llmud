@@ -24,34 +24,34 @@ class Token(BaseModel):
 
 @router.post("/login", response_model=Token)
 def login_user_for_access_token(
-    db: Session = Depends(get_db), # Removed *, so Form can be injected
-    form_data: OAuth2PasswordRequestForm = Depends() # <<< USE THIS
+    db: Session = Depends(get_db), 
+    form_data: OAuth2PasswordRequestForm = Depends() 
 ) -> Any:
-    """
-    Authenticate user using OAuth2 password flow and return an access token.
-    Receives username and password as form data.
-    """
-    player = crud.crud_player.get_player_by_username(db, username=form_data.username) # Use form_data.username
-    if not player or not verify_password(form_data.password, player.hashed_password): # type: ignore # Use form_data.password
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
+    try:
+        player = crud.crud_player.get_player_by_username(db, username=form_data.username) 
+        if not player or not verify_password(form_data.password, player.hashed_password): # type: ignore 
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            subject=str(player.id), expires_delta=access_token_expires
         )
-    
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        subject=str(player.id), expires_delta=access_token_expires
-    )
-    return Token(access_token=access_token, token_type="bearer")
+        return Token(access_token=access_token, token_type="bearer")
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal server error during login.")
 
-@router.get("/me", response_model=schemas.Player) # Test endpoint
+@router.get("/me", response_model=schemas.Player) 
 def read_users_me(
-    current_player: models.Player = Depends(get_current_player) # Use the dependency
+    current_player: models.Player = Depends(get_current_player) 
 ) -> Any:
-    """
-    Fetch the current logged in player.
-    """
     return current_player
 
 @router.post("/register", response_model=schemas.Player, status_code=status.HTTP_201_CREATED)
@@ -60,12 +60,18 @@ def register_new_user(
     db: Session = Depends(get_db),
     player_in: schemas.PlayerCreate
 ) -> Any:
-    # ... (existing registration logic) ...
-    existing_player = crud.crud_player.get_player_by_username(db, username=player_in.username)
-    if existing_player:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A player with this username already exists.",
-        )
-    player = crud.crud_player.create_player(db, player_in=player_in)
-    return player
+    try:
+        existing_player = crud.crud_player.get_player_by_username(db, username=player_in.username)
+        if existing_player:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A player with this username already exists.",
+            )
+        player = crud.crud_player.create_player(db, player_in=player_in)
+        return player
+    except HTTPException as http_exc:
+        raise http_exc
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Internal server error during registration.")

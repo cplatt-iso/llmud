@@ -162,12 +162,14 @@ export const UI = {
         if (levelEl) levelEl.textContent = level || "N/A";
     },
 
-    updateCurrencyDisplay: function(gold, silver, copper) {
+    updateCurrencyDisplay: function(platinum, gold, silver, copper) { // Added platinum
         if (!currencyDisplayContainerDiv) return;
+        const platinumEl = currencyDisplayContainerDiv.querySelector('.currency.platinum'); // NEW
         const goldEl = currencyDisplayContainerDiv.querySelector('.currency.gold');
         const silverEl = currencyDisplayContainerDiv.querySelector('.currency.silver');
         const copperEl = currencyDisplayContainerDiv.querySelector('.currency.copper');
 
+        if (platinumEl) platinumEl.textContent = `${platinum || 0}p`; // NEW
         if (goldEl) goldEl.textContent = `${gold || 0}g`;
         if (silverEl) silverEl.textContent = `${silver || 0}s`;
         if (copperEl) copperEl.textContent = `${copper || 0}c`;

@@ -192,14 +192,50 @@ def resolve_mob_target(
     if len(exact_matches) == 1:
         return exact_matches[0], None # Unique exact match
     if len(exact_matches) > 1:
-        # Prefer exact match over partial if multiple exacts (unlikely for unique mob instances)
-        return exact_matches[0], "(Multiple exact name matches found, targeting first.)" 
+        # This case is unlikely if mob names are unique, but handle it.
+        # For simplicity, if multiple exact matches, prompt for ambiguity.
+        prompt_lines = [f"Multiple exact matches for '{target_ref}'. Which did you mean?"]
+        exact_matches.sort(key=lambda m: m.mob_template.name if m.mob_template else "")
+        for i, mob_match in enumerate(exact_matches):
+            mob_name = mob_match.mob_template.name if mob_match.mob_template else "Unknown Mob"
+            prompt_lines.append(f"  {i + 1}. {mob_name} (Exact)")
+        return None, "\n".join(prompt_lines)
 
-    # 3. Try partial name match (prefix, case-insensitive)
+    # 3. Try flexible partial name match (case-insensitive)
     partial_matches: List[models.RoomMobInstance] = []
+    # Use a set to ensure each mob instance is added to partial_matches only once
+    # even if it matches multiple criteria (e.g., prefix and word start).
+    matched_mob_ids_for_partial = set()
+
     for mob_instance in mobs_in_room:
-        if mob_instance.mob_template and mob_instance.mob_template.name.lower().startswith(target_ref_lower):
-            partial_matches.append(mob_instance)
+        if not (mob_instance.mob_template and mob_instance.mob_template.name):
+            continue
+
+        mob_name_lower = mob_instance.mob_template.name.lower()
+        mob_name_words = mob_name_lower.split()
+        
+        matched_this_instance = False
+
+        # Criterion a: Full mob name starts with target_ref_lower (e.g., "gia" for "Giant Rat")
+        if mob_name_lower.startswith(target_ref_lower):
+            matched_this_instance = True
+        
+        # Criterion b: Any word in the mob name starts with target_ref_lower (e.g., "ra" for "Giant Rat")
+        if not matched_this_instance:
+            for word in mob_name_words:
+                if word.startswith(target_ref_lower):
+                    matched_this_instance = True
+                    break
+        
+        # Criterion c: target_ref_lower is an exact match for any word in the mob name (e.g., "rat" for "Giant Rat")
+        if not matched_this_instance:
+            if target_ref_lower in mob_name_words:
+                matched_this_instance = True
+        
+        if matched_this_instance:
+            if mob_instance.id not in matched_mob_ids_for_partial:
+                partial_matches.append(mob_instance)
+                matched_mob_ids_for_partial.add(mob_instance.id)
 
     if len(partial_matches) == 1:
         return partial_matches[0], None # Unique partial match
@@ -207,14 +243,14 @@ def resolve_mob_target(
     if len(partial_matches) > 1:
         # Ambiguous partial match
         prompt_lines = [f"Which '{target_ref}' did you mean?"]
-        # Sort partial_matches by name for consistent numbering, if desired
+        # Sort partial_matches by name for consistent numbering
         partial_matches.sort(key=lambda m: m.mob_template.name if m.mob_template else "")
         for i, mob_match in enumerate(partial_matches):
             mob_name = mob_match.mob_template.name if mob_match.mob_template else "Unknown Mob"
             prompt_lines.append(f"  {i + 1}. {mob_name}")
         return None, "\n".join(prompt_lines)
 
-    # 4. No match found
+    # 4. No match found by any criteria
     return None, f"Cannot find anything called '{target_ref}' here to target."
 
 def format_room_characters_for_player_message(

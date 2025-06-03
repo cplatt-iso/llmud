@@ -1,6 +1,6 @@
 # backend/app/websocket_router.py
 import uuid
-from typing import Optional, Any, Generator, List 
+from typing import Optional, Any, Generator, List, Tuple 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query, status
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
@@ -252,16 +252,58 @@ async def websocket_game_endpoint(
                                     f"<span class='char-name'>{current_char_state.name}</span> sits down to rest."
                                 )
                     
-                    elif verb in movement_verbs:
-                        if current_char_state.id in combat_manager.active_combats:
+                    elif verb in movement_verbs: # e.g., "n", "s", "e", "w", "u", "d", "go"
+                        # Check for combat BEFORE attempting movement
+                        if current_char_state.id in combat_manager.active_combats and combat_manager.active_combats.get(current_char_state.id):
+                            # Fetch current room for context in the message
+                            current_room_for_msg = crud.crud_room.get_room_by_id(db_loop, current_char_state.current_room_id)
+                            room_schema_for_msg = schemas.RoomInDB.from_orm(current_room_for_msg) if current_room_for_msg else None
                             await combat_manager.send_combat_log(
                                 player.id,
-                                ["You are in combat! Use 'flee <optional_direction>' to escape."],
-                                room_data=current_room_schema_for_command
+                                ["You cannot move while in combat! Try 'flee <direction>' or 'flee'."],
+                                room_data=room_schema_for_msg,
+                                transient=True # This is a quick feedback message
                             )
-                        else: # Not in combat, allow normal move
-                            await _handle_websocket_move_if_not_in_combat(db_loop, player, current_char_state, verb, args_str)
+                            continue # Skip movement logic
 
+                        # If "go", parse direction from args_str
+                        direction_to_move_verb = verb 
+                        direction_to_move_args = args_str
+
+                        if verb == "go":
+                            if not args_str:
+                                current_room_for_msg = crud.crud_room.get_room_by_id(db_loop, current_char_state.current_room_id)
+                                room_schema_for_msg = schemas.RoomInDB.from_orm(current_room_for_msg) if current_room_for_msg else None
+                                await combat_manager.send_combat_log(player.id, ["Go where?"], room_data=room_schema_for_msg, transient=True)
+                                continue
+                            # For "go", the verb is "go" and args_str is the direction
+                        
+                        # Player is NOT in combat, proceed with movement
+                        await _handle_websocket_move_if_not_in_combat(
+                            db_loop, player, current_char_state, direction_to_move_verb, direction_to_move_args
+                        )
+                        continue
+                    
+                    elif verb == "flee":
+                        if current_char_state.id in combat_manager.active_combats and combat_manager.active_combats.get(current_char_state.id):
+                            flee_direction_arg = args_str.split(" ", 1)[0].lower() if args_str else "random"
+                            
+                            canonical_flee_dir = "random"
+                            if flee_direction_arg != "random":
+                                canonical_flee_dir = combat_manager.direction_map.get(flee_direction_arg, flee_direction_arg)
+                                if canonical_flee_dir not in combat_manager.direction_map.values():
+                                    current_room_for_msg = crud.crud_room.get_room_by_id(db_loop, current_char_state.current_room_id)
+                                    room_schema_for_msg = schemas.RoomInDB.from_orm(current_room_for_msg) if current_room_for_msg else None
+                                    await combat_manager.send_combat_log(player.id, [f"Invalid flee direction '{flee_direction_arg}'. Try 'flee' or 'flee <direction>'."], room_data=room_schema_for_msg, transient=True)
+                                    continue 
+
+                            combat_manager.character_queued_actions[current_char_state.id] = f"flee {canonical_flee_dir}"
+                            await combat_manager.send_combat_log(player.id, [f"You prepare to flee {canonical_flee_dir if canonical_flee_dir != 'random' else '...'}"]) # No room_data needed, not a room state change yet
+                        else:
+                            current_room_for_msg = crud.crud_room.get_room_by_id(db_loop, current_char_state.current_room_id)
+                            room_schema_for_msg = schemas.RoomInDB.from_orm(current_room_for_msg) if current_room_for_msg else None
+                            await combat_manager.send_combat_log(player.id, ["You are not in combat."], room_data=room_schema_for_msg, transient=True)
+                        continue
                     elif verb in ["attack", "atk", "kill", "k"]:
                         if not args_str: 
                             await combat_manager.send_combat_log(player.id, ["Attack what?"], room_data=current_room_schema_for_command)
@@ -294,115 +336,151 @@ async def websocket_game_endpoint(
                             await combat_manager.send_combat_log(player.id, ["Use what skill? (And on whom/what, if applicable?)"], room_data=current_room_schema_for_command)
                             continue
 
-                        # --- Parsing skill name and potential target ---
+                        args_list = args_str.split() # Define args_list from args_str
+
+                        # Split input into potential skill name part and potential target part
+                        # e.g., "ba giant rat" -> skill_input_part = "ba", potential_target_str = "giant rat"
+                        # e.g., "basic punch" -> skill_input_part = "basic punch", potential_target_str = ""
+                        # e.g., "ba"          -> skill_input_part = "ba", potential_target_str = ""
+                        
+                        # Try to intelligently split skill from target.
+                        # This is a simple approach; more complex parsing might be needed for multi-word skill names AND multi-word targets.
+                        # For now, we assume the first "word(s)" could be the skill, and the rest is the target.
+                        # We'll iterate to find the longest skill name match.
+
                         learned_skill_tags = current_char_state.learned_skills or []
-                        matched_skill_template: Optional[models.SkillTemplate] = None
-                        remaining_args_for_target_str: Optional[str] = None
-                        possible_skill_name_parts = args_str.split()
-                        
-                        # 1. Attempt direct skill_id_tag match first
-                        # (This allows power users to type 'use power_attack_melee some_target')
-                        potential_tag_match = crud.crud_skill.get_skill_template_by_tag(db_loop, skill_id_tag=possible_skill_name_parts[0].lower())
-                        if potential_tag_match and potential_tag_match.skill_id_tag in learned_skill_tags:
-                            matched_skill_template = potential_tag_match
-                            remaining_args_for_target_str = " ".join(possible_skill_name_parts[1:]).strip()
-                        else:
-                            # 2. Try to match player-facing skill names (longest match first)
-                            # Iterate through all learned skills to find the best name match
-                            longest_match_len = 0
-                            for skill_tag_iter in learned_skill_tags:
-                                skill_template_iter = crud.crud_skill.get_skill_template_by_tag(db_loop, skill_id_tag=skill_tag_iter)
-                                if not skill_template_iter: continue
-
-                                skill_name_words = skill_template_iter.name.lower().split()
-                                input_words_lower = [word.lower() for word in possible_skill_name_parts]
-                                current_match_is_prefix = True
-                                if len(input_words_lower) >= len(skill_name_words):
-                                    for i in range(len(skill_name_words)):
-                                        if input_words_lower[i] != skill_name_words[i]:
-                                            current_match_is_prefix = False
-                                            break
-                                    if current_match_is_prefix and len(skill_name_words) > longest_match_len:
-                                        matched_skill_template = skill_template_iter
-                                        longest_match_len = len(skill_name_words)
-                                        remaining_args_for_target_str = " ".join(possible_skill_name_parts[longest_match_len:]).strip()
-                                else: # Input too short to be this skill name
-                                    current_match_is_prefix = False
-                        
-                        if not matched_skill_template:
-                            # Handle unknown or unlearned skill
-                            if potential_tag_match and potential_tag_match.skill_id_tag not in learned_skill_tags:
-                                 await combat_manager.send_combat_log(player.id, [f"You haven't learned the skill '{potential_tag_match.name}'."], room_data=current_room_schema_for_command)
-                            else:
-                                await combat_manager.send_combat_log(player.id, [f"You don't know any skill starting with '{args_str.split(' ')[0]}' or it's not a full skill name you know."], room_data=current_room_schema_for_command)
+                        if not learned_skill_tags:
+                            await combat_manager.send_combat_log(player.id, ["You haven't learned any skills."], room_data=current_room_schema_for_command)
                             continue
-                        # --- End Skill Name Parsing ---
 
-                        # --- Cooldown Check (Placeholder) ---
-                        # if combat_manager.is_skill_on_cooldown(current_char_state.id, matched_skill_template.skill_id_tag):
-                        #    await combat_manager.send_combat_log(player.id, [f"'{matched_skill_template.name}' is still on cooldown."], room_data=current_room_schema_for_command)
-                        #    continue
+                        possible_skill_matches: List[Tuple[models.SkillTemplate, str]] = [] # (SkillTemplate, remaining_args_for_target)
 
-                        target_mob_id_for_skill_queue = "None" # Default for non-targeted skills
-                        target_ref_input_for_skill = remaining_args_for_target_str if remaining_args_for_target_str else None
+                        for i in range(len(args_list), 0, -1): # Try matching 1 word, then 2 words, etc. from args_list for skill name
+                            current_skill_input_part = " ".join(args_list[:i]).lower()
+                            current_potential_target_str = " ".join(args_list[i:]).strip()
 
-                        if matched_skill_template.target_type == "ENEMY_MOB":
-                            resolved_mob_target_for_skill: Optional[models.RoomMobInstance] = None
-                            error_or_prompt_for_target: Optional[str] = None
+                            for skill_tag in learned_skill_tags:
+                                skill_template_db = crud.crud_skill.get_skill_template_by_tag(db_loop, skill_id_tag=skill_tag)
+                                if not skill_template_db:
+                                    continue
+                                
+                                # Match against skill_id_tag OR player-facing name
+                                if skill_template_db.skill_id_tag.lower().startswith(current_skill_input_part) or \
+                                   skill_template_db.name.lower().startswith(current_skill_input_part):
+                                    # Check if this exact skill_template is already found with a shorter target string (prefer longer skill match)
+                                    already_found_better_match = False
+                                    for existing_match, _ in possible_skill_matches:
+                                        if existing_match.id == skill_template_db.id:
+                                            already_found_better_match = True
+                                            break
+                                    if not already_found_better_match:
+                                        possible_skill_matches.append((skill_template_db, current_potential_target_str))
+                            
+                            if possible_skill_matches and len(current_skill_input_part.split()) > 0 : # If we found matches with current_skill_input_part, break to prefer longer skill name matches
+                                break # This prioritizes matching "basic punch" over "basic" if both are typed for "basic punch some target"
 
-                            mobs_in_char_room = crud.crud_mob.get_mobs_in_room(db_loop, room_id=current_char_state.current_room_id)
 
-                            if not mobs_in_char_room:
-                                await combat_manager.send_combat_log(player.id, ["There's no one here to target with that skill."], room_data=current_room_schema_for_command)
-                                continue
+                        selected_skill_template: Optional[models.SkillTemplate] = None
+                        remaining_args_for_target_str: str = ""
 
-                            if target_ref_input_for_skill:
-                                # Player provided an explicit target
-                                resolved_mob_target_for_skill, error_or_prompt_for_target = resolve_mob_target(target_ref_input_for_skill, mobs_in_char_room)
+                        if not possible_skill_matches:
+                            await combat_manager.send_combat_log(player.id, [f"No skill found matching '{args_list[0].lower() if args_list else args_str}'."], room_data=current_room_schema_for_command) # Added check for empty args_list
+                            continue
+                        elif len(possible_skill_matches) == 1:
+                            selected_skill_template = possible_skill_matches[0][0]
+                            remaining_args_for_target_str = possible_skill_matches[0][1]
+                        else: # Multiple partial matches
+                            # Refine matches: if an exact match for skill_input_part exists, prefer it.
+                            exact_match_skill = None
+                            skill_input_first_part_lower = args_list[0].lower() if args_list else "" # Added check for empty args_list
+                            for sm_template, sm_target_args in possible_skill_matches:
+                                if sm_template.name.lower() == skill_input_first_part_lower or sm_template.skill_id_tag.lower() == skill_input_first_part_lower:
+                                    exact_match_skill = sm_template
+                                    remaining_args_for_target_str = sm_target_args
+                                    break
+                            
+                            if exact_match_skill:
+                                selected_skill_template = exact_match_skill
                             else:
-                                # Player did NOT provide a target, try to use current combat target
-                                if current_char_state.id in combat_manager.active_combats and combat_manager.active_combats[current_char_state.id]:
-                                    # Get the first target from their current combat set
-                                    # (Could be more sophisticated, e.g., last attacked target)
-                                    current_combat_target_ids = list(combat_manager.active_combats[current_char_state.id])
-                                    if current_combat_target_ids:
-                                        # Ensure this target is still valid and in the room
-                                        potential_current_target = crud.crud_mob.get_room_mob_instance(db_loop, room_mob_instance_id=current_combat_target_ids[0])
-                                        if potential_current_target and potential_current_target.room_id == current_char_state.current_room_id and potential_current_target.current_health > 0:
-                                            resolved_mob_target_for_skill = potential_current_target
-                                            await combat_manager.send_combat_log(player.id, [f"(Targeting your current combatant: {potential_current_target.mob_template.name})"], room_data=current_room_schema_for_command, transient=True) # Transient message
-                                        else:
-                                            error_or_prompt_for_target = "Your current combat target is no longer valid. Please specify a target."
-                                    else: # In combat but target set is empty (shouldn't happen if active_combats is managed well)
-                                        error_or_prompt_for_target = f"You are in combat, but have no specific target. Who do you want to use '{matched_skill_template.name}' on?"
-                                else: # Not in combat and no target specified for a targeted skill
-                                    error_or_prompt_for_target = f"Who do you want to use '{matched_skill_template.name}' on?"
-                            
-                            if error_or_prompt_for_target:
-                                await combat_manager.send_combat_log(player.id, [error_or_prompt_for_target], room_data=current_room_schema_for_command)
+                                skill_names = list(set([st.name for st, _ in possible_skill_matches])) # Use set to avoid duplicates if tag and name both matched
+                                await combat_manager.send_combat_log(player.id, [f"Multiple skills match. Be more specific: {', '.join(skill_names)}"], room_data=current_room_schema_for_command)
                                 continue
-                            if not resolved_mob_target_for_skill: # Should be caught by error_or_prompt generally
-                                await combat_manager.send_combat_log(player.id, [f"Cannot determine a valid target for {matched_skill_template.name}."], room_data=current_room_schema_for_command)
-                                continue
-                            
-                            # Auto-engage if not already in combat with this specific target
-                            if current_char_state.id not in combat_manager.active_combats or \
-                               resolved_mob_target_for_skill.id not in combat_manager.active_combats.get(current_char_state.id, set()):
-                                await combat_manager.initiate_combat_session(
-                                    db_loop, player.id, current_char_state.id, current_char_state.name, resolved_mob_target_for_skill.id
-                                )
-                            
-                            target_mob_id_for_skill_queue = str(resolved_mob_target_for_skill.id)
                         
+                        # At this point, selected_skill_template is the uniquely matched skill
+                        target_mob_id_for_skill_queue: Optional[str] = "None" 
+                        resolved_mob_target_for_skill: Optional[models.RoomMobInstance] = None
+
+                        if selected_skill_template.target_type in ["ENEMY_MOB", "FRIENDLY_CHAR"]: # Skills requiring a mob/char target
+                            mobs_in_char_room = crud.crud_mob.get_mobs_in_room(db_loop, room_id=current_char_state.current_room_id)
+                            # TODO: Add other players to mobs_in_char_room if target_type can be FRIENDLY_CHAR
+
+                            if remaining_args_for_target_str: # User specified a target string
+                                resolved_mob_target_for_skill, error_or_prompt = resolve_mob_target(remaining_args_for_target_str, mobs_in_char_room)
+                                if error_or_prompt:
+                                    await combat_manager.send_combat_log(player.id, [error_or_prompt], room_data=current_room_schema_for_command)
+                                    continue
+                                if not resolved_mob_target_for_skill:
+                                    await combat_manager.send_combat_log(player.id, [f"Could not find target '{remaining_args_for_target_str}'."], room_data=current_room_schema_for_command)
+                                    continue
+                                target_mob_id_for_skill_queue = str(resolved_mob_target_for_skill.id)
+                            else: # No target specified by user for a skill that needs one
+                                current_combat_targets = combat_manager.active_combats.get(current_char_state.id)
+                                if current_combat_targets: # Character is in combat
+                                    if len(current_combat_targets) == 1:
+                                        implicit_target_id = list(current_combat_targets)[0]
+                                        # Fetch mob instance to check health and for name in prep message
+                                        resolved_mob_target_for_skill = crud.crud_mob.get_room_mob_instance(db_loop, room_mob_instance_id=implicit_target_id) # Changed to get_room_mob_instance
+                                        if resolved_mob_target_for_skill and resolved_mob_target_for_skill.current_health > 0:
+                                            target_mob_id_for_skill_queue = str(implicit_target_id)
+                                        else:
+                                            await combat_manager.send_combat_log(player.id, ["Your current combat target is invalid or already defeated."], room_data=current_room_schema_for_command)
+                                            continue
+                                    else: # In combat with multiple targets
+                                        await combat_manager.send_combat_log(player.id, [f"The skill '{selected_skill_template.name}' requires a target. You are fighting multiple enemies, please specify one."], room_data=current_room_schema_for_command)
+                                        continue
+                                else: # Not in combat, no target specified, skill needs one
+                                    await combat_manager.send_combat_log(player.id, [f"The skill '{selected_skill_template.name}' requires a target. Who do you want to use it on?"], room_data=current_room_schema_for_command)
+                                    continue
+                        
+                        # --- Initiate combat if necessary (out of combat, valid target for skill, skill is offensive) ---
+                        is_offensive_skill = selected_skill_template.skill_type == "COMBAT_ACTIVE" and selected_skill_template.target_type == "ENEMY_MOB" # Add more conditions if needed
+                        
+                        if is_offensive_skill and \
+                           resolved_mob_target_for_skill and \
+                           resolved_mob_target_for_skill.id not in combat_manager.active_combats.get(current_char_state.id, set()):
+                            
+                            await combat_manager.initiate_combat_session(
+                                db_loop, player.id, current_char_state.id, current_char_state.name, resolved_mob_target_for_skill.id
+                            )
+                            # Combat is initiated, the skill will be queued against this target.
+
                         # --- Queue the skill action ---
-                        combat_manager.character_queued_actions[current_char_state.id] = f"use_skill {matched_skill_template.skill_id_tag} {target_mob_id_for_skill_queue}"
+                        combat_manager.character_queued_actions[current_char_state.id] = f"use_skill {selected_skill_template.skill_id_tag} {target_mob_id_for_skill_queue}"
+                        
                         target_name_for_prep_msg = ""
                         if target_mob_id_for_skill_queue != "None":
-                            # Small optimization: if resolved_mob_target_for_skill is already set, use its name
-                            mob_for_name = crud.crud_mob.get_room_mob_instance(db_loop, uuid.UUID(target_mob_id_for_skill_queue))
-                            if mob_for_name: target_name_for_prep_msg = f" on {mob_for_name.mob_template.name}"
+                            # Try to get name from resolved_mob_target_for_skill if it was set (e.g. new target or implicit single combat target)
+                            mob_for_name = resolved_mob_target_for_skill
+                            if not mob_for_name and target_mob_id_for_skill_queue and target_mob_id_for_skill_queue.lower() != "none": # Added check for "none"
+                                try:
+                                    mob_for_name = crud.crud_mob.get_room_mob_instance(db_loop, room_mob_instance_id=uuid.UUID(target_mob_id_for_skill_queue)) # Changed to get_room_mob_instance
+                                except ValueError: # Should not happen if ID is valid UUID string
+                                    pass
+                            if mob_for_name:
+                                target_name_for_prep_msg = f" on <span class='inv-item-name'>{mob_for_name.mob_template.name}</span>"
+                            else: # Fallback if name couldn't be fetched
+                                target_name_for_prep_msg = " on the specified target"
 
-                        await combat_manager.send_combat_log(player.id, [f"You prepare to use {matched_skill_template.name}{target_name_for_prep_msg}."], room_data=current_room_schema_for_command)
+
+                        await combat_manager.send_combat_log(
+                            player.id,
+                            [f"You prepare to use <span class='skill-name'>{selected_skill_template.name}</span>{target_name_for_prep_msg}."],
+                            room_data=current_room_schema_for_command
+                        )
+                        continue # End of 'use' command processing for this message
+                    # Remove or comment out the old 'use_skill' block that started with:
+                    # elif command_verb == "use_skill": 
+                    # (This was likely a direct command from HTTP or an older system)
                     elif verb == "flee":
                         if current_char_state.id in combat_manager.active_combats:
                             flee_direction_arg = args_str.split(" ", 1)[0].lower() if args_str else "random"
@@ -419,8 +497,8 @@ async def websocket_game_endpoint(
                             combat_manager.character_queued_actions[current_char_state.id] = f"flee {canonical_flee_dir}"
                             await combat_manager.send_combat_log(player.id, ["You prepare to flee..."], room_data=current_room_schema_for_command)
                         else:
-                            await combat_manager.send_combat_log(player.id, ["You are not in combat."], room_data=current_room_schema_for_command)
-                    
+                            await combat_manager.send_combat_log(player.id, ["You are not in combat."], room_data=current_room_schema_for_command, transient=True)
+                        continue
                     elif verb in ["look", "l"]: 
                         look_messages = []
                         if current_room_for_command_orm: 
