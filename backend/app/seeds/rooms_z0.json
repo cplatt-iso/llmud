@@ -3,7 +3,7 @@
     "unique_tag": "central_hub_0_0_0",
     "data": {
       "name": "Central Processing Unit (CPU)",
-      "description": "The air hums. Corridors branch off. A sturdy-looking door to the east is currently closed. A faint inscription reads 'Sector 0,0,0'.",
+      "description": "The air hums. Corridors branch off. [DYNAMIC_EXIT_EAST]. A faint inscription reads 'Sector 0,0,0'. This appears to be some kind of nexus or entry point.",
       "x": 0, "y": 0, "z": 0,
       "room_type": "standard",
       "interactables": [
@@ -11,8 +11,6 @@
           "id_tag": "cpu_east_lever",
           "name": "a sturdy metal lever",
           "description": "A heavy metal lever is set into the wall, currently in the 'up' position.",
-          "is_hidden": false,
-          "reveal_dc_perception": null,
           "action_verb": "pull",
           "on_interact_effect": {
             "type": "toggle_exit_lock",
@@ -21,122 +19,452 @@
             "message_success_others": "{character_name} pulls the lever. A distant clunk is heard."
           }
         }
-      ],
-      "exits": {}
-    }
-  },
-  {
-    "unique_tag": "north_corridor_0_1_0",
-    "data": {
-      "name": "North Data Conduit Alpha",
-      "description": "A sterile corridor stretches northwards. Panel N-1. The walls are smooth and featureless for the most part.",
-      "x": 0, "y": 1, "z": 0,
-      "room_type": "standard",
-      "interactables": [
-        {
-          "id_tag": "loose_panel_north_wall",
-          "name": "a slightly loose wall panel",
-          "description": "Upon closer inspection, one of the wall panels seems slightly askew. You could probably pry it open.",
-          "is_hidden": true,
-          "reveal_dc_perception": 15, 
-          "revealed_to_char_ids": [],
-          "action_verb": "pry", 
-          "on_interact_effect": {
-            "type": "custom_event", 
-            "message_success_self": "You pry the loose panel open. Tucked inside, you find a datachip labeled 'Emergency Exit Override Codes - Obsolete'. It crumbles to dust as you touch it.",
-            "message_success_others": "{character_name} pries open a loose wall panel, finding something that quickly turns to dust."
-          }
-        }
-      ],
-      "exits": {}
+      ]
     }
   },
   {
     "unique_tag": "east_storage_1_0_0",
     "data": {
       "name": "Secure Storage Vault Epsilon",
-      "description": "Dust motes dance in the dim light. Shelves line the walls, mostly empty. Panel E-1.",
+      "description": "Dust motes dance in the dim light. Shelves line the walls, mostly empty. Panel E-1. [DYNAMIC_EXIT_WEST]",
       "x": 1, "y": 0, "z": 0,
-      "room_type": "standard",
-      "interactables": [],
-      "exits": {}
+      "room_type": "standard"
     }
   },
   {
-    "unique_tag": "south_corridor_0_-1_0",
+    "unique_tag": "outskirts_gate_0_1_0",
     "data": {
-      "name": "South Maintenance Tunnel 7",
-      "description": "Dimly lit and smelling faintly of burnt coffee. A heavy iron door blocks the way south. Panel S-1.",
-      "x": 0, "y": -1, "z": 0,
-      "room_type": "standard",
-      "interactables": [],
-      "exits": {}
+      "name": "Dilapidated Northern Gate",
+      "description": "A crumbling stone archway marks what might have once been a northern exit from the central complex. The path beyond is overgrown and disappears into a tangle of thorny bushes.",
+      "x": 0, "y": 1, "z": 0,
+      "room_type": "standard"
     }
   },
   {
-    "unique_tag": "deep_archive_0_-2_0",
+    "unique_tag": "beginner_path_0_2_0",
+    "data": {
+      "name": "Overgrown Path",
+      "description": "Thorny bushes and grasping weeds choke this narrow path. The air is damp and smells of decay. Small creatures skitter in the undergrowth.",
+      "x": 0, "y": 2, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "ruined_shack_clearing_0_3_0",
+    "data": {
+      "name": "Ruined Shack Clearing",
+      "description": "The path opens into a small clearing where the remains of a wooden shack slowly rot. A rusty water pump stands askew nearby.",
+      "x": 0, "y": 3, "z": 0,
+      "room_type": "standard",
+      "interactables": [
+        {
+          "id_tag": "shack_pump_handle",
+          "name": "a rusty pump handle",
+          "description": "The handle of the old water pump is stiff but might still move.",
+          "action_verb": "pump",
+          "on_interact_effect": {
+            "type": "custom_event",
+            "message_success_self": "You work the pump handle. After a few groaning protests, a trickle of brackish water sputters out.",
+            "message_success_others": "{character_name} works the pump handle, producing a trickle of murky water."
+          }
+        }
+      ]
+    }
+  },
+  {
+    "unique_tag": "shack_interior_0_4_0",
+    "data": {
+      "name": "Inside Ruined Shack",
+      "description": "The interior of the shack is damp and filled with cobwebs. Most of the roof has caved in, offering a view of the sky. A tattered mat lies in one corner.",
+      "x": 0, "y": 4, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "thorn_thicket_west_m1_3_0",
+    "data": {
+      "name": "Thorny Thicket (West)",
+      "description": "An almost impassable thicket of thorny vines blocks easy passage further west. You can hear buzzing insects.",
+      "x": -1, "y": 3, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "thorn_thicket_east_1_3_0",
+    "data": {
+      "name": "Thorny Thicket (East)",
+      "description": "The thorny vines are particularly dense here, scraping at your clothes as you push through.",
+      "x": 1, "y": 3, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "rat_infested_cellar_1_4_0",
+    "data": {
+      "name": "Rat-Infested Cellar Entrance",
+      "description": "A collapsed section of ground near the eastern thicket reveals a dark opening leading down into what might be a cellar. It stinks of vermin. [DYNAMIC_EXIT_EAST_CELLAR_DOOR]",
+      "x": 1, "y": 4, "z": 0,
+      "room_type": "dungeon_entrance"
+    }
+  },
+  {
+    "unique_tag": "deep_cellar_main_2_4_0",
+    "data": {
+      "name": "Deep Cellar - Main Chamber",
+      "description": "This small, damp cellar chamber is filled with refuse and the gnawed bones of small animals. The air is heavy with the stench of rats.",
+      "x": 2, "y": 4, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "deep_cellar_nest_2_5_0",
+    "data": {
+      "name": "Deep Cellar - Rat Nest",
+      "description": "A particularly rank corner of the cellar, piled high with shredded cloth and filth. This is clearly a nest for something unpleasant.",
+      "x": 2, "y": 5, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "goblin_lookout_0_5_0",
+    "data": {
+      "name": "Goblin Lookout Point",
+      "description": "North of the ruined shack, the path climbs slightly to a rocky outcrop. Crude goblin symbols are daubed on the rocks.",
+      "x": 0, "y": 5, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "goblin_trail_m1_5_0",
+    "data": {
+      "name": "Goblin Trail West",
+      "description": "A crudely marked trail leads west from the lookout, littered with discarded bones and scraps of leather.",
+      "x": -1, "y": 5, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "goblin_camp_m2_5_0",
+    "data": {
+      "name": "Small Goblin Camp",
+      "description": "A small, messy encampment is hidden here, with a poorly tended fire pit and a few crude hide tents. [DYNAMIC_EXIT_WEST_CAVE]",
+      "x": -2, "y": 5, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "goblin_cave_entrance_m3_5_0",
+    "data": {
+      "name": "Goblin Cave Entrance",
+      "description": "A narrow opening in the rocks, reeking of goblin filth, leads into a dark cave.",
+      "x": -3, "y": 5, "z": 0,
+      "room_type": "dungeon_entrance"
+    }
+  },
+  {
+    "unique_tag": "goblin_cave_storage_m3_6_0",
+    "data": {
+      "name": "Goblin Cave - Storage Nook",
+      "description": "This small nook in the cave is piled with stolen junk and rotting food.",
+      "x": -3, "y": 6, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "path_to_woods_0_6_0",
+    "data": {
+      "name": "Path to the Whispering Woods",
+      "description": "The overgrown path continues north from the goblin lookout, gradually becoming overshadowed by larger, darker trees. The air grows cooler.",
+      "x": 0, "y": 6, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "woods_edge_0_7_0",
+    "data": {
+      "name": "Edge of the Whispering Woods",
+      "description": "You stand at the verge of a dark and ancient forest. Twisted trees loom, their branches like skeletal fingers. The sounds of the outskirts fade behind you.",
+      "x": 0, "y": 7, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "woods_gloomy_trail_0_8_0",
+    "data": {
+      "name": "Gloomy Trail",
+      "description": "A barely discernible trail winds deeper into the woods. Sunlight struggles to penetrate the thick canopy above.",
+      "x": 0, "y": 8, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "woods_wolf_den_clearing_m1_8_0",
+    "data": {
+      "name": "Wolf Den Clearing",
+      "description": "The trail opens into a small clearing. The ground is paw-printed, and a low growl emanates from a shadowed cleft in some rocks to the west.",
+      "x": -1, "y": 8, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "wolf_den_cave_m2_8_0",
+    "data": {
+      "name": "Inside the Wolf Den",
+      "description": "A shallow cave, littered with bones and smelling strongly of wet fur. This is undoubtedly a wolf den.",
+      "x": -2, "y": 8, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "woods_ancient_oak_0_9_0",
+    "data": {
+      "name": "Ancient Oak",
+      "description": "A colossal, ancient oak tree dominates this part of the woods. Its gnarled branches are draped with moss, and its roots heave up the earth.",
+      "x": 0, "y": 9, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "woods_spider_lair_1_9_0",
+    "data": {
+      "name": "Spider-Infested Grove",
+      "description": "Thick, sticky webs hang between the trees here, glistening with dew. The silence is broken only by the rustling of something large in the higher branches.",
+      "x": 1, "y": 9, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "woods_broodmother_web_1_10_0",
+    "data": {
+      "name": "Broodmother's Web",
+      "description": "A massive, funnel-shaped web fills a hollow between several large trees. The air is thick with the smell of decay and the chitinous clicking of many legs.",
+      "x": 1, "y": 10, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "woods_hidden_shrine_m1_9_0",
+    "data": {
+      "name": "Hidden Forest Shrine",
+      "description": "Tucked away behind a curtain of ivy to the west of the ancient oak, you find a small, moss-covered stone shrine, seemingly forgotten by time. [DYNAMIC_EXIT_WEST_SHRINE_NICHE]",
+      "x": -1, "y": 9, "z": 0,
+      "room_type": "sanctuary"
+    }
+  },
+  {
+    "unique_tag": "woods_shrine_niche_m2_9_0",
+    "data": {
+      "name": "Shrine Niche",
+      "description": "A small alcove within the hidden shrine. A faint, almost imperceptible humming emanates from the stone.",
+      "x": -2, "y": 9, "z": 0,
+      "room_type": "puzzle"
+    }
+  },
+  {
+    "unique_tag": "woods_path_to_mine_0_10_0",
+    "data": {
+      "name": "Path to the Old Mine",
+      "description": "The trail grows rockier and begins to ascend slightly, heading towards a cliff face visible through the trees to the north.",
+      "x": 0, "y": 10, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "mine_entrance_0_11_0",
+    "data": {
+      "name": "Old Mine Entrance",
+      "description": "A dark, foreboding mine entrance gapes in the cliffside. Rotting timbers support the opening, and the air smells of damp earth and something metallic. [DYNAMIC_EXIT_NORTH_MINE_GATE]",
+      "x": 0, "y": 11, "z": 0,
+      "room_type": "dungeon_entrance"
+    }
+  },
+  {
+    "unique_tag": "mine_entry_tunnel_0_12_0",
+    "data": {
+      "name": "Mine Entry Tunnel",
+      "description": "The tunnel is dark and supported by creaking wooden beams. Water drips from the ceiling, and the sound of skittering echoes from deeper within.",
+      "x": 0, "y": 12, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "mine_foremans_office_m1_12_0",
+    "data": {
+      "name": "Foreman's Office (Ruined)",
+      "description": "A small, caved-in chamber off the main tunnel. A rickety desk and a broken chair are all that remain of what might have been an office.",
+      "x": -1, "y": 12, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "mine_shaft_junction_0_13_0",
+    "data": {
+      "name": "Mine Shaft Junction",
+      "description": "The tunnel opens into a larger area where several mine shafts converge. Most are collapsed, but one leads east, and another continues deeper north.",
+      "x": 0, "y": 13, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "mine_east_vein_1_13_0",
+    "data": {
+      "name": "East Vein Tunnel",
+      "description": "This narrow tunnel follows a vein of some glittering, unfamiliar ore. The air is stale.",
+      "x": 1, "y": 13, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "mine_east_dead_end_2_13_0",
+    "data": {
+      "name": "East Vein - Dead End",
+      "description": "The tunnel ends abruptly in a rockfall. It seems this vein was worked out or abandoned.",
+      "x": 2, "y": 13, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "mine_deep_shaft_0_14_0",
+    "data": {
+      "name": "Deep Mine Shaft",
+      "description": "This shaft descends steeply into darkness. The air is noticeably colder, and an unnerving silence hangs in the air.",
+      "x": 0, "y": 14, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "mine_undead_chamber_0_15_0",
+    "data": {
+      "name": "Undead Miners' Chamber",
+      "description": "This large cavern is littered with broken mining tools and the skeletal remains of miners, still clad in tattered work clothes. A chilling aura pervades the room.",
+      "x": 0, "y": 15, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "bridge_to_sanctum_0_16_0",
+    "data": {
+      "name": "Crumbling Stone Bridge",
+      "description": "North of the deepest part of the mine, a natural chasm is spanned by a dangerously weathered stone bridge. Far below, you can hear the faint sound of rushing water. The air feels charged.",
+      "x": 0, "y": 16, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_gatehouse_0_17_0",
+    "data": {
+      "name": "Sanctum Gatehouse",
+      "description": "Beyond the bridge stands a formidable stone gatehouse, its portcullis rusted shut. Strange symbols are carved above the archway. [DYNAMIC_EXIT_NORTH_SANCTUM_PORTCULLIS]",
+      "x": 0, "y": 17, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_courtyard_0_18_0",
+    "data": {
+      "name": "Corrupted Sanctum Courtyard",
+      "description": "The flagstones of this courtyard are cracked and overgrown with sickly weeds. Defaced statues stand in alcoves, and an oppressive atmosphere hangs heavy.",
+      "x": 0, "y": 18, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_west_wing_m1_18_0",
+    "data": {
+      "name": "Sanctum - West Wing Antechamber",
+      "description": "A once-grand antechamber, now fallen into ruin. Tapestries hang in tatters, and dust coats every surface.",
+      "x": -1, "y": 18, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_library_m2_18_0",
+    "data": {
+      "name": "Sanctum Library (Desecrated)",
+      "description": "Bookshelves line the walls, their contents mostly burned or torn. Pages skitter across the floor in the draft. A large, rune-covered lectern stands in the center. [DYNAMIC_EXIT_WEST_SECRET_PASSAGE]",
+      "x": -2, "y": 18, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_secret_study_m3_18_0",
+    "data": {
+      "name": "Sanctum Secret Study",
+      "description": "A hidden study, remarkably preserved. Books on dark arts and forbidden lore line the shelves. A single, guttering candle illuminates a desk.",
+      "x": -3, "y": 18, "z": 0,
+      "room_type": "puzzle"
+    }
+  },
+  {
+    "unique_tag": "sanctum_east_wing_1_18_0",
+    "data": {
+      "name": "Sanctum - East Wing Hallway",
+      "description": "This hallway echoes with an unsettling silence. Doors leading off it are mostly broken or hanging from single hinges.",
+      "x": 1, "y": 18, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_barracks_1_19_0",
+    "data": {
+      "name": "Sanctum Barracks (Haunted)",
+      "description": "Rotting bunks line the walls of this former barracks. The air is icy cold, and a palpable sense of dread fills the room.",
+      "x": 1, "y": 19, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_main_hall_0_19_0",
+    "data": {
+      "name": "Sanctum Main Hall",
+      "description": "A vast, domed hall that must have once been breathtaking. Now, rubble litters the floor, and ominous shadows dance in the dim light filtering from cracks in the dome.",
+      "x": 0, "y": 19, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_altar_chamber_0_20_0",
+    "data": {
+      "name": "Sanctum Altar Chamber",
+      "description": "At the northernmost end of the sanctum lies a raised dais upon which a massive, dark stone altar stands. The air crackles with a malevolent energy. [DYNAMIC_EXIT_NORTH_ALTAR_BARRIER]",
+      "x": 0, "y": 20, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_inner_sanctum_0_21_0",
+    "data": {
+      "name": "Inner Sanctum",
+      "description": "Beyond the altar, this chamber hums with concentrated dark power. Disturbing runes cover every surface, glowing faintly.",
+      "x": 0, "y": 21, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "south_corridor_0_m1_0",
+    "data": {
+      "name": "South Maintenance Tunnel",
+      "description": "Dimly lit and smelling faintly of burnt coffee. A heavy iron door blocks the way further south. Panel S-1. [DYNAMIC_EXIT_SOUTH_ARCHIVE]",
+      "x": 0, "y": -1, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "deep_archive_0_m2_0",
     "data": {
       "name": "Deep Archive Sector 42",
-      "description": "Ancient, whirring machinery fills this chamber. It feels important. Panel S-2.",
+      "description": "Ancient, whirring machinery fills this chamber. It feels important. Panel S-2. [DYNAMIC_EXIT_NORTH_ARCHIVE]",
       "x": 0, "y": -2, "z": 0,
-      "room_type": "puzzle",
-      "interactables": [],
-      "exits": {}
+      "room_type": "puzzle"
     }
   },
   {
-    "unique_tag": "west_corridor_-1_0_0",
+    "unique_tag": "west_corridor_m1_0_0",
     "data": {
       "name": "West Logic Gate Array",
       "description": "To the west, a series of humming conduits. Panel W-1.",
       "x": -1, "y": 0, "z": 0,
-      "room_type": "standard",
-      "interactables": [],
-      "exits": {}
-    }
-  },
-  {
-    "unique_tag": "nexus_junction_0_2_0",
-    "data": {
-      "name": "Nexus Junction N-2",
-      "description": "A wider intersection of data conduits.",
-      "x": 0, "y": 2, "z": 0,
-      "room_type": "standard",
-      "interactables": [],
-      "exits": {}
-    }
-  },
-  {
-    "unique_tag": "sanctuary_alcove_1_2_0",
-    "data": {
-      "name": "Quiet Reflection Alcove",
-      "description": "A surprisingly calm alcove. Soft light emanates from the walls. You feel a sense of peace here.",
-      "x": 1, "y": 2, "z": 0,
-      "room_type": "sanctuary",
-      "interactables": [],
-      "exits": {}
-    }
-  },
-  {
-    "unique_tag": "shop_node_2_2_0",
-    "data": {
-      "name": "Automated Goods Dispenser Node",
-      "description": "A humming terminal offers various wares for digital currency. A holographic shopkeeper glitches occasionally.",
-      "x": 2, "y": 2, "z": 0,
-      "room_type": "shop",
-      "interactables": [],
-      "exits": {}
-    }
-  },
-  {
-    "unique_tag": "trainer_sim_3_2_0",
-    "data": {
-      "name": "Combat Simulation Pod",
-      "description": "A sleek pod invites users to hone their skills. A sign reads: 'Skill Enhancement Services'.",
-      "x": 3, "y": 2, "z": 0,
-      "room_type": "trainer",
-      "interactables": [],
-      "exits": {}
+      "room_type": "standard"
     }
   }
 ]

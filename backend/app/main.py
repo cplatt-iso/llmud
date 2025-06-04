@@ -69,24 +69,35 @@ app = FastAPI(title=settings.PROJECT_NAME)
 logger.info("--- main.py - FastAPI app instance CREATED ---")
 
 @app.on_event("startup")
-def on_startup_sync(): # Renamed to avoid clash if we make it async later
+def on_startup_sync():
     logger.info("--- main.py - START of on_startup_sync event ---")
     db: Session = next(get_db())
     logger.debug("--- main.py - on_startup_sync: Acquired DB session ---")
     try:
-        logger.info("--- main.py - on_startup_sync: Running startup event: Seeding initial world... ---")
-        seed_initial_world(db)        
-        logger.debug("--- main.py - on_startup_sync: seed_initial_world COMPLETED ---")
-        seed_initial_mob_templates(db)        
-        logger.debug("--- main.py - on_startup_sync: seed_initial_mob_templates COMPLETED ---")
+        logger.info("--- main.py - on_startup_sync: Running startup event: Seeding initial data... ---")
+        
+        # CORRECT ORDER:
+        # 1. Seed items FIRST
         seed_initial_items(db)
         logger.debug("--- main.py - on_startup_sync: seed_initial_items COMPLETED ---")
+
+        # 2. THEN seed the world (rooms/exits), which might place items
+        seed_initial_world(db)        
+        logger.debug("--- main.py - on_startup_sync: seed_initial_world COMPLETED ---")
+        
+        # 3. THEN other things
+        seed_initial_mob_templates(db)        
+        logger.debug("--- main.py - on_startup_sync: seed_initial_mob_templates COMPLETED ---")
+        
         seed_initial_character_class_templates(db)
         logger.debug("--- main.py - on_startup_sync: seed_initial_character_class_templates COMPLETED ---")
+        
         seed_initial_skill_templates(db)
         logger.debug("--- main.py - on_startup_sync: seed_initial_skill_templates COMPLETED ---")
-        seed_initial_trait_templates(db) # Make sure this is imported if you uncomment it
+        
+        seed_initial_trait_templates(db)
         logger.debug("--- main.py - on_startup_sync: seed_initial_trait_templates COMPLETED ---")
+        
         seed_initial_mob_spawn_definitions(db)
         logger.debug("--- main.py - on_startup_sync: seed_initial_mob_spawn_definitions COMPLETED ---")
         

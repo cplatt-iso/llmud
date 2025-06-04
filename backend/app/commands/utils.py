@@ -1,14 +1,19 @@
 # backend/app/commands/utils.py
 import re
+import logging
 from typing import List, Optional, Tuple, Dict
 import uuid
 import random
+from app.schemas.common_structures import ExitDetail
 
 from app import models, schemas
 from app.models.item import EQUIPMENT_SLOTS
 
+logger_utils = logging.getLogger(__name__) 
+
 def get_visible_length(s: str) -> int: # ... content ...
     return len(re.sub(r'<[^>]+>', '', s))
+
 
 def format_room_items_for_player_message(room_items: List[models.RoomItemInstance]) -> Tuple[str, Dict[int, uuid.UUID]]: # ... content ...
     lines = []
@@ -367,3 +372,43 @@ def format_room_characters_for_player_message(
         char_class_html = f"<span class='char-class'>({char_orm.class_name})</span>" # Re-use char-class style
         lines.append(f"  {char_name_html} {char_class_html}")
     return "\n".join(lines)
+
+def get_dynamic_room_description(room_orm: 'models.Room') -> str: # Forward reference for models.Room
+    """
+    Generates a room description by replacing placeholders with dynamic exit statuses.
+    Example placeholder: [DYNAMIC_EXIT_NORTH], [DYNAMIC_EXIT_EAST_DOOR]
+    """
+    # Ensure models.Room is resolvable, or pass room_orm: Any and access attributes directly
+    # This might require: from app import models at the top of utils.py
+    
+    base_description = room_orm.description or "You see nothing remarkable."
+    
+    if not room_orm.exits:
+        return base_description
+
+    processed_description = base_description
+    for direction, exit_data_dict in room_orm.exits.items():
+        if not isinstance(exit_data_dict, dict):
+            continue
+        try:
+            exit_detail = ExitDetail(**exit_data_dict)
+            placeholder = f"[DYNAMIC_EXIT_{direction.upper()}]"
+            
+            status_description = ""
+            if exit_detail.is_locked:
+                status_description = exit_detail.description_when_locked
+            elif exit_detail.description_when_unlocked: 
+                status_description = exit_detail.description_when_unlocked
+            else: 
+                status_description = f"The way {direction} is open." 
+            
+            if placeholder in processed_description:
+                processed_description = processed_description.replace(placeholder, status_description)
+            # else:
+            #     logger_utils.debug(f"Placeholder {placeholder} not in room '{room_orm.name}' desc: '{base_description[:50]}...'")
+                
+        except Exception as e_parse:
+            logger_utils.error(f"Error parsing exit detail for dynamic desc in room '{room_orm.name}', exit '{direction}': {e_parse}", exc_info=True)
+            continue
+            
+    return processed_description

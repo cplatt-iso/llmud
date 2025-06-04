@@ -203,55 +203,94 @@ async def handle_contextual_interactable_action(
     
     effect = interactable.on_interact_effect
     message_to_player = ""
-    room_changed = False
+    # This will be the room data sent back to the player initiating the action.
+    # It should be the data of the room they are currently in.
+    response_room_schema = context.current_room_schema 
+    room_state_changed_for_response = False
 
-    # --- Placeholder for skill/stat checks if interaction requires them ---
-    # e.g., if effect.required_skill_dc: roll skill vs DC
-    # e.g., if effect.required_item_tags: check inventory
 
     if effect.type == "toggle_exit_lock":
         if not effect.target_exit_direction:
             message_to_player = "Error: This interactable's effect is misconfigured (no target direction)."
         else:
+            # Step 1: Identify the lock_id_tag from the CURRENT room's targeted exit
             current_room_orm = context.current_room_orm
-            current_exits_dict = dict(current_room_orm.exits or {}) # Mutable copy
-            target_exit_data_dict = current_exits_dict.get(effect.target_exit_direction)
+            current_room_exits_dict = dict(current_room_orm.exits or {})
+            targeted_exit_in_current_room_data = current_room_exits_dict.get(effect.target_exit_direction)
 
-            if not target_exit_data_dict or not isinstance(target_exit_data_dict, dict):
-                message_to_player = f"Error: The {effect.target_exit_direction} exit is misconfigured or doesn't exist."
+            if not targeted_exit_in_current_room_data or not isinstance(targeted_exit_in_current_room_data, dict):
+                message_to_player = f"Error: The {effect.target_exit_direction} exit in your current room is misconfigured or doesn't exist."
             else:
                 try:
-                    target_exit_detail = ExitDetail(**target_exit_data_dict)
-                    target_exit_detail.is_locked = not target_exit_detail.is_locked # Toggle lock
+                    current_room_exit_detail = ExitDetail(**targeted_exit_in_current_room_data)
+                    lock_to_toggle_id_tag = current_room_exit_detail.lock_id_tag
                     
-                    current_exits_dict[effect.target_exit_direction] = target_exit_detail.model_dump(mode='json')
-                    current_room_orm.exits = current_exits_dict
-                    attributes.flag_modified(current_room_orm, "exits")
-                    context.db.add(current_room_orm)
-                    context.db.commit()
-                    # context.db.refresh(current_room_orm)
-                    room_changed = True
+                    if not lock_to_toggle_id_tag:
+                        message_to_player = f"Error: The {effect.target_exit_direction} exit in your room doesn't have a lock_id_tag to toggle."
+                    else:
+                        # Step 2 & 3: Find ALL rooms and iterate through ALL their exits
+                        all_rooms_in_db = context.db.query(models.Room).all()
+                        rooms_actually_modified_this_action = []
 
-                    message_to_player = (effect.message_success_self or "You interact with it.").format(character_name=context.active_character.name)
-                    
-                    # Broadcast to room
-                    broadcast_msg_text = (effect.message_success_others or f"{{character_name}} interacts with {interactable.name}.").format(character_name=context.active_character.name)
-                    player_ids_in_room = [
-                        char.player_id for char in crud.crud_character.get_characters_in_room(
-                            context.db, room_id=current_room_orm.id, exclude_character_id=context.active_character.id
-                        ) if connection_manager.is_player_connected(char.player_id)
-                    ]
-                    if player_ids_in_room:
-                        await connection_manager.broadcast_to_players({"type": "game_event", "message": broadcast_msg_text}, player_ids_in_room)
+                        for room_orm_to_check in all_rooms_in_db:
+                            room_exits_dict_to_check = dict(room_orm_to_check.exits or {})
+                            an_exit_in_this_room_was_modified = False
 
-                except Exception as e_parse_exit:
-                    message_to_player = f"Error processing exit data for {effect.target_exit_direction}: {e_parse_exit}"
-                    print(f"ERROR parsing target exit for interactable: {e_parse_exit}, Data: {target_exit_data_dict}")
+                            for direction, exit_data_dict_to_check in room_exits_dict_to_check.items():
+                                if isinstance(exit_data_dict_to_check, dict):
+                                    try:
+                                        exit_detail_to_check = ExitDetail(**exit_data_dict_to_check)
+                                        if exit_detail_to_check.lock_id_tag == lock_to_toggle_id_tag:
+                                            # Found a matching lock_id_tag, toggle it
+                                            exit_detail_to_check.is_locked = not exit_detail_to_check.is_locked
+                                            room_exits_dict_to_check[direction] = exit_detail_to_check.model_dump(mode='json')
+                                            an_exit_in_this_room_was_modified = True
+                                    except Exception as e_parse_other_exit:
+                                        # Log this, but don't necessarily stop the whole process
+                                        # logger.error(f"Error parsing exit data in room {room_orm_to_check.name} ({room_orm_to_check.id}) for exit {direction}: {e_parse_other_exit}")
+                                        print(f"ERROR (interaction_parser): Parsing exit {direction} in room {room_orm_to_check.name}: {e_parse_other_exit}")
+
+
+                            if an_exit_in_this_room_was_modified:
+                                room_orm_to_check.exits = room_exits_dict_to_check
+                                attributes.flag_modified(room_orm_to_check, "exits")
+                                context.db.add(room_orm_to_check)
+                                rooms_actually_modified_this_action.append(room_orm_to_check)
+                        
+                        if rooms_actually_modified_this_action:
+                            context.db.commit()
+                            # Refresh the current room ORM if it was among those modified,
+                            # to ensure the response_room_schema is up-to-date.
+                            if current_room_orm in rooms_actually_modified_this_action:
+                                context.db.refresh(current_room_orm)
+                            
+                            response_room_schema = schemas.RoomInDB.from_orm(current_room_orm) # Update with potentially changed current room
+                            room_state_changed_for_response = True
+
+                            message_to_player = (effect.message_success_self or "You interact with it.").format(character_name=context.active_character.name)
+                            broadcast_msg_text = (effect.message_success_others or f"{{character_name}} interacts with {interactable.name}.").format(character_name=context.active_character.name)
+                            
+                            # Optimized broadcast: only broadcast to players in *affected* rooms if they are different from current.
+                            # For simplicity now, just broadcasting to current room.
+                            # A more advanced system could collect all affected room_ids and broadcast to them.
+                            player_ids_in_current_room = [
+                                char.player_id for char in crud.crud_character.get_characters_in_room(
+                                    context.db, room_id=current_room_orm.id, exclude_character_id=context.active_character.id
+                                ) if connection_manager.is_player_connected(char.player_id)
+                            ]
+                            if player_ids_in_current_room:
+                                await connection_manager.broadcast_to_players({"type": "game_event", "message": broadcast_msg_text}, player_ids_in_current_room)
+                        else:
+                            message_to_player = f"You interact with the {interactable.name}, but it seems disconnected or already in the desired state."
+
+                except Exception as e_parse_current_exit:
+                    message_to_player = f"Error processing the {effect.target_exit_direction} exit in your room: {e_parse_current_exit}"
+                    print(f"ERROR (interaction_parser): Parsing current room's target exit for interactable: {e_parse_current_exit}")
     
-    elif effect.type == "custom_event": # Like our "pry panel"
+    elif effect.type == "custom_event":
         message_to_player = (effect.message_success_self or f"You {interactable.action_verb} the {interactable.name}.").format(character_name=context.active_character.name)
         broadcast_msg_text = (effect.message_success_others or f"{{character_name}} {interactable.action_verb}s the {interactable.name}.").format(character_name=context.active_character.name)
-        # Broadcast if needed
+        
         player_ids_in_room = [
             char.player_id for char in crud.crud_character.get_characters_in_room(
                 context.db, room_id=context.current_room_orm.id, exclude_character_id=context.active_character.id
@@ -259,13 +298,15 @@ async def handle_contextual_interactable_action(
         ]
         if player_ids_in_room and broadcast_msg_text:
             await connection_manager.broadcast_to_players({"type": "game_event", "message": broadcast_msg_text}, player_ids_in_room)
-        # Potentially update interactable's state if it's stateful
-        # current_room_orm may need update if interactable state change is persisted
+        
+        # If this custom event changes room state (e.g. description, interactable visibility)
+        # then response_room_schema should be updated and room_state_changed_for_response set to True.
+        # For now, assume no state change for generic custom_event unless explicitly handled.
 
-    else:
+    else: # Default fallback for other/unhandled effect types
         message_to_player = (effect.message_fail_self or "Nothing interesting happens.").format(character_name=context.active_character.name)
 
     return schemas.CommandResponse(
-        room_data=schemas.RoomInDB.from_orm(context.current_room_orm) if room_changed else context.current_room_schema,
+        room_data=response_room_schema, # This will be the (potentially refreshed) current room's schema
         message_to_player=message_to_player
     )

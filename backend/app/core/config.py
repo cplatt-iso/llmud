@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7 # Token expires in 7 days
 
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper() # Default to INFO
+    SHOW_COMBAT_ROLLS_TO_PLAYER: bool = os.getenv("SHOW_COMBAT_ROLLS_TO_PLAYER", "True").lower() == "true"
+
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding='utf-8', extra='ignore')
 

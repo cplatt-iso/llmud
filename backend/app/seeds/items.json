@@ -1,0 +1,107 @@
+[
+  {
+    "name": "Rusty Sword",
+    "description": "A short sword, pitted with rust. Better than nothing.",
+    "item_type": "weapon",
+    "slot": "main_hand",
+    "properties": {
+      "damage": "1d6",
+      "damage_type": "slashing",
+      "weapon_type": "sword"
+    },
+    "weight": 3.0,
+    "value": 5,
+    "stackable": false,
+    "max_stack_size": 1
+  },
+  {
+    "name": "Cloth Tunic",
+    "description": "Simple, patched-up clothing.",
+    "item_type": "armor",
+    "slot": "torso",
+    "properties": {
+      "armor_class_bonus": 1
+    },
+    "weight": 1.0,
+    "value": 2,
+    "stackable": false,
+    "max_stack_size": 1
+  },
+  {
+    "name": "Wooden Shield",
+    "description": "A basic round wooden shield.",
+    "item_type": "armor",
+    "slot": "off_hand",
+    "properties": {
+      "armor_class_bonus": 2,
+      "item_subtype": "shield"
+    },
+    "weight": 5.0,
+    "value": 8,
+    "stackable": false,
+    "max_stack_size": 1
+  },
+  {
+    "name": "Dagger",
+    "description": "A small, easily concealable dagger.",
+    "item_type": "weapon",
+    "slot": "main_hand",
+    "properties": {
+      "damage": "1d4",
+      "damage_type": "piercing",
+      "weapon_type": "dagger",
+      "finesse": true
+    },
+    "weight": 1.0,
+    "value": 2,
+    "stackable": false,
+    "max_stack_size": 1
+  },
+  {
+    "name": "Archive Key Alpha",
+    "description": "A small, intricately carved metal key. Sector 42.",
+    "item_type": "key",
+    "slot": null,
+    "properties": {
+      "item_tag": "archive_key_alpha"
+    },
+    "weight": 0.1,
+    "value": 0,
+    "stackable": false,
+    "max_stack_size": 1
+  },
+  {
+    "name": "Basic Healing Draught",
+    "description": "A common herbal brew that knits minor wounds.",
+    "item_type": "potion",
+    "slot": "consumable",
+    "properties": {
+        "effect_type": "heal_direct",
+        "heal_amount_dice": "2d4",
+        "heal_amount_bonus": 2,
+        "cooldown_group": "potion",
+        "cooldown_seconds": 30
+    },
+    "weight": 0.5,
+    "value": 25,
+    "stackable": true,
+    "max_stack_size": 5
+  },
+  {
+    "name": "Lockpicks",
+    "description": "A set of fine tools for bypassing simple locks.",
+    "item_type": "tool",
+    "slot": null,
+    "properties": {
+        "item_tag": "basic_lockpicks",
+        "provides_skill_bonus": {
+            "skill_id_tag": "pick_lock_basic",
+            "bonus_amount": 2 
+        }
+    },
+    "weight": 0.2,
+    "value": 50,
+    "stackable": false,
+    "max_stack_size": 1
+  }
+]

@@ -1,10 +1,12 @@
 #!/bin/bash
 
 # Script to bundle specified project files into a single output file for context.
+# It first lists all relevant project files, then bundles a core subset.
 # Run this script from the root of your 'mud_project' directory.
 
 OUTPUT_FILE="project_context_bundle.txt"
-BASE_DIR="backend/app" # Base directory for most of our files
+BACKEND_APP_DIR="backend/app"
+FRONTEND_SRC_DIR="frontend/src"
 
 # Clear the output file if it already exists
 > "$OUTPUT_FILE"
@@ -13,115 +15,83 @@ echo "--- SCRIPT START --- Creating bundle: $OUTPUT_FILE ---" >> "$OUTPUT_FILE"
 echo "Timestamp: $(date)" >> "$OUTPUT_FILE"
 echo "" >> "$OUTPUT_FILE"
 
-# List of files to include in the bundle.
-# Paths are relative to where the script is run (mud_project root).
-FILES_TO_BUNDLE=(
-    # --- Core Application & Configuration ---
-    "$BASE_DIR/main.py"                     # App setup, startup events (tickers, seeders)
-    "$BASE_DIR/core/config.py"              # Settings, API_V1_STR
-    "$BASE_DIR/core/security.py"            # JWT creation, password hashing
-    "$BASE_DIR/db/session.py"               # DB Session setup, get_db
-    "$BASE_DIR/db/base_class.py"            # SQLAlchemy Base
+# --- LLM Instruction ---
+echo "# --- LLM INSTRUCTION ---" >> "$OUTPUT_FILE"
+echo "# The following is a list of all potentially relevant files in the project." >> "$OUTPUT_FILE"
+echo "# Below this list, a small core set of files has been bundled for initial context." >> "$OUTPUT_FILE"
+echo "# If you need to see the content of any other file from the list to answer a question accurately," >> "$OUTPUT_FILE"
+echo "# please ask for it specifically by its full path as listed." >> "$OUTPUT_FILE"
+echo "# --- END LLM INSTRUCTION ---" >> "$OUTPUT_FILE"
+echo "" >> "$OUTPUT_FILE"
 
-    # --- WebSocket & Real-time Logic ---
-    "$BASE_DIR/websocket_router.py"         # Main WebSocket endpoint, message handling
-    "$BASE_DIR/websocket_manager.py"        # Manages WebSocket connections & broadcasting
+# --- List of All Project Files ---
+echo "--- LIST OF ALL PROJECT FILES ---" >> "$OUTPUT_FILE"
+(
+    # List the script itself
+    echo "bundle_context.sh";
 
-    # --- Game Logic (Tickers, Managers, AI) ---
-    "$BASE_DIR/game_logic/combat_manager.py" # Server-side combat loop, state, round processing
-    "$BASE_DIR/game_logic/world_ticker.py"   # World tick loop and task registration
-    "$BASE_DIR/game_logic/mob_respawner.py"  # Mob respawn task logic
-    "$BASE_DIR/game_logic/mob_ai_ticker.py"  # Mob roaming and aggression logic
-    "$BASE_DIR/game_logic/player_vital_regenerator.py" # Player HP/MP regen
+    # List backend files (Python and JSON, excluding pycache)
+    if [ -d "$BACKEND_APP_DIR" ]; then
+        find "$BACKEND_APP_DIR" -type f \( -name "*.py" -o -name "*.json" \) -not -path "*/__pycache__/*" -not -name "*.pyc";
+    fi;
 
-    # --- Command System ---
-    "$BASE_DIR/commands/command_args.py"    # CommandContext Pydantic model
-    "$BASE_DIR/commands/utils.py"           # Shared utilities (formatters, roll_dice, resolve_mob_target)
-    "$BASE_DIR/commands/movement_parser.py" # 'look', movement, broadcasts movement
-    "$BASE_DIR/commands/inventory_parser.py"# 'inventory', 'equip', etc.
-    "$BASE_DIR/commands/social_parser.py"   # 'say', 'emote', 'fart', 'ooc'
-    "$BASE_DIR/commands/meta_parser.py"     # 'help', 'score', 'skills', 'traits'
-    "$BASE_DIR/commands/debug_parser.py"    # Debug commands including currency
-    "$BASE_DIR/api/v1/endpoints/command.py" # HTTP command dispatcher
+    # List frontend files (JS, HTML, CSS, JSON)
+    if [ -d "$FRONTEND_SRC_DIR" ]; then
+        find "$FRONTEND_SRC_DIR" -type f \( -name "*.js" -o -name "*.html" -o -name "*.css" -o -name "*.json" \);
+    fi
+) | sort >> "$OUTPUT_FILE"
+echo "--- END OF FILE LIST ---" >> "$OUTPUT_FILE"
+echo "" >> "$OUTPUT_FILE"
 
-    # --- Models (Ensure all are present) ---
-    "$BASE_DIR/models/__init__.py"
-    "$BASE_DIR/models/player.py"
-    "$BASE_DIR/models/character.py" # Includes currency
-    "$BASE_DIR/models/character_class_template.py"
-    "$BASE_DIR/models/skill_template.py"
-    "$BASE_DIR/models/trait_template.py"
-    "$BASE_DIR/models/item.py"
-    "$BASE_DIR/models/character_inventory_item.py"
-    "$BASE_DIR/models/room_item_instance.py"
-    "$BASE_DIR/models/mob_template.py" # Includes currency_drop, aggression_type
-    "$BASE_DIR/models/room_mob_instance.py" # Includes ai_state (commented out), relationship to spawn_def
-    "$BASE_DIR/models/mob_spawn_definition.py" # Includes roaming_behavior
-    "$BASE_DIR/models/room.py" # Exits can be complex JSON for locked doors later
 
-    # --- Schemas (Ensure all are present) ---
-    "$BASE_DIR/schemas/__init__.py"
-    "$BASE_DIR/schemas/player.py"
-    "$BASE_DIR/schemas/character.py" # Includes currency
-    "$BASE_DIR/schemas/character_class_template.py"
-    "$BASE_DIR/schemas/skill.py"
-    "$BASE_DIR/schemas/trait.py"
-    "$BASE_DIR/schemas/item.py" # Includes CharacterInventoryDisplay with currency
-    "$BASE_DIR/schemas/room_item.py"
-    "$BASE_DIR/schemas/mob.py" # Includes currency_drop in MobTemplate schemas
-    "$BASE_DIR/schemas/mob_spawn_definition.py"
-    "$BASE_DIR/schemas/room.py"
-    "$BASE_DIR/schemas/map.py"
-    "$BASE_DIR/schemas/command.py"
-    "$BASE_DIR/schemas/token.py"
+# --- Core Files to Bundle ---
+# Define a smaller set of core files to include in the bundle.
+# Adjust this list as needed to provide essential starting context.
+CORE_FILES_TO_BUNDLE=(
+    "bundle_context.sh"  # Include the script itself for context on the bundling process
 
-    # --- CRUD Operations (Ensure all are present) ---
-    "$BASE_DIR/crud/__init__.py"
-    "$BASE_DIR/crud/crud_player.py"
-    "$BASE_DIR/crud/crud_character.py" # Includes update_character_currency
-    "$BASE_DIR/crud/crud_character_class.py"
-    "$BASE_DIR/crud/crud_skill.py"
-    "$BASE_DIR/crud/crud_trait.py"
-    "$BASE_DIR/crud/crud_item.py"
-    "$BASE_DIR/crud/crud_character_inventory.py"
-    "$BASE_DIR/crud/crud_room_item.py"
-    "$BASE_DIR/crud/crud_mob.py" # Includes seeding currency_drop
-    "$BASE_DIR/crud/crud_mob_spawn_definition.py" # Includes seeding roaming_behavior
-    "$BASE_DIR/crud/crud_room.py"
+    # Backend - Core application & setup
+    "$BACKEND_APP_DIR/main.py"
+    "$BACKEND_APP_DIR/core/config.py"
+    "$BACKEND_APP_DIR/websocket_router.py"
 
-    # --- API Endpoints & Dependencies (Ensure all are present) ---
-    "$BASE_DIR/api/dependencies.py"
-    "$BASE_DIR/api/v1/api_router.py"
-    "$BASE_DIR/api/v1/endpoints/users.py"
-    "$BASE_DIR/api/v1/endpoints/character.py"
-    "$BASE_DIR/api/v1/endpoints/character_class.py" # For listing classes
-    "$BASE_DIR/api/v1/endpoints/map.py"
-    "$BASE_DIR/api/v1/endpoints/inventory.py" # Assuming this exists for inventory related HTTP if any
+    # Seed examples
+    "$BACKEND_APP_DIR/seeds/exits_z0.json"
+    "$BACKEND_APP_DIR/seeds/rooms_z0.json"
 
-    # --- Frontend (Refactored JS modules) ---
-    "$FRONTEND_DIR/src/index.html"       # Main HTML structure
-    "$FRONTEND_DIR/src/main.js"          # Main orchestrator, event handling
-    "$FRONTEND_DIR/src/ui.js"            # UI DOM manipulation
-    "$FRONTEND_DIR/src/api.js"           # HTTP API calls
-    "$FRONTEND_DIR/src/websocket.js"     # WebSocket service
-    "$FRONTEND_DIR/src/map.js"           # Map display logic
-    "$FRONTEND_DIR/src/state.js"         # Global state, localStorage
-    "$FRONTEND_DIR/src/config.js"        # Frontend config (URLs, constants)
+    # Backend - Key game logic (example)
+    "$BACKEND_APP_DIR/game_logic/combat/combat_round_processor.py"
+    "$BACKEND_APP_DIR/game_logic/combat/skill_resolver.py" # Example of another key file
+
+    # Backend - Key models (example)
+    "$BACKEND_APP_DIR/models/character.py"
+    "$BACKEND_APP_DIR/models/room.py"
+
+    # Backend - Key CRUD (example)
+    "$BACKEND_APP_DIR/crud/crud_room.py"
+
+    # Frontend - Main entry point (example, if it exists)
+    "$FRONTEND_SRC_DIR/main.js"
+    "$FRONTEND_SRC_DIR/websocket.js"
 )
-for FILE_PATH in "${FILES_TO_BUNDLE[@]}"; do
+
+echo "--- START OF CORE BUNDLED FILES ---" >> "$OUTPUT_FILE"
+for FILE_PATH in "${CORE_FILES_TO_BUNDLE[@]}"; do
     if [ -f "$FILE_PATH" ]; then
+        echo "" >> "$OUTPUT_FILE"
         echo "--- START OF FILE $FILE_PATH ---" >> "$OUTPUT_FILE"
         cat "$FILE_PATH" >> "$OUTPUT_FILE"
         echo "" >> "$OUTPUT_FILE" # Add a newline for readability
         echo "--- END OF FILE $FILE_PATH ---" >> "$OUTPUT_FILE"
-        echo "" >> "$OUTPUT_FILE" # Add a blank line between files
-        echo "Bundled: $FILE_PATH"
+        echo "Bundled core file: $FILE_PATH"
     else
-        echo "--- FILE NOT FOUND: $FILE_PATH ---" >> "$OUTPUT_FILE"
         echo "" >> "$OUTPUT_FILE"
-        echo "Warning: File not found - $FILE_PATH"
+        echo "--- CORE FILE NOT FOUND: $FILE_PATH ---" >> "$OUTPUT_FILE"
+        echo "Warning: Core file not found - $FILE_PATH"
     fi
 done
+echo "--- END OF CORE BUNDLED FILES ---" >> "$OUTPUT_FILE"
+echo "" >> "$OUTPUT_FILE"
 
 echo "--- SCRIPT END --- Bundle complete: $OUTPUT_FILE ---" >> "$OUTPUT_FILE"
 echo "Bundle created: $OUTPUT_FILE"

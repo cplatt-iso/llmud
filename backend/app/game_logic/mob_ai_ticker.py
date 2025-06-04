@@ -126,7 +126,7 @@ async def process_aggressive_mobs_task(db: Session):
         joinedload(models.RoomMobInstance.mob_template),
         joinedload(models.RoomMobInstance.room)
     ).filter(
-        models.RoomMobInstance.mob_template.has(models.MobTemplate.aggression_type == "AGGRESSIVE_ON_SIGHT"),
+        # models.RoomMobInstance.mob_template.has(models.MobTemplate.aggression_type == "AGGRESSIVE_ON_SIGHT"),
         models.RoomMobInstance.current_health > 0 
     ).all()
 
