@@ -22,20 +22,17 @@
         .char-class-desc {
             font-style: italic;
             color: #999;
-            /* Or your preferred color */
         }
 
         .header-text {
             text-align: center;
             margin-bottom: 20px;
-            /* Increased space a bit */
         }
 
         .header-text h1 {
             margin: 0 0 5px 0;
             font-size: 1.8em;
             line-height: 1.2;
-            /* Adjusted for multi-line title */
         }
 
         .header-text p {
@@ -44,44 +41,27 @@
             color: #00cc00;
         }
 
-        /* NEW WRAPPER FOR MUD AND MAP */
         .game-area-wrapper {
             display: flex;
             flex-direction: row;
             align-items: flex-start;
             width: 100%;
-            /* Allow it to take full width if needed */
             max-width: 1200px;
-            /* Example: MUD (900) + Map (250) + Spacing (50) */
-            /* margin: 0 auto; /* Uncomment to center the whole game area if body isn't doing it */
         }
 
         .mud-container {
             position: relative;
-            /* Needed for absolute positioning of the copy button */
-            /* flex-grow: 1; /* Allow mud-container to take up remaining space if map has fixed width */
-            /* Or set a specific width/max-width */
             width: 100%;
             max-width: 900px;
             display: flex;
             flex-direction: column;
             border: 1px solid #005500;
-            /* position: relative; /* No longer needed for map */
         }
 
         #copy-output-button {
             position: absolute;
-            /* top: 36px; */ /* Adjust this value if needed after testing */
-            /* A more precise calculation:
-               #character-info-bar has padding: 6px top/bottom, border-bottom: 1px.
-               Assuming font-size 0.9em leads to a line height of ~17px.
-               Total height ~ 6 + 17 + 6 + 1 = 30px.
-               Let's place the button 5px below that.
-            */
             top: 35px;
-            /* Position from the top of mud-container */
             right: 5px;
-            /* Position from the right of mud-container */
             padding: 8px 12px;
             background-color: #333;
             color: #0f0;
@@ -91,21 +71,14 @@
             font-family: 'Consolas', 'Monaco', monospace;
             font-size: 0.9em;
             z-index: 100;
-            /* Ensure it's above other elements if necessary */
         }
 
-        #copy-output-button:hover {
-            background-color: #444;
-        }
-
-        #copy-output-button:active {
-            background-color: #222;
-        }
+        #copy-output-button:hover { background-color: #444; }
+        #copy-output-button:active { background-color: #222; }
 
         .terminal-output {
             flex-grow: 1;
             height: 70vh;
-            /* Adjusted viewport height slightly */
             overflow-y: scroll;
             background-color: #030303;
             padding: 10px;
@@ -114,20 +87,12 @@
             line-height: 1.4;
             border-bottom: 1px solid #005500;
             display: flex;
-            flex-direction: column-reverse;
-            overflow-y: auto;
+            flex-direction: column-reverse; /* Keep for scrolling from bottom */
+        }
+         /* Ensure individual lines/messages added to terminal output allow normal flow */
+        .terminal-output > div {     
         }
 
-        .exits-bar {
-            background-color: #050505;
-            padding: 5px 10px;
-            color: #00ffff;
-            font-size: 0.9em;
-            border-bottom: 1px solid #005500;
-            min-height: 1.5em;
-            white-space: nowrap;
-            overflow-x: auto;
-        }
 
         .terminal-input-line {
             display: flex;
@@ -154,39 +119,17 @@
             padding: 0;
         }
 
-        /* Scrollbar styling for terminal-output */
-        .terminal-output::-webkit-scrollbar {
-            width: 10px;
-            height: 10px;
-        }
-
-        .terminal-output::-webkit-scrollbar-track {
-            background: #080808;
-        }
-
-        .terminal-output::-webkit-scrollbar-thumb {
-            background-color: #005500;
-            border-radius: 5px;
-            border: 2px solid #030303;
-        }
-
-        .terminal-output::-webkit-scrollbar-thumb:hover {
-            background-color: #007700;
-        }
-
-        .terminal-output::-webkit-scrollbar-corner {
-            background: #030303;
-        }
+        .terminal-output::-webkit-scrollbar { width: 10px; height: 10px; }
+        .terminal-output::-webkit-scrollbar-track { background: #080808; }
+        .terminal-output::-webkit-scrollbar-thumb { background-color: #005500; border-radius: 5px; border: 2px solid #030303; }
+        .terminal-output::-webkit-scrollbar-thumb:hover { background-color: #007700; }
+        .terminal-output::-webkit-scrollbar-corner { background: #030303; }
 
         #vitals-monitor {
             display: none;
-            /* Remains hidden initially */
             flex-direction: row;
-            /* <<< CHANGE TO ROW for single line */
             justify-content: space-around;
-            /* <<< EVENLY SPACE THE BARS */
             align-items: center;
-            /* Align items vertically in the center of the row */
             padding: 5px 8px;
             background-color: #1a1a1a;
             border-bottom: 1px solid #333;
@@ -194,338 +137,160 @@
             font-size: 0.9em;
             margin-bottom: 5px;
             height: auto;
-            /* Let content determine height, or set a fixed height if preferred */
         }
 
         .vital-bar-container {
             display: flex;
             align-items: center;
-            /* margin-bottom: 3px; <<< REMOVE, no longer needed for vertical stacking */
-            flex-basis: 30%;
-            /* <<< Give each bar container a basis, adjust for desired spacing/width */
-            /* For 3 items, ~30-32% each allows for some spacing. */
-            /* Or use flex-grow: 1; if you want them to expand to fill available space from space-around */
             flex-grow: 1;
-            /* <<< Let them grow to fill space given by space-around */
             margin-right: 10px;
-            /* Space between bars if not using space-around effectively */
+        }
+        .vital-bar-container:last-child { margin-right: 0; }
+        .vital-label { color: #bbb; margin-right: 5px; font-size: 0.85em; }
+        .vital-bar-outer { flex-grow: 1; height: 16px; background-color: #333; border: 1px solid #555; border-radius: 3px; position: relative; overflow: hidden; }
+        .vital-bar-inner { height: 100%; transition: width 0.3s ease-out; border-radius: 2px; }
+        .vital-bar-text { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #ffffff; font-size: 0.75em; font-weight: bold; text-shadow: 1px 1px 1px #000000; white-space: nowrap; }
+
+        #map-column { /* New container for map and its title */
+            display: none; /* JS will control this */
+            flex-direction: column;
+            margin-left: 15px;
+            width: 250px; /* Fixed width for the whole column */
+            flex-shrink: 0; /* Prevent shrinking */
         }
 
-        .vital-bar-container:last-child {
-            margin-right: 0;
-            /* No margin for the last bar */
-        }
-
-
-        .vital-label {
-            color: #bbb;
-            /* min-width: 35px; /* May not need min-width if bars are side-by-side like this */
-            margin-right: 5px;
-            font-size: 0.85em;
-            /* Slightly smaller label if space is tight */
-        }
-
-        .vital-bar-outer {
-            flex-grow: 1;
-            height: 16px;
-            /* Can make bars slightly shorter if needed for single line */
-            background-color: #333;
-            border: 1px solid #555;
-            border-radius: 3px;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .vital-bar-inner {
-            height: 100%;
-            transition: width 0.3s ease-out;
-            border-radius: 2px;
-        }
-
-        .vital-bar-text {
-            position: absolute;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
-            color: #ffffff;
-            font-size: 0.75em;
-            /* Smaller text for smaller bars */
-            font-weight: bold;
-            text-shadow: 1px 1px 1px #000000;
+        #map-title-bar {
+            /* Styles similar to #character-info-bar */
+            background-color: #111;
+            color: #00dd00;
+            padding: 6px 10px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em; /* Matches char info bar */
+            border: 1px solid #005500; /* Border around */
+            border-bottom: 1px solid #005500; /* Separator before map viewport */
+            text-align: center;
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            /* height: consistent with #character-info-bar if possible, else auto */
+            /* Ensure its height is considered for #map-viewport */
         }
+        #map-title-bar span { margin: 0 3px; } /* Slightly less margin than char info */
+        .map-title-separator { color: #007700; font-weight: bold; }
+        #map-title-text { font-weight: bold; color: #ffffff;}
+        #map-coords-label { color: #bbbbbb; } /* Dimmer label for "Coords:" */
+        #map-coords-text { font-weight: bold; }
 
 
-        /* Map Viewport Styling */
         #map-viewport {
-            width: 250px;
-            height: 250px;
-            /* Made it square, adjust as desired */
+            /* width: 250px; /* Width is now on #map-column */
+            /* height: 250px; /* Height can be flexible or fixed */
+            height: 228px; /* Example: 250px total - map-title-bar height. Adjust as needed */
             border: 1px solid #00cc00;
+            border-top: none; /* Avoid double border with title bar */
             background-color: #080808;
             overflow: hidden;
-            display: none;
-            /* JS will control this */
+            /* display: none; /* Controlled by #map-column */
             box-shadow: 0 0 10px #00cc00;
-            margin-left: 15px;
-            /* Space between MUD container and map */
-            /* flex-shrink: 0; /* Prevent map from shrinking if .mud-container wants all space */
+            /* margin-left: 15px; /* Now on #map-column */
+            position: relative; 
         }
 
-        /* Styling for character lists in terminal output */
-        .char-list-item {
-            margin-left: 20px;
-        }
+        .char-list-item { margin-left: 20px; }
+        .char-list-item .char-index { color: #ffff00; }
+        .char-list-item .char-name { color: #00ff00; }
+        .char-list-item .char-class { color: #00aaaa; }
+        .room-name-header { color: #ffff00; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
+        .error-message-inline { color: #ff4444; font-style: italic; }
+        .game-message { color: #cccccc; display: block; } /* Ensure game messages are block */
+        .system-message-inline { color: #00aa00; font-style: italic; } /* For copy log success */
 
-        .char-list-item .char-index {
-            color: #ffff00;
-        }
 
-        .char-list-item .char-name {
-            color: #00ff00;
-        }
+        .inv-slot-name { color: #00ffff; font-weight: bold; }
+        .inv-backpack-number { color: #ffff00; }
+        .inv-item-name { color: #00ff00; }
+        .inv-item-qty { color: #aaaaaa; }
+        .inv-section-header { color: #f0f0f0; font-weight: bold; }
+        .char-name { color: #00ff00; }
 
-        .char-list-item .char-class {
-            color: #00aaaa;
-        }
-
-        /* Styling for room name in terminal output */
-        .room-name-header {
-            color: #ffff00;
-            font-weight: bold;
-            margin-top: 1em;
-            margin-bottom: 0.5em;
-        }
-
-        .error-message-inline {
-            color: #ff4444;
-            font-style: italic;
-        }
-
-        .game-message {
-            color: #cccccc;
-            display: block;
-        }
-
-        /* Inventory Styles */
-        .inv-slot-name {
-            color: #00ffff;
-            font-weight: bold;
-        }
-
-        .inv-backpack-number {
-            color: #ffff00;
-        }
-
-        .inv-item-name {
-            color: #00ff00;
-        }
-
-        /* Used for items and mobs */
-        .inv-item-qty {
-            color: #aaaaaa;
-        }
-
-        .inv-section-header {
-            color: #f0f0f0;
-            font-weight: bold;
-        }
-
-        /* Character Name style (if different from item name) */
-        .char-name {
-            color: #00ff00;
-        }
-
-        /* Or a distinct player color e.g. #99ff99 */
-
-        /* Combat Specific Styles */
-        .combat-success {
-            color: #33cc33;
-            font-weight: bold;
-        }
-
-        .combat-miss {
-            color: #ff9933;
-        }
-
-        .combat-hit {
-            color: #ffff00;
-            font-weight: bold;
-        }
-
-        .combat-crit {
-            color: #ff9900;
-            font-weight: bold;
-        }
-
-        .combat-hp {
-            color: #ffdddd;
-        }
-
-        .combat-death {
-            color: #ff3333;
-            font-weight: bold;
-            font-style: italic;
-        }
-
-        .combat-hit-player {
-            color: #ff6666;
-            font-weight: bold;
-        }
-
-        .combat-crit-player {
-            color: #cc0000;
-            font-weight: bold;
-        }
-
-        .ooc-chat-message {
-            color: #9999ff;
-            /* Example: Light purple for OOC */
-            font-style: italic;
-        }
-
-        #input-prompt-line {
-            display: flex;
-            /* Keep this from your existing styles */
-            align-items: center;
-            /* Keep this */
-            padding: 0 8px;
-            /* Match vitals monitor padding if desired */
-        }
+        .combat-success { color: #33cc33; font-weight: bold; }
+        .combat-miss { color: #ff9933; }
+        .combat-hit { color: #ffff00; font-weight: bold; }
+        .combat-crit { color: #ff9900; font-weight: bold; }
+        .combat-hp { color: #ffdddd; }
+        .combat-death { color: #ff3333; font-weight: bold; font-style: italic; }
+        .combat-hit-player { color: #ff6666; font-weight: bold; }
+        .combat-crit-player { color: #cc0000; font-weight: bold; }
+        .ooc-chat-message { color: #9999ff; font-style: italic; }
+        
+        #input-prompt-line { display: flex; align-items: center; padding: 0 8px; }
 
         #character-info-bar {
-            display: none;
-            /* Hide initially, show when in game */
+            display: none; 
             background-color: #111;
-            /* Slightly different dark shade */
             color: #00dd00;
-            /* Bright green text */
             padding: 6px 10px;
             font-family: 'Consolas', 'Monaco', monospace;
             font-size: 0.9em;
             border-bottom: 1px solid #005500;
-            /* Green border */
             text-align: center;
-            /* Center the content */
             white-space: nowrap;
             overflow: hidden;
-            /* Prevent content from breaking layout if too long */
             text-overflow: ellipsis;
-            /* Add ... if content overflows */
+            /* height: 22px; /* Example fixed height if needed */
         }
-
-        #character-info-bar span {
-            margin: 0 5px;
-            /* Spacing between elements */
-        }
-
-        .char-info-separator {
-            color: #007700;
-            /* Darker green for separator */
-            font-weight: bold;
-        }
-
-        #char-info-name {
-            font-weight: bold;
-            color: #ffffff;
-            /* Lighter green for name */
-        }
-
-        #char-info-class {
-            font-style: italic;
-            color: #00ffdd;
-        }
-
-        #char-info-level {
-            font-weight: bold;
-        }
+        #character-info-bar span { margin: 0 5px; }
+        .char-info-separator { color: #007700; font-weight: bold; }
+        #char-info-name { font-weight: bold; color: #ffffff; }
+        #char-info-class { font-style: italic; color: #00ffdd; }
+        #char-info-level { font-weight: bold; }
 
         #bottom-info-bar {
-            display: none;
-            /* Hide initially, show when in game */
+            display: none; 
             display: flex;
             justify-content: space-between;
-            /* Pushes exits to left, currency to right */
             align-items: center;
             padding: 5px 10px;
             background-color: #181818;
-            /* Slightly different from vitals monitor */
             border-top: 1px solid #005500;
             border-bottom: 1px solid #005500;
-            /* Add border bottom to separate from input line */
             font-family: 'Consolas', 'Monaco', monospace;
             font-size: 0.9em;
             color: #00cc00;
             margin-bottom: 5px;
-            /* Space before input line */
+        }
+        #exits-display-container { flex-basis: 60%; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        #exits-display-container b { color: #bbb; }
+        #exits-text { color: #00dd00; }
+        #currency-display-container { flex-basis: 35%; text-align: right; white-space: nowrap; }
+        .currency { margin-left: 10px; font-weight: bold; }
+        .currency.gold { color: #FFD700; }
+        .currency.silver { color: #C0C0C0; }
+        .currency.copper { color: #B87333; }
+        .currency.platinum { color: #e5e4e2; }
+
+        /* Ensure terminal lines flow correctly */
+        .terminal-line {
+            /* white-space: pre-wrap; /* Already on .terminal-output, might not be needed here */
+            /* margin-bottom: 2px; /* Optional: small space between distinct messages */
+        }
+        .room-description { /* For multiline room descriptions */
+            /* white-space: pre-wrap; */ /* Handled by .terminal-output */
         }
 
-        #exits-display-container {
-            flex-basis: 60%;
-            /* Give exits more space initially */
-            text-align: left;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        #exits-display-container b {
-            color: #bbb;
-            /* Match other labels */
-        }
-
-        #exits-text {
-            color: #00dd00;
-            /* Bright green for actual exits */
-        }
-
-
-        #currency-display-container {
-            flex-basis: 35%;
-            /* Space for currency */
-            text-align: right;
-            white-space: nowrap;
-        }
-
-        .currency {
-            margin-left: 10px;
-            /* Space between currency types */
-            font-weight: bold;
-        }
-
-        .currency.gold {
-            color: #FFD700;
-            /* Gold color */
-        }
-
-        .currency.silver {
-            color: #C0C0C0;
-            /* Silver color */
-        }
-
-        .currency.copper {
-            color: #B87333;
-            /* Copper color */
-        }
-
-        .currency.platinum {
-            color: #e5e4e2;
-            /* Platinum color */
-        }
     </style>
 </head>
 
 <body>
-    <div class="header-text">
-        <h1>Legend of the Solar Dragon's Tradewar<br>2002 Barrels of Food Fight<br>Over a Usurped Pit of Devastation
-            (Alpha)</h1>
-        <p>(UMGTWOTRDBSR_EUPFDX_TPSC for short, obviously)</p>
-    </div>
+    <header class="header-text"> <!-- Renamed for clarity -->
+        <h1>Legend of the Solar Dragon's Tradewar</h1>
+        <h2>2002 Barrels of Food Fight</h2>
+        <h3>Over a Usurped Pit of Devastation (Alpha)</h3>
+        <p class="subtitle">(UMGTWOTRDBSREUPPDX_TPSC for short, obviously)</p>
+    </header>
 
-    <!-- NEW WRAPPER FOR MUD AND MAP -->
     <div class="game-area-wrapper">
         <div class="mud-container">
-            <!-- Main MUD interface elements -->
             <div id="character-info-bar">
                 <span id="char-info-name">Character Name</span>
                 <span class="char-info-separator">|</span>
@@ -534,15 +299,13 @@
                 <span>Level: <span id="char-info-level">1</span></span>
             </div>
             <div id="output" class="terminal-output"></div>
-            
-            <button id="copy-output-button" title="Copy output to clipboard">Copy Log</button> <!-- NEW BUTTON -->
-
+            <button id="copy-output-button" title="Copy output to clipboard">Copy Log</button>
             <div id="bottom-info-bar">
                 <div id="exits-display-container">
                     <b>Exits:</b> <span id="exits-text"></span>
                 </div>
                 <div id="currency-display-container">
-                    <span class="currency platinum">0p</span> <!-- NEW -->
+                    <span class="currency platinum">0p</span> 
                     <span class="currency gold">0g</span>
                     <span class="currency silver">0s</span>
                     <span class="currency copper">0c</span>
@@ -552,42 +315,45 @@
                 <div class="vital-bar-container">
                     <span class="vital-label">HP:</span>
                     <div class="vital-bar-outer" id="hp-bar-outer">
-                        <div class="vital-bar-inner" id="player-hp-bar" style="width: 100%; background-color: #d9534f;">
-                        </div>
+                        <div class="vital-bar-inner" id="player-hp-bar" style="width: 100%; background-color: #d9534f;"></div>
                         <span class="vital-bar-text" id="player-hp-text">100 / 100</span>
                     </div>
                 </div>
                 <div class="vital-bar-container">
                     <span class="vital-label">MP:</span>
                     <div class="vital-bar-outer" id="mp-bar-outer">
-                        <div class="vital-bar-inner" id="player-mp-bar" style="width: 100%; background-color: #5bc0de;">
-                        </div>
+                        <div class="vital-bar-inner" id="player-mp-bar" style="width: 100%; background-color: #5bc0de;"></div>
                         <span class="vital-bar-text" id="player-mp-text">50 / 50</span>
                     </div>
                 </div>
                 <div class="vital-bar-container">
                     <span class="vital-label">XP:</span>
                     <div class="vital-bar-outer" id="xp-bar-outer">
-                        <div class="vital-bar-inner" id="player-xp-bar" style="width: 0%; background-color: #f0ad4e;">
-                        </div>
+                        <div class="vital-bar-inner" id="player-xp-bar" style="width: 0%; background-color: #f0ad4e;"></div>
                         <span class="vital-bar-text" id="player-xp-text">0 / 100</span>
                     </div>
                 </div>
             </div>
             <div id="input-prompt-line" class="terminal-input-line">
                 <span id="prompt-text">> </span>
-                <input type="text" id="commandInput" class="terminal-input" name="mud_command_line" autofocus
-                    autocomplete="off">
+                <input type="text" id="commandInput" class="terminal-input" name="mud_command_line" autofocus autocomplete="off">
             </div>
         </div>
 
-        <!-- MAP VIEWPORT IS NOW A SIBLING TO .mud-container, INSIDE THE WRAPPER -->
-        <div id="map-viewport">
-            <svg id="map-svg" width="100%" height="100%"></svg>
+        <div id="map-column"> <!-- Wrapped map-title-bar and map-viewport -->
+            <div id="map-title-bar">
+                <span id="map-title-text">Map</span>
+                <span class="map-title-separator">|</span>
+                <span id="map-coords-label">Coords:</span>
+                <span id="map-coords-text">?, ?, ?</span>
+                <!-- Future: <span class="map-title-separator">|</span> <span id="map-zone-name">Zone Name</span> -->
+            </div>
+            <div id="map-viewport"> <!-- Removed inline style="position: relative;" as it's in CSS now -->
+                <svg id="map-svg" width="100%" height="100%"></svg>
+            </div>
         </div>
     </div>
 
     <script type="module" src="main.js"></script>
 </body>
-
 </html>

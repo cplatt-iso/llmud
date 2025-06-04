@@ -1,225 +1,231 @@
 // frontend/src/ui.js
-import { gameState } from './state.js';
-import { MAX_OUTPUT_LINES } from './config.js';
-
-// Declare all module-scoped UI element variables
-let outputDiv, commandInput, promptTextSpan, inputPromptLineDiv, 
-    exitsTextSpan, currencyDisplayContainerDiv, characterInfoBarDiv,
-    mapViewportDiv, mapSvgElement, vitalsMonitorDiv, bottomInfoBarDiv,
-    copyOutputButton; // NEW: Declare copy button variable
+import { gameState } from './state.js'; // Import gameState
 
 export const UI = {
-    initializeElements: function () {     
-        // Fetch all DOM elements
-        outputDiv = document.getElementById('output');
-        commandInput = document.getElementById('commandInput');
-        promptTextSpan = document.getElementById('prompt-text');
-        inputPromptLineDiv = document.getElementById('input-prompt-line');
-        
-        exitsTextSpan = document.getElementById('exits-text'); // For the actual exit strings
-        currencyDisplayContainerDiv = document.getElementById('currency-display-container');
-        bottomInfoBarDiv = document.getElementById('bottom-info-bar'); // The parent of exits and currency
+    // Existing elements
+    outputElement: null,
+    commandInputElement: null,
+    promptTextElement: null,
+    characterNameElement: null,
+    characterClassElement: null,
+    characterLevelElement: null, 
+    exitsTextElement: null,
+    playerHpBar: null,
+    playerHpText: null,
+    playerMpBar: null,
+    playerMpText: null,
+    playerXpBar: null,
+    playerXpText: null,
+    currencyPlatinumElement: null,
+    currencyGoldElement: null,
+    currencySilverElement: null,
+    currencyCopperElement: null,
+    copyOutputButton: null,
 
-        characterInfoBarDiv = document.getElementById('character-info-bar');
-        
-        mapViewportDiv = document.getElementById('map-viewport');
-        mapSvgElement = document.getElementById('map-svg');
-        vitalsMonitorDiv = document.getElementById('vitals-monitor');
-        copyOutputButton = document.getElementById('copy-output-button'); // NEW: Get copy button
+    // New map title bar elements
+    mapTitleBarElement: null, 
+    mapTitleTextElement: null,
+    mapCoordsTextElement: null,
 
-        // Consolidate checks
-        const elements = [
-            outputDiv, commandInput, promptTextSpan, inputPromptLineDiv,
-            exitsTextSpan, currencyDisplayContainerDiv, bottomInfoBarDiv,
-            characterInfoBarDiv, mapViewportDiv, mapSvgElement, vitalsMonitorDiv,
-            copyOutputButton // NEW: Add to check
+    // View state control
+    gameViewElements: [], 
+    inputPromptLineElement: null, // Explicitly store this
+
+    initializeElements: function () {
+        this.outputElement = document.getElementById('output');
+        this.commandInputElement = document.getElementById('commandInput');
+        this.promptTextElement = document.getElementById('prompt-text');
+        this.inputPromptLineElement = document.getElementById('input-prompt-line'); // Get it
+
+        this.characterNameElement = document.getElementById('char-info-name');
+        this.characterClassElement = document.getElementById('char-info-class');
+        this.characterLevelElement = document.getElementById('char-info-level');
+
+        this.exitsTextElement = document.getElementById('exits-text');
+
+        this.playerHpBar = document.getElementById('player-hp-bar');
+        this.playerHpText = document.getElementById('player-hp-text');
+        this.playerMpBar = document.getElementById('player-mp-bar');
+        this.playerMpText = document.getElementById('player-mp-text');
+        this.playerXpBar = document.getElementById('player-xp-bar');
+        this.playerXpText = document.getElementById('player-xp-text');
+
+        this.currencyPlatinumElement = document.querySelector('#currency-display-container .currency.platinum');
+        this.currencyGoldElement = document.querySelector('#currency-display-container .currency.gold');
+        this.currencySilverElement = document.querySelector('#currency-display-container .currency.silver');
+        this.currencyCopperElement = document.querySelector('#currency-display-container .currency.copper');
+
+        this.copyOutputButton = document.getElementById('copy-output-button');
+        if (this.copyOutputButton) {
+            this.copyOutputButton.addEventListener('click', () => this.copyOutputToClipboard());
+        }
+
+        this.mapTitleBarElement = document.getElementById('map-title-bar'); 
+        this.mapTitleTextElement = document.getElementById('map-title-text');
+        this.mapCoordsTextElement = document.getElementById('map-coords-text');
+
+        this.gameViewElements = [
+            document.getElementById('character-info-bar'),
+            document.getElementById('bottom-info-bar'),
+            document.getElementById('vitals-monitor'),
+            document.getElementById('map-column'), 
         ];
 
-        if (elements.some(el => !el)) {
-            const missing = elements.map((el, i) => el ? '' : ['outputDiv', 'commandInput', 'promptTextSpan', 'inputPromptLineDiv', 'exitsTextSpan', 'currencyDisplayContainerDiv', 'bottomInfoBarDiv', 'characterInfoBarDiv', 'mapViewportDiv', 'mapSvgElement', 'vitalsMonitorDiv', 'copyOutputButton'][i]).filter(Boolean);
-            console.error("CRITICAL: One or more core UI elements not found during initialization!", missing);
-            document.body.innerHTML = `Error: Core UI elements missing (${missing.join(', ')}). App cannot start.`;
+        if (!this.outputElement || !this.commandInputElement || !this.characterNameElement || !this.mapTitleBarElement || !this.inputPromptLineElement) {
+            console.error("Fatal Error: Essential UI elements not found. The application cannot start.");
+            document.body.innerHTML = "Error: UI elements missing. Please check console.";
             return false;
         }
-
-        // NEW: Add event listener for the copy button
-        if (copyOutputButton) {
-            copyOutputButton.addEventListener('click', UI.handleCopyOutputToClipboard);
-        }
-
+        // console.log("UI Elements Initialized. Map Title Bar Element:", this.mapTitleBarElement);
         return true;
     },
 
-    getCommandInput: function() {
-        return commandInput;
+    showAppropriateView: function () { // Reads directly from gameState
+        const isGameActive = gameState.loginState === 'IN_GAME';
+        // console.log(`UI.showAppropriateView: loginState is ${gameState.loginState}, isGameActive: ${isGameActive}`);
+
+        this.gameViewElements.forEach(el => {
+            if (el) {
+                const displayStyle = isGameActive ? (el.id === 'map-column' ? 'flex' : (el.style.display === 'none' || el.style.display === '' ? (el.tagName === 'DIV' && (el.id === 'vitals-monitor' || el.id === 'character-info-bar' || el.id === 'bottom-info-bar' ) ? 'flex' : 'block') : el.style.display ) ) : 'none';
+                // Corrected logic: if game active, determine display based on element type or keep current if already visible. Otherwise hide.
+                // For map-column specifically, use flex. For others that were flex containers like vitals, use flex. Default to block for others.
+                let currentDisplay = 'block'; // default for most things when shown
+                if (el.id === 'vitals-monitor' || el.id === 'bottom-info-bar' || el.id === 'character-info-bar' || el.id === 'map-column') {
+                    currentDisplay = 'flex';
+                }
+                el.style.display = isGameActive ? currentDisplay : 'none';
+            }
+        });
+        
+        if (this.inputPromptLineElement) {
+             const showInputPromptLine = gameState.loginState === 'IN_GAME' ||
+                gameState.loginState === 'CHAR_SELECT_PROMPT' ||
+                gameState.loginState === 'CHAR_CREATE_PROMPT_NAME' ||
+                gameState.loginState === 'CHAR_CREATE_PROMPT_CLASS' ||
+                gameState.loginState === 'PROMPT_USER' ||
+                gameState.loginState === 'PROMPT_PASSWORD' ||
+                gameState.loginState === 'REGISTER_PROMPT_USER' ||
+                gameState.loginState === 'REGISTER_PROMPT_PASSWORD';
+            this.inputPromptLineElement.style.display = showInputPromptLine ? 'flex' : 'none';
+            // console.log(`Input prompt line display: ${this.inputPromptLineElement.style.display}`);
+        }
+    },
+    
+    clearOutput: function () {
+        if (this.outputElement) this.outputElement.innerHTML = '';
+    },
+
+    appendToOutput: function (message, options = {}) {
+        if (!this.outputElement) return;
+        const { styleClass = '' } = options; 
+
+        const lineElement = document.createElement('div'); 
+        if (styleClass) lineElement.classList.add(styleClass);
+        lineElement.innerHTML = message; 
+
+        this.outputElement.insertBefore(lineElement, this.outputElement.firstChild);
+        this.outputElement.scrollTop = 0; 
+    },
+
+    updateCharacterInfoBar: function (name, className, level) {
+        if (this.characterNameElement) this.characterNameElement.textContent = name || 'Unknown';
+        if (this.characterClassElement) this.characterClassElement.textContent = className || 'Adventurer';
+        if (this.characterLevelElement) this.characterLevelElement.textContent = (level !== undefined && level !== null) ? String(level) : '1';
+    },
+
+    updateMapTitleBar: function(x, y, z, zoneName = null) {
+        if (this.mapCoordsTextElement) {
+            if (x !== undefined && y !== undefined && z !== undefined) {
+                this.mapCoordsTextElement.textContent = `${x}, ${y}, ${z}`;
+            } else if (z !== undefined) { 
+                 this.mapCoordsTextElement.textContent = `?, ?, ${z}`;
+            }
+            else {
+                this.mapCoordsTextElement.textContent = "?, ?, ?";
+            }
+        }
     },
 
     updatePlayerVitals: function (currentHp, maxHp, currentMp, maxMp, currentXp, nextLevelXp) {
-        const hpBar = document.getElementById('player-hp-bar');
-        const hpText = document.getElementById('player-hp-text');
-        const mpBar = document.getElementById('player-mp-bar');
-        const mpText = document.getElementById('player-mp-text');
-        const xpBar = document.getElementById('player-xp-bar');
-        const xpText = document.getElementById('player-xp-text');
-
-        if (hpBar && hpText) {
-            const hpPercent = maxHp > 0 ? Math.max(0, Math.min(100, (currentHp / maxHp) * 100)) : 0;
-            hpBar.style.width = `${hpPercent}%`;
-            hpText.textContent = `${currentHp} / ${maxHp}`;
-        } else { console.warn("HP display elements not found for vitals update."); }
-
-        if (mpBar && mpText) {
-            const mpPercent = maxMp > 0 ? Math.max(0, Math.min(100, (currentMp / maxMp) * 100)) : 0;
-            mpBar.style.width = `${mpPercent}%`;
-            mpText.textContent = `${currentMp} / ${maxMp}`;
-        } else { console.warn("MP display elements not found for vitals update."); }
-
-        if (xpBar && xpText) {
-            if (typeof currentXp !== 'undefined' && typeof nextLevelXp !== 'undefined') {
-                let xpPercent = 0;
-                let xpDisplayString = `${currentXp} / ${nextLevelXp}`;
-
-                if (nextLevelXp === -1) { // Max level
-                    xpPercent = 100;
-                    xpDisplayString = `${currentXp} (Max Lvl)`;
-                } else if (nextLevelXp > 0 && currentXp >= 0) { 
-                    xpPercent = Math.max(0, Math.min(100, (currentXp / nextLevelXp) * 100));
-                } else { // Handles cases like nextLevelXp being 0 or undefined currentXp
-                    xpDisplayString = `${currentXp === undefined ? 'N/A' : currentXp} / ${nextLevelXp <= 0 || nextLevelXp === undefined ? '---' : nextLevelXp}`;
-                }
-                xpBar.style.width = `${xpPercent}%`;
-                xpText.textContent = xpDisplayString;
-            }
-        } else { console.warn("XP display elements not found for vitals update."); }
-    },
-
-    setInputCommandType: function (type) {
-        if (commandInput) {
-            commandInput.type = type;
-            commandInput.autocomplete = (type === 'password') ? 'current-password' : 'off';
+        if (this.playerHpBar && this.playerHpText) {
+            const hpPercent = maxHp > 0 ? (currentHp / maxHp) * 100 : 0;
+            this.playerHpBar.style.width = `${Math.max(0, Math.min(100, hpPercent))}%`;
+            this.playerHpText.textContent = `${currentHp} / ${maxHp}`;
         }
-    },
-
-    showAppropriateView: function () {
-        // Ensure all elements used here are checked for existence after initializeElements
-        if (!bottomInfoBarDiv || !inputPromptLineDiv || !mapViewportDiv || !vitalsMonitorDiv || !characterInfoBarDiv) {
-            console.error("showAppropriateView: One or more UI layout elements missing.");
-            return;
+        if (this.playerMpBar && this.playerMpText) {
+            const mpPercent = maxMp > 0 ? (currentMp / maxMp) * 100 : 0;
+            this.playerMpBar.style.width = `${Math.max(0, Math.min(100, mpPercent))}%`;
+            this.playerMpText.textContent = `${currentMp} / ${maxMp}`;
         }
-        const showGameRelatedUI = (gameState.loginState === 'IN_GAME');
-        const showInputPromptLine = gameState.loginState !== 'INIT' && 
-                                   gameState.loginState !== 'CONNECTING_WS'; 
-
-        // Toggle visibility of game-specific UI sections
-        characterInfoBarDiv.style.display = showGameRelatedUI ? 'flex' : 'none'; // Assuming it's a flex container for centering
-        vitalsMonitorDiv.style.display = showGameRelatedUI ? 'flex' : 'none';
-        mapViewportDiv.style.display = showGameRelatedUI ? 'block' : 'none'; // Map can be block
-        bottomInfoBarDiv.style.display = showGameRelatedUI ? 'flex' : 'none'; // Parent of exits/currency
-        
-        inputPromptLineDiv.style.display = showInputPromptLine ? 'flex' : 'none';
-    },
-
-    handleCopyOutputToClipboard: function() {
-        if (!outputDiv || !copyOutputButton) return;
-
-        const lines = [];
-        // Output div has children added with insertBefore(..., outputDiv.firstChild)
-        // and CSS flex-direction: column-reverse.
-        // So, to get chronological order, we iterate children from last to first.
-        for (let i = outputDiv.children.length - 1; i >= 0; i--) {
-            lines.push(outputDiv.children[i].textContent || '');
+        if (this.playerXpBar && this.playerXpText) {
+            const xpPercent = nextLevelXp > 0 && nextLevelXp !== -1 ? (currentXp / nextLevelXp) * 100 : (nextLevelXp === -1 ? 100 : 0);
+            const displayNextLevelXp = (nextLevelXp === -1) ? "MAX" : nextLevelXp;
+            this.playerXpBar.style.width = `${Math.max(0, Math.min(100, xpPercent))}%`;
+            this.playerXpText.textContent = `${currentXp} / ${displayNextLevelXp}`;
         }
-        const textToCopy = lines.join('\n');
-
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(textToCopy).then(() => {
-                const originalText = copyOutputButton.textContent;
-                copyOutputButton.textContent = 'Copied!';
-                setTimeout(() => {
-                    copyOutputButton.textContent = originalText;
-                }, 1500);
-            }).catch(err => {
-                console.error('Failed to copy text: ', err);
-                const originalText = copyOutputButton.textContent;
-                copyOutputButton.textContent = 'Error!';
-                setTimeout(() => {
-                    copyOutputButton.textContent = originalText;
-                }, 1500);
-            });
-        } else {
-            // Fallback for older browsers (less common now)
-            console.warn('Clipboard API not available. Manual copy might be needed.');
-            // You could implement a textarea-based fallback here if needed
-            const originalText = copyOutputButton.textContent;
-            copyOutputButton.textContent = 'No API!';
-            setTimeout(() => {
-                copyOutputButton.textContent = originalText;
-            }, 2000);
-        }
-    },
-
-    appendToOutput: function (htmlContent, options = {}) {
-        const { isPrompt = false, styleClass = '' } = options;
-        if (!outputDiv) return;
-
-        const messageElement = document.createElement('div');
-        if (isPrompt) messageElement.classList.add('prompt-line');
-        if (styleClass) {
-            styleClass.split(' ').forEach(cls => { if(cls) messageElement.classList.add(cls); });
-        }
-        messageElement.innerHTML = htmlContent; // Use innerHTML to render spans
-
-        outputDiv.insertBefore(messageElement, outputDiv.firstChild);
-        outputDiv.scrollTop = 0; 
-
-        while (outputDiv.children.length > MAX_OUTPUT_LINES) {
-            outputDiv.removeChild(outputDiv.lastChild);
-        }
-    },
-
-    clearOutput: function () { if (outputDiv) outputDiv.innerHTML = ''; },
-    setInputCommandPlaceholder: function (text) { if (commandInput) commandInput.placeholder = text; },
-    focusCommandInput: function() { if(commandInput) commandInput.focus(); },
-
-    updateExitsDisplay: function (roomData) {
-        if (!exitsTextSpan) return; // Use the specific span for text content
-        if (gameState.loginState === 'IN_GAME' && roomData && roomData.exits && Object.keys(roomData.exits).length > 0) {
-            exitsTextSpan.textContent = Object.keys(roomData.exits).map(d => d.toUpperCase()).join(' | ');
-        } else if (gameState.loginState === 'IN_GAME') {
-            exitsTextSpan.textContent = '(None)';
-        } else {
-            exitsTextSpan.textContent = ''; // Clear if not in game
-        }
-    },
-
-    updateGameDisplay: function (roomData) { 
-        if (!outputDiv || !roomData) return;
-        // Note: appendToOutput handles inserting at the "bottom" (top of DOM due to column-reverse)
-        UI.appendToOutput(`--- ${roomData.name} ---`, { styleClass: 'room-name-header' });
-        UI.appendToOutput(roomData.description || "It's eerily quiet.");
     },
     
-    updateCharacterInfoBar: function(name, className, level) {
-        if (!characterInfoBarDiv) return;
-        const nameEl = document.getElementById('char-info-name');
-        const classEl = document.getElementById('char-info-class');
-        const levelEl = document.getElementById('char-info-level');
-
-        if (nameEl) nameEl.textContent = name || "N/A";
-        if (classEl) classEl.textContent = className || "N/A";
-        if (levelEl) levelEl.textContent = level || "N/A";
+    updateExitsDisplay: function(roomData) {
+        if (this.exitsTextElement && roomData && roomData.exits) {
+            const exitNames = Object.keys(roomData.exits).map(dir => dir.toUpperCase());
+            this.exitsTextElement.textContent = exitNames.length > 0 ? exitNames.join(' | ') : 'None';
+        } else if (this.exitsTextElement) {
+            this.exitsTextElement.textContent = 'Unknown';
+        }
     },
 
-    updateCurrencyDisplay: function(platinum, gold, silver, copper) { // Added platinum
-        if (!currencyDisplayContainerDiv) return;
-        const platinumEl = currencyDisplayContainerDiv.querySelector('.currency.platinum'); // NEW
-        const goldEl = currencyDisplayContainerDiv.querySelector('.currency.gold');
-        const silverEl = currencyDisplayContainerDiv.querySelector('.currency.silver');
-        const copperEl = currencyDisplayContainerDiv.querySelector('.currency.copper');
+    updateCurrencyDisplay: function(platinum, gold, silver, copper) {
+        if (this.currencyPlatinumElement) this.currencyPlatinumElement.textContent = `${platinum || 0}p`;
+        if (this.currencyGoldElement) this.currencyGoldElement.textContent = `${gold || 0}g`;
+        if (this.currencySilverElement) this.currencySilverElement.textContent = `${silver || 0}s`;
+        if (this.currencyCopperElement) this.currencyCopperElement.textContent = `${copper || 0}c`;
+    },
 
-        if (platinumEl) platinumEl.textContent = `${platinum || 0}p`; // NEW
-        if (goldEl) goldEl.textContent = `${gold || 0}g`;
-        if (silverEl) silverEl.textContent = `${silver || 0}s`;
-        if (copperEl) copperEl.textContent = `${copper || 0}c`;
+    updateGameDisplay: function(roomData) { 
+        if (!roomData) return;
+        let lines = [];
+        lines.push(`<span class="room-name-header">--- ${roomData.name || 'Unknown Room'} ---</span>`);
+        lines.push(roomData.description || 'An empty space.');
+
+        if (roomData.dynamic_description_additions && roomData.dynamic_description_additions.length > 0) {
+            roomData.dynamic_description_additions.forEach(line => lines.push(line));
+        }
+
+        if (roomData.items_on_ground && roomData.items_on_ground.length > 0) {
+            lines.push("You see here:");
+            roomData.items_on_ground.forEach(item => lines.push(`  <span class="inv-item-name">${item.item_template.name}</span>${item.quantity > 1 ? ' (x' + item.quantity + ')' : ''}`));
+        }
+        if (roomData.mobs_in_room && roomData.mobs_in_room.length > 0) {
+            lines.push("Also here:");
+            roomData.mobs_in_room.forEach((mob, index) => lines.push(`  ${index + 1}. <span class="inv-item-name">${mob.mob_template.name}</span>`));
+        }
+        if (roomData.other_characters && roomData.other_characters.length > 0) {
+            lines.push("Others here:");
+            roomData.other_characters.forEach(char => lines.push(`  <span class="char-name">${char.name}</span>`));
+        }
+        this.appendToOutput(lines.join('\n'), {styleClass: "game-message"}); 
+    },
+    
+    getCommandInput: function() { return this.commandInputElement; },
+    setInputCommandPlaceholder: function(text) { if (this.commandInputElement) this.commandInputElement.placeholder = text; },
+    setInputCommandType: function(type) { if (this.commandInputElement) this.commandInputElement.type = type; },
+    focusCommandInput: function() { 
+        if (this.commandInputElement) {
+            // console.log("Focusing command input. Current display:", this.commandInputElement.parentElement.style.display);
+            this.commandInputElement.focus(); 
+        }
+    },
+
+    copyOutputToClipboard: function() {
+        if (!this.outputElement) return;
+        const textToCopy = this.outputElement.innerText || this.outputElement.textContent;
+        navigator.clipboard.writeText(textToCopy)
+            .then(() => {
+                this.appendToOutput("Log copied to clipboard.", { styleClass: "system-message-inline" });
+            })
+            .catch(err => {
+                console.error('Failed to copy output: ', err);
+                this.appendToOutput("! Failed to copy log.", { styleClass: "error-message-inline" });
+            });
     }
 };
