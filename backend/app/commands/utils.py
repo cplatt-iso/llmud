@@ -25,6 +25,105 @@ def format_room_items_for_player_message(room_items: List[models.RoomItemInstanc
             item_map[idx + 1] = room_item_instance.id
     return "\n".join(lines), item_map
 
+def resolve_room_item_target(
+    target_ref: str, 
+    items_on_ground: List[models.RoomItemInstance] 
+) -> Tuple[Optional[models.RoomItemInstance], Optional[str]]:
+    if not items_on_ground:
+        return None, "There is nothing on the ground here." # More direct
+
+    target_ref_lower = target_ref.lower().strip()
+    if not target_ref_lower: # Handle empty target reference
+        return None, "Get what?"
+
+    # 1. Try to parse as a number (from 1-based index)
+    # This relies on the display order being consistent with items_on_ground list.
+    # format_room_items_for_player_message assigns numbers based on list index.
+    try:
+        num_ref = int(target_ref_lower) # Use target_ref_lower for consistency, though int() handles spaces
+        if 1 <= num_ref <= len(items_on_ground):
+            return items_on_ground[num_ref - 1], None 
+    except ValueError:
+        pass # Not a number, proceed to name/keyword matching
+
+    # Lists to hold different types of matches
+    exact_name_matches: List[models.RoomItemInstance] = []
+    exact_tag_matches: List[models.RoomItemInstance] = []
+    keyword_matches: List[models.RoomItemInstance] = [] # e.g., for "key" when item_type is "key"
+    partial_name_matches: List[models.RoomItemInstance] = [] # For "arch" matching "Archive Key Alpha"
+
+    for item_instance in items_on_ground:
+        if not item_instance.item or not item_instance.item.name:
+            continue # Should not happen with proper data
+
+        item_name_lower = item_instance.item.name.lower()
+        item_type_lower = item_instance.item.item_type.lower()
+        item_properties = item_instance.item.properties or {}
+        item_tag_from_prop = item_properties.get("item_tag", "").lower() # Ensure it's a string
+
+        # A. Exact Name Match
+        if item_name_lower == target_ref_lower:
+            exact_name_matches.append(item_instance)
+        
+        # B. Exact Tag Match
+        if item_tag_from_prop and item_tag_from_prop == target_ref_lower:
+            if item_instance not in exact_tag_matches: # Avoid duplicates if name also matched tag
+                 exact_tag_matches.append(item_instance)
+
+        # C. Keyword "key" Match (if target_ref is "key" and item type is "key")
+        if target_ref_lower == "key" and "key" in item_type_lower:
+            if item_instance not in keyword_matches:
+                keyword_matches.append(item_instance)
+        
+        # D. Partial Name Match (target_ref is a prefix of the item name)
+        # Only add if not already an exact match by name or tag.
+        if item_name_lower.startswith(target_ref_lower):
+            if item_instance not in exact_name_matches and \
+               item_instance not in exact_tag_matches and \
+               item_instance not in partial_name_matches:
+                partial_name_matches.append(item_instance)
+
+    # Determine result based on match priority:
+    # 1. Single exact name match
+    if len(exact_name_matches) == 1:
+        return exact_name_matches[0], None
+    if len(exact_name_matches) > 1:
+        return None, _format_ambiguity_prompt(target_ref_lower, exact_name_matches, "exactly named")
+
+    # 2. Single exact tag match
+    if len(exact_tag_matches) == 1:
+        return exact_tag_matches[0], None
+    if len(exact_tag_matches) > 1:
+        return None, _format_ambiguity_prompt(target_ref_lower, exact_tag_matches, "tagged as")
+
+    # 3. Single keyword "key" match (if that's what was typed)
+    if target_ref_lower == "key" and keyword_matches:
+        if len(keyword_matches) == 1:
+            return keyword_matches[0], None
+        if len(keyword_matches) > 1:
+            return None, _format_ambiguity_prompt("key", keyword_matches, "of type 'key'")
+            
+    # 4. Single partial name match
+    if len(partial_name_matches) == 1:
+        return partial_name_matches[0], None
+    if len(partial_name_matches) > 1:
+        return None, _format_ambiguity_prompt(target_ref_lower, partial_name_matches, "partially named")
+
+    return None, f"You don't see anything like '{target_ref}' on the ground here."
+
+# _format_ambiguity_prompt function remains the same
+def _format_ambiguity_prompt(
+    target_ref: str, 
+    matches: List[models.RoomItemInstance],
+    match_type_desc: str
+) -> str:
+    prompt_lines = [f"Multiple items {match_type_desc} '{target_ref}'. Which did you mean?"]
+    matches.sort(key=lambda inst: inst.item.name if inst.item else "")
+    # For now, just lists names. A better system would give usable numbers.
+    for i, item_match in enumerate(matches):
+        item_name = item_match.item.name if item_match.item else "Unknown Item"
+        prompt_lines.append(f"  - {item_name}") 
+    return "\n".join(prompt_lines)
 
 def format_room_mobs_for_player_message(room_mobs: List[models.RoomMobInstance]) -> Tuple[str, Dict[int, uuid.UUID]]: # ... content ...
     lines = []

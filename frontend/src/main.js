@@ -37,11 +37,11 @@ export function handleWebSocketMessage(serverData) {
                 charVitals.level // Assumes 'level' is present in charVitals
             );
         }
-        if (typeof UI.updateCurrencyDisplay === 'function' && charVitals && 
-            (typeof charVitals.platinum !== 'undefined' || 
-             typeof charVitals.gold !== 'undefined' || 
-             typeof charVitals.silver !== 'undefined' || 
-             typeof charVitals.copper !== 'undefined')
+        if (typeof UI.updateCurrencyDisplay === 'function' && charVitals &&
+            (typeof charVitals.platinum !== 'undefined' ||
+                typeof charVitals.gold !== 'undefined' ||
+                typeof charVitals.silver !== 'undefined' ||
+                typeof charVitals.copper !== 'undefined')
         ) {
             UI.updateCurrencyDisplay(
                 charVitals.platinum,
@@ -395,12 +395,44 @@ async function handleInputSubmission() {
 
                 if (commandVerb === "logout") { handleLogout(); break; }
 
-                const webSocketHandledVerbs = ["attack", "atk", "kill", "k", "flee", "look", "l", "rest", "use", "skill", "cast"];
+                const webSocketHandledVerbs = [
+                    "attack", "atk", "kill", "k",
+                    "flee",
+                    "look", "l",
+                    "rest",
+                    "use", "skill", "cast",
+                    "get", "take", 
+                    "unlock",       
+                    "search", "examine",                     
+                    "pull", "push", "turn", "pry", "activate",
+                    "n", "s", "e", "w", "north", "south", "east", "west", "up", "down", "u", "d", "go"
+                ];
                 if (webSocketHandledVerbs.includes(commandVerb)) {
                     WebSocketService.sendMessage({ type: "command", command_text: inputText });
                 } else {
-                    const httpResponse = await API.sendHttpCommand(inputText);
-                    handleHttpCommandResponse(httpResponse, inputText); // Pass original command for context
+                    // These commands might still go via HTTP if you have specific endpoints/handlers
+                    // For example, complex UI-driven things or pure info displays.
+                    // If 'help', 'score', 'inventory' etc. are implemented as HTTP endpoints:
+                    const httpOkayVerbs = [
+                        "spawnmob", "mod_xp", "set_hp",
+                        "help", 
+                        "ooc", "say", 
+                        "score", 
+                        "inventory", "i", 
+                        "skills", "traits", "status", "st", "sc", "sk", "tr", 
+                        "?", 
+                        "equip", "unequip", "wear", "remove", "eq"];
+                    if (httpOkayVerbs.includes(commandVerb)) {
+                        const httpResponse = await API.sendHttpCommand(inputText);
+                        handleHttpCommandResponse(httpResponse, inputText);
+                    } else {
+                        // If it's not in WS list and not in HTTP list, it's truly unknown by client
+                        UI.appendToOutput(`> ${inputText}`); // Echo the command
+                        UI.appendToOutput(`Hmm, '${commandVerb}'? Not sure if that goes to WS or HTTP, or if it's valid. Assuming WS for now.`);
+                        WebSocketService.sendMessage({ type: "command", command_text: inputText });
+                        // Or, be stricter:
+                        // UI.appendToOutput(`! Unknown command routing for '${commandVerb}'.`);
+                    }
                 }
                 break;
             default:
@@ -450,7 +482,7 @@ async function attemptSessionResume() {
 document.addEventListener('DOMContentLoaded', async () => {
     if (!UI.initializeElements()) return; // Critical UI elements check
     MapDisplay.initialize();
-    
+
     const commandInputEl = UI.getCommandInput();
     if (commandInputEl) {
         commandInputEl.addEventListener('keypress', function (e) {

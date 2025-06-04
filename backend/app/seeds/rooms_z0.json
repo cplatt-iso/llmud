@@ -1,0 +1,142 @@
+[
+  {
+    "unique_tag": "central_hub_0_0_0",
+    "data": {
+      "name": "Central Processing Unit (CPU)",
+      "description": "The air hums. Corridors branch off. A sturdy-looking door to the east is currently closed. A faint inscription reads 'Sector 0,0,0'.",
+      "x": 0, "y": 0, "z": 0,
+      "room_type": "standard",
+      "interactables": [
+        {
+          "id_tag": "cpu_east_lever",
+          "name": "a sturdy metal lever",
+          "description": "A heavy metal lever is set into the wall, currently in the 'up' position.",
+          "is_hidden": false,
+          "reveal_dc_perception": null,
+          "action_verb": "pull",
+          "on_interact_effect": {
+            "type": "toggle_exit_lock",
+            "target_exit_direction": "east",
+            "message_success_self": "You pull the lever down with a CLUNK. You hear a mechanism engage nearby.",
+            "message_success_others": "{character_name} pulls the lever. A distant clunk is heard."
+          }
+        }
+      ],
+      "exits": {}
+    }
+  },
+  {
+    "unique_tag": "north_corridor_0_1_0",
+    "data": {
+      "name": "North Data Conduit Alpha",
+      "description": "A sterile corridor stretches northwards. Panel N-1. The walls are smooth and featureless for the most part.",
+      "x": 0, "y": 1, "z": 0,
+      "room_type": "standard",
+      "interactables": [
+        {
+          "id_tag": "loose_panel_north_wall",
+          "name": "a slightly loose wall panel",
+          "description": "Upon closer inspection, one of the wall panels seems slightly askew. You could probably pry it open.",
+          "is_hidden": true,
+          "reveal_dc_perception": 15, 
+          "revealed_to_char_ids": [],
+          "action_verb": "pry", 
+          "on_interact_effect": {
+            "type": "custom_event", 
+            "message_success_self": "You pry the loose panel open. Tucked inside, you find a datachip labeled 'Emergency Exit Override Codes - Obsolete'. It crumbles to dust as you touch it.",
+            "message_success_others": "{character_name} pries open a loose wall panel, finding something that quickly turns to dust."
+          }
+        }
+      ],
+      "exits": {}
+    }
+  },
+  {
+    "unique_tag": "east_storage_1_0_0",
+    "data": {
+      "name": "Secure Storage Vault Epsilon",
+      "description": "Dust motes dance in the dim light. Shelves line the walls, mostly empty. Panel E-1.",
+      "x": 1, "y": 0, "z": 0,
+      "room_type": "standard",
+      "interactables": [],
+      "exits": {}
+    }
+  },
+  {
+    "unique_tag": "south_corridor_0_-1_0",
+    "data": {
+      "name": "South Maintenance Tunnel 7",
+      "description": "Dimly lit and smelling faintly of burnt coffee. A heavy iron door blocks the way south. Panel S-1.",
+      "x": 0, "y": -1, "z": 0,
+      "room_type": "standard",
+      "interactables": [],
+      "exits": {}
+    }
+  },
+  {
+    "unique_tag": "deep_archive_0_-2_0",
+    "data": {
+      "name": "Deep Archive Sector 42",
+      "description": "Ancient, whirring machinery fills this chamber. It feels important. Panel S-2.",
+      "x": 0, "y": -2, "z": 0,
+      "room_type": "puzzle",
+      "interactables": [],
+      "exits": {}
+    }
+  },
+  {
+    "unique_tag": "west_corridor_-1_0_0",
+    "data": {
+      "name": "West Logic Gate Array",
+      "description": "To the west, a series of humming conduits. Panel W-1.",
+      "x": -1, "y": 0, "z": 0,
+      "room_type": "standard",
+      "interactables": [],
+      "exits": {}
+    }
+  },
+  {
+    "unique_tag": "nexus_junction_0_2_0",
+    "data": {
+      "name": "Nexus Junction N-2",
+      "description": "A wider intersection of data conduits.",
+      "x": 0, "y": 2, "z": 0,
+      "room_type": "standard",
+      "interactables": [],
+      "exits": {}
+    }
+  },
+  {
+    "unique_tag": "sanctuary_alcove_1_2_0",
+    "data": {
+      "name": "Quiet Reflection Alcove",
+      "description": "A surprisingly calm alcove. Soft light emanates from the walls. You feel a sense of peace here.",
+      "x": 1, "y": 2, "z": 0,
+      "room_type": "sanctuary",
+      "interactables": [],
+      "exits": {}
+    }
+  },
+  {
+    "unique_tag": "shop_node_2_2_0",
+    "data": {
+      "name": "Automated Goods Dispenser Node",
+      "description": "A humming terminal offers various wares for digital currency. A holographic shopkeeper glitches occasionally.",
+      "x": 2, "y": 2, "z": 0,
+      "room_type": "shop",
+      "interactables": [],
+      "exits": {}
+    }
+  },
+  {
+    "unique_tag": "trainer_sim_3_2_0",
+    "data": {
+      "name": "Combat Simulation Pod",
+      "description": "A sleek pod invites users to hone their skills. A sign reads: 'Skill Enhancement Services'.",
+      "x": 3, "y": 2, "z": 0,
+      "room_type": "trainer",
+      "interactables": [],
+      "exits": {}
+    }
+  }
+]

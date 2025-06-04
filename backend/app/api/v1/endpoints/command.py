@@ -15,6 +15,7 @@ from app.commands import social_parser
 from app.commands import debug_parser
 from app.commands import meta_parser
 # from app.commands import combat_parser 
+from app.commands import interaction_parser
 
 
 router = APIRouter()
@@ -57,6 +58,13 @@ COMMAND_REGISTRY: Dict[str, CommandHandler] = {
     # "attack": combat_parser.handle_attack, 
     # "atk": combat_parser.handle_attack,    
     # "kill": combat_parser.handle_attack,    
+
+    # interactions
+    "unlock": interaction_parser.handle_unlock,
+    "search": interaction_parser.handle_search,    
+    "examine": interaction_parser.handle_search,
+    "ex": interaction_parser.handle_search, # Alias for examine
+    "exa": interaction_parser.handle_search,
 
     # Social
     "fart": social_parser.handle_fart,
@@ -104,6 +112,7 @@ async def process_command_for_character(
     command_parts = original_command_text.split()
     command_verb = command_parts[0].lower()
     args = command_parts[1:]
+    # target_of_verb = " ".join(args) # Potential target string
 
     current_room_orm = crud.crud_room.get_room_by_id(db, room_id=active_character.current_room_id)
     if not current_room_orm:
@@ -116,17 +125,56 @@ async def process_command_for_character(
         command_verb=command_verb, args=args
     )
 
+    # 1. Check standard command registry first
     handler = COMMAND_REGISTRY.get(command_verb)
     if handler:
         return await handler(context)
-    else:
-        # If command is an attack verb, suggest using game interface (implying WS)
-        if command_verb in ["attack", "atk", "kill", "kil", "ki", "k"]:
-             return schemas.CommandResponse(
-                room_data=current_room_schema,
-                message_to_player=f"Combat actions like '{command_verb}' are handled in real-time. (Use game interface)"
-            )
-        return schemas.CommandResponse(
+    
+    # 2. If not in standard registry, check for interactable action verbs
+    if current_room_orm.interactables:
+        target_interactable_name_or_id_from_args = " ".join(args).lower()
+        for interactable_dict in current_room_orm.interactables:
+            try:
+                interactable = schemas.InteractableDetail(**interactable_dict)
+                # Check if interactable is visible to this character
+                is_visible = not interactable.is_hidden or active_character.id in interactable.revealed_to_char_ids
+                
+                if is_visible and command_verb == interactable.action_verb.lower():
+                    # Potential match! Now check if the args specify this interactable.
+                    # Player might type "pull lever" or "pull rusty_lever" or just "pull" if only one thing is pullable.
+                    # This needs a robust target resolution for interactables.
+                    
+                    # Simple match: if args match id_tag or part of the name, or if no args and it's the only one with this verb
+                    matches_this_interactable = False
+                    if not target_interactable_name_or_id_from_args: 
+                        # Check if this is the *only* visible interactable with this action_verb
+                        count_with_verb = 0
+                        for other_i_dict in current_room_orm.interactables:
+                            other_i = schemas.InteractableDetail(**other_i_dict)
+                            other_is_visible = not other_i.is_hidden or active_character.id in other_i.revealed_to_char_ids
+                            if other_is_visible and other_i.action_verb.lower() == command_verb:
+                                count_with_verb += 1
+                        if count_with_verb == 1:
+                            matches_this_interactable = True
+                    elif interactable.id_tag.lower() == target_interactable_name_or_id_from_args or \
+                         target_interactable_name_or_id_from_args in interactable.name.lower():
+                        matches_this_interactable = True
+
+                    if matches_this_interactable:
+                        # Pass the specific interactable to the handler context or directly
+                        return await interaction_parser.handle_contextual_interactable_action(context, interactable)
+                        
+            except Exception as e_parse_interactable:
+                print(f"ERROR: Could not parse interactable in room {current_room_orm.id} for contextual command: {e_parse_interactable}. Data: {interactable_dict}")
+                continue # Skip this malformed interactable
+
+    # 3. If still not found, default to unknown command or combat check
+    if command_verb in ["attack", "atk", "kill", "kil", "ki", "k", "use"]: # "use" also goes to WS
+            return schemas.CommandResponse(
             room_data=current_room_schema,
-            message_to_player=f"I don't understand the command: '{original_command_text}'. Type 'help' or '?'."
+            message_to_player=f"Actions like '{command_verb}' are handled in real-time. (Use game interface / WebSocket)"
         )
+    return schemas.CommandResponse(
+        room_data=current_room_schema,
+        message_to_player=f"I don't understand the command: '{original_command_text}'. Type 'help' or '?'."
+    )

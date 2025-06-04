@@ -43,7 +43,7 @@ from app.crud.crud_item import seed_initial_items
 logger.debug("--- main.py - Imported seed_initial_items ---")
 from app.crud.crud_mob import seed_initial_mob_templates
 logger.debug("--- main.py - Imported seed_initial_mob_templates ---")
-from app.game_logic.combat_manager import start_combat_ticker_task, stop_combat_ticker_task
+from app.game_logic.combat import start_combat_ticker_task, stop_combat_ticker_task
 logger.debug("--- main.py - Imported combat_manager tasks ---")
 from app.crud.crud_character_class import seed_initial_character_class_templates 
 logger.debug("--- main.py - Imported seed_initial_character_class_templates ---")

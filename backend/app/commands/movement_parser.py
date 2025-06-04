@@ -10,6 +10,7 @@ from .utils import ( # Assuming these are all in utils.py now
     format_room_characters_for_player_message # Make sure this is imported
 )
 from app.websocket_manager import connection_manager # For broadcasting
+from app.schemas.common_structures import ExitDetail 
 
 # --- Helper Function (Ideally in utils.py) ---
 def format_room_mobs_for_player_message(
@@ -105,7 +106,7 @@ async def handle_move(context: CommandContext) -> schemas.CommandResponse:
     target_room_orm_for_move: Optional[models.Room] = None
     
     direction_map = {"n": "north", "s": "south", "e": "east", "w": "west", "u": "up", "d": "down"}
-    target_direction_str_raw = "" # The raw input for direction
+    target_direction_str_raw = ""
 
     if context.command_verb == "go":
         if context.args: 
@@ -114,54 +115,61 @@ async def handle_move(context: CommandContext) -> schemas.CommandResponse:
             message_to_player = "Go where?"
             return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message_to_player)
     else: 
-        target_direction_str_raw = context.command_verb.lower() # Command itself is the direction
+        target_direction_str_raw = context.command_verb.lower()
         
-    # Determine the full direction name (e.g., "n" -> "north")
-    # target_direction will be the canonical direction name like "north", "south", etc.
     target_direction = direction_map.get(target_direction_str_raw, target_direction_str_raw)
 
-    if target_direction not in direction_map.values(): # Validate against canonical names
+    if target_direction not in direction_map.values():
         message_to_player = "That's not a valid direction to move."
         return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message_to_player)
 
-    # Store details from before the move
     old_room_id = context.active_character.current_room_id
-    character_name_for_broadcast = context.active_character.name # For messages to others
+    character_name_for_broadcast = context.active_character.name
 
-    # Attempt to find the exit and the target room
-    current_exits = context.current_room_orm.exits if context.current_room_orm.exits is not None else {}
-    if target_direction in current_exits:
-        next_room_uuid_str = current_exits.get(target_direction)
-        if next_room_uuid_str:
+    current_exits_dict_of_dicts = context.current_room_orm.exits if context.current_room_orm.exits is not None else {}
+    
+    if target_direction in current_exits_dict_of_dicts:
+        exit_data_as_dict = current_exits_dict_of_dicts.get(target_direction) # This is an ExitDetail-like dict
+        
+        if isinstance(exit_data_as_dict, dict):
             try:
-                target_room_uuid = uuid.UUID(hex=next_room_uuid_str)
-                potential_target_room_orm = crud.crud_room.get_room_by_id(context.db, room_id=target_room_uuid)
+                # Parse the dict into an ExitDetail Pydantic model
+                exit_detail_model = ExitDetail(**exit_data_as_dict)
+            except Exception as e_parse:
+                message_to_player = f"The exit '{target_direction}' seems corrupted ({e_parse})."
+                # Log e_parse for server-side debugging
+                print(f"ERROR parsing ExitDetail for {target_direction} in room {context.current_room_orm.id}: {e_parse}, Data: {exit_data_as_dict}")
+                return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message_to_player)
+
+            if exit_detail_model.is_locked:
+                message_to_player = exit_detail_model.description_when_locked
+                # No movement, message_to_player is set.
+            else:
+                # Exit is not locked, proceed to get target room
+                # target_room_id from the model is already a UUID object
+                target_room_uuid_obj = exit_detail_model.target_room_id
+                potential_target_room_orm = crud.crud_room.get_room_by_id(context.db, room_id=target_room_uuid_obj)
                 if potential_target_room_orm:
                     target_room_orm_for_move = potential_target_room_orm
                     moved = True
                 else: 
                     message_to_player = "The path ahead seems to vanish into thin air. Spooky."
-            except ValueError: 
-                message_to_player = "The exit in that direction appears to be corrupted. Call a dev, maybe."
-        else: 
-            # This case should ideally not happen if exits dict is well-formed,
-            # but good to have a fallback.
-            message_to_player = "The way in that direction is unclear or broken."
+        else:
+            message_to_player = f"The exit data for '{target_direction}' is malformed."
+            print(f"ERROR: Exit data for {target_direction} in room {context.current_room_orm.id} is not a dict: {exit_data_as_dict}")
     else: 
         message_to_player = "You can't go that way."
 
     # If the move was successful
     if moved and target_room_orm_for_move:
-        # 1. Update character's location in DB
+        # ... (rest of the successful move logic - broadcasting, formatting messages, etc.)
+        # This part should be largely okay from previous versions, ensure it uses target_room_orm_for_move
         crud.crud_character.update_character_room(
             context.db, character_id=context.active_character.id, new_room_id=target_room_orm_for_move.id
         )
-        # The context.active_character object itself is not updated by the above call immediately
-        # unless we re-fetch it. For broadcasting, we use the new room ID.
-        
-        new_room_schema = schemas.RoomInDB.from_orm(target_room_orm_for_move) # For the mover's response
+        new_room_schema = schemas.RoomInDB.from_orm(target_room_orm_for_move)
 
-        # 2. Broadcast "leaves" message to players in the OLD room
+        # Broadcast "leaves" message
         player_ids_in_old_room = [
             char.player_id for char in crud.crud_character.get_characters_in_room(
                 context.db, room_id=old_room_id, exclude_character_id=context.active_character.id
@@ -174,53 +182,41 @@ async def handle_move(context: CommandContext) -> schemas.CommandResponse:
             }
             await connection_manager.broadcast_to_players(leave_message_payload, player_ids_in_old_room)
 
-        # 3. Broadcast "arrives" message to players in the NEW room
-        player_ids_in_new_room_others = [ # Others already in the new room
+        # Broadcast "arrives" message
+        player_ids_in_new_room_others = [
             char.player_id for char in crud.crud_character.get_characters_in_room(
                 context.db, room_id=target_room_orm_for_move.id, exclude_character_id=context.active_character.id
             ) if connection_manager.is_player_connected(char.player_id)
         ]
         if player_ids_in_new_room_others:
-            # TODO: Determine direction of arrival (e.g., if moved north, arrived from south)
-            # For now, a generic arrival message.
+            # TODO: Arrival direction
             arrive_message_payload = {
                 "type": "game_event", 
                 "message": f"<span class='char-name'>{character_name_for_broadcast}</span> arrives."
             }
             await connection_manager.broadcast_to_players(arrive_message_payload, player_ids_in_new_room_others)
         
-        # 4. Prepare the message_to_player for the character who moved
-        # This message will include the description of items, mobs, and other characters in the new room.
-        # Room name and description itself will be handled by the client using room_data.
         arrival_message_parts: List[str] = []
-        
         items_in_new_room_orm = crud.crud_room_item.get_items_in_room(context.db, room_id=target_room_orm_for_move.id)
         ground_items_text, _ = format_room_items_for_player_message(items_in_new_room_orm)
-        if ground_items_text:
-            arrival_message_parts.append(ground_items_text)
+        if ground_items_text: arrival_message_parts.append(ground_items_text)
             
         mobs_in_new_room_orm = crud.crud_mob.get_mobs_in_room(context.db, room_id=target_room_orm_for_move.id)
         mobs_text, _ = format_room_mobs_for_player_message(mobs_in_new_room_orm)
-        if mobs_text:
-            arrival_message_parts.append(mobs_text)
+        if mobs_text: arrival_message_parts.append(mobs_text)
 
-        # List other characters in the new room for the mover
         other_characters_in_new_room = crud.crud_character.get_characters_in_room(
-            context.db, 
-            room_id=target_room_orm_for_move.id, 
-            exclude_character_id=context.active_character.id # Exclude self
+            context.db, room_id=target_room_orm_for_move.id, exclude_character_id=context.active_character.id
         )
         if other_characters_in_new_room:
             chars_text_for_mover = format_room_characters_for_player_message(other_characters_in_new_room)
-            if chars_text_for_mover: 
-                arrival_message_parts.append(chars_text_for_mover)
+            if chars_text_for_mover: arrival_message_parts.append(chars_text_for_mover)
             
         final_arrival_message = "\n".join(filter(None, arrival_message_parts)).strip()
         
         return schemas.CommandResponse(
             room_data=new_room_schema, 
-            message_to_player=final_arrival_message if final_arrival_message else None # Send only if there's something to describe
+            message_to_player=final_arrival_message if final_arrival_message else None
         )
             
-    # If move failed, return the failure message and current room data
     return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message_to_player)

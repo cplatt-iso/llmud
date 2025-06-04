@@ -1,7 +1,11 @@
 # backend/app/schemas/room.py
-from pydantic import BaseModel, Field, field_validator # field_validator for Pydantic v2
-import uuid # Import uuid
-from typing import Dict, Optional, Any
+from pydantic import BaseModel, Field
+import uuid
+from typing import Dict, Optional, Any, List
+
+# Import the new detail schemas and RoomTypeEnum
+from ..models.room import RoomTypeEnum # <<< Import from models
+from .common_structures import ExitDetail, InteractableDetail
 
 class RoomBase(BaseModel):
     name: str
@@ -9,26 +13,27 @@ class RoomBase(BaseModel):
     x: int
     y: int
     z: int
-    # Exits: keys are directions (str), values are target room UUIDs (str)
-    exits: Optional[Dict[str, str]] = Field(default_factory=dict) 
+    room_type: RoomTypeEnum = Field(default=RoomTypeEnum.STANDARD) # <<< NEW FIELD
+    exits: Optional[Dict[str, ExitDetail]] = Field(default_factory=dict) 
+    interactables: Optional[List[InteractableDetail]] = Field(default_factory=list)
 
 class RoomCreate(RoomBase):
-    # id can optionally be provided if you want to set it explicitly,
-    # otherwise the DB model's default=uuid.uuid4 will handle it.
     id: Optional[uuid.UUID] = None 
-    # name, description, x, y, z, exits are inherited
     pass
 
-class RoomUpdate(BaseModel): # Not heavily used yet, but good to keep consistent
+class RoomUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     x: Optional[int] = None
     y: Optional[int] = None
     z: Optional[int] = None
-    exits: Optional[Dict[str, str]] = None
+    room_type: Optional[RoomTypeEnum] = None # <<< NEW FIELD
+    exits: Optional[Dict[str, ExitDetail]] = None
+    interactables: Optional[List[InteractableDetail]] = None
 
-class RoomInDB(RoomBase): # This schema is used for reading rooms from DB
-    id: uuid.UUID # ID from DB will definitely be a UUID
+class RoomInDB(RoomBase):
+    id: uuid.UUID
+    # room_type is already in RoomBase
 
     class Config:
-        from_attributes = True # For Pydantic v2 ORM mode
+        from_attributes = True

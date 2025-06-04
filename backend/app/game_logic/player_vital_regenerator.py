@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app import crud, models, schemas
 from app.websocket_manager import connection_manager as ws_manager
-from app.game_logic import combat_manager # To check if player is in combat
+from app.game_logic import combat # To check if player is in combat
 from app.game_state import is_character_resting, set_character_resting_status
 
 async def regenerate_player_vitals_task(db: Session):
@@ -25,7 +25,7 @@ async def regenerate_player_vitals_task(db: Session):
             continue
 
         # Skip regeneration if character is in combat
-        if character.id in combat_manager.active_combats:
+        if character.id in combat.active_combats:
             continue
 
         hp_to_regen = 0

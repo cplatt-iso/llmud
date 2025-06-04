@@ -1,0 +1,94 @@
+[
+  {
+    "source_tag": "central_hub_0_0_0", "direction": "north", "target_tag": "north_corridor_0_1_0",
+    "details": {}
+  },
+  {
+    "source_tag": "north_corridor_0_1_0", "direction": "south", "target_tag": "central_hub_0_0_0",
+    "details": {}
+  },
+  {
+    "source_tag": "central_hub_0_0_0", "direction": "east", "target_tag": "east_storage_1_0_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "cpu_east_door_lock",
+      "description_when_locked": "A heavy blast door to the east is sealed tight. The nearby lever might control it."
+    }
+  },
+  {
+    "source_tag": "east_storage_1_0_0", "direction": "west", "target_tag": "central_hub_0_0_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "cpu_east_door_lock",
+      "description_when_locked": "The blast door to the west is sealed. It seems to be controlled from the other side."
+    }
+  },
+  {
+    "source_tag": "central_hub_0_0_0", "direction": "south", "target_tag": "south_corridor_0_-1_0",
+    "details": {}
+  },
+  {
+    "source_tag": "south_corridor_0_-1_0", "direction": "north", "target_tag": "central_hub_0_0_0",
+    "details": {}
+  },
+  {
+    "source_tag": "south_corridor_0_-1_0", "direction": "south", "target_tag": "deep_archive_0_-2_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "deep_archive_key_lock",
+      "key_item_tag_opens": "archive_key_alpha",
+      "description_when_locked": "A formidable iron door blocks passage south. It has a complex keyhole.",
+      "skill_to_pick": {"skill_id_tag": "pick_lock_basic", "dc": 18}
+    }
+  },
+  {
+    "source_tag": "deep_archive_0_-2_0", "direction": "north", "target_tag": "south_corridor_0_-1_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "deep_archive_key_lock",
+      "key_item_tag_opens": "archive_key_alpha",
+      "description_when_locked": "The iron door to the north is locked from this side too.",
+      "skill_to_pick": {"skill_id_tag": "pick_lock_basic", "dc": 18}
+    }
+  },
+  {
+    "source_tag": "central_hub_0_0_0", "direction": "west", "target_tag": "west_corridor_-1_0_0",
+    "details": {}
+  },
+  {
+    "source_tag": "west_corridor_-1_0_0", "direction": "east", "target_tag": "central_hub_0_0_0",
+    "details": {}
+  },
+  {
+    "source_tag": "north_corridor_0_1_0", "direction": "north", "target_tag": "nexus_junction_0_2_0",
+    "details": {}
+  },
+  {
+    "source_tag": "nexus_junction_0_2_0", "direction": "south", "target_tag": "north_corridor_0_1_0",
+    "details": {}
+  },
+  {
+    "source_tag": "nexus_junction_0_2_0", "direction": "east", "target_tag": "sanctuary_alcove_1_2_0",
+    "details": {}
+  },
+  {
+    "source_tag": "sanctuary_alcove_1_2_0", "direction": "west", "target_tag": "nexus_junction_0_2_0",
+    "details": {}
+  },
+  {
+    "source_tag": "sanctuary_alcove_1_2_0", "direction": "east", "target_tag": "shop_node_2_2_0",
+    "details": {}
+  },
+  {
+    "source_tag": "shop_node_2_2_0", "direction": "west", "target_tag": "sanctuary_alcove_1_2_0",
+    "details": {}
+  },
+  {
+    "source_tag": "shop_node_2_2_0", "direction": "east", "target_tag": "trainer_sim_3_2_0",
+    "details": {}
+  },
+  {
+    "source_tag": "trainer_sim_3_2_0", "direction": "west", "target_tag": "shop_node_2_2_0",
+    "details": {}
+  }
+]
