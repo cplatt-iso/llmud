@@ -28,40 +28,35 @@ export function handleWebSocketMessage(serverData) {
         case "welcome_package":
             if (serverData.log && serverData.log.length > 0) UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
             if (serverData.room_data) {
-                UI.updateGameDisplay(serverData.room_data);
-                UI.updateExitsDisplay(serverData.room_data);
-                updateGameState({ displayedRoomId: serverData.room_data.id });
-                // MapDisplay.fetchAndDrawMap(); // Fetch full map structure
-                // THEN, after full map is fetched (or if already cached), highlight and set title from this specific room_data
-                // For welcome_package, fetchAndDrawMap will handle initial drawing and title bar from its fetched data
-                MapDisplay.fetchAndDrawMap(serverData.room_data); // Pass initial room data for immediate title update
+                const currentRoom = serverData.room_data;
+                UI.updateGameDisplay(currentRoom);
+                UI.updateExitsDisplay(currentRoom);
+                updateGameState({ displayedRoomId: currentRoom.id });
+                // Pass currentRoom data for immediate title/highlight and to determine target Z
+                MapDisplay.fetchAndDrawMap(currentRoom); 
             }
             break;
-        case "combat_update": // This is often used for movement, look, rest, etc.
+        case "combat_update": 
             if (serverData.room_data) {
-                const currentRoom = serverData.room_data; // This is the new current room's data
+                const currentRoom = serverData.room_data; 
                 const movedRoom = gameState.displayedRoomId !== currentRoom.id;
+                const zLevelChanged = MapDisplay.currentZLevel !== currentRoom.z;
                 
-                UI.updateGameDisplay(currentRoom); // Update room name/desc
+                UI.updateGameDisplay(currentRoom); 
                 UI.updateExitsDisplay(currentRoom);
                 updateGameState({ displayedRoomId: currentRoom.id });
 
-                // If map structure isn't loaded yet for this z-level, fetchAndDrawMap will handle it.
-                // Otherwise, redrawMapForCurrentRoom will just update highlight and title.
-                if (movedRoom || !MapDisplay.mapData || MapDisplay.mapData.current_z_level !== currentRoom.z) {
-                    // If moved to a new Z level, or map data is missing, fetch the whole map.
-                    // Pass currentRoom data so title bar can be updated immediately.
+                if (movedRoom || zLevelChanged || !MapDisplay.mapDataCache[currentRoom.z]) {
+                    // console.log(`Map update triggered: moved=${movedRoom}, zChanged=${zLevelChanged}, notCached=${!MapDisplay.mapDataCache[currentRoom.z]}`);
                     MapDisplay.fetchAndDrawMap(currentRoom);
                 } else {
-                    // Still on same Z-level, map structure is loaded, just update current room.
                     MapDisplay.redrawMapForCurrentRoom(currentRoom.id, currentRoom);
                 }
             }
             if (serverData.log && serverData.log.length > 0) UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
             updateGameState({ isInCombat: !serverData.combat_over });
             break;
-        case "vitals_update":
-            break;
+        case "vitals_update": break;
         case "ooc_message": UI.appendToOutput(serverData.message, { styleClass: "ooc-chat-message" }); break;
         case "game_event": if (serverData.message) UI.appendToOutput(serverData.message, { styleClass: "game-message" }); break;
         default:
@@ -71,11 +66,16 @@ export function handleWebSocketMessage(serverData) {
     }
 }
 
+// ... (startLoginProcess, promptForPassword, etc. remain largely unchanged from previous correct version) ...
+// Make sure they call UI.showAppropriateView() AFTER updateGameState loginState changes.
+
 async function startLoginProcess() {
     clearSession(); 
     updateGameState({ loginState: 'PROMPT_USER' }); 
     WebSocketService.close();
     MapDisplay.clearMap(); 
+    MapDisplay.currentMapDisplayData = null; // Clear current display data
+    MapDisplay.currentZLevel = 0; // Reset Z
     MapDisplay.drawMap();  
     UI.showAppropriateView(); 
     UI.clearOutput();
@@ -220,15 +220,9 @@ async function enterGameModeWithCharacter(character, initialRoomDataFromHttpSele
     UI.setInputCommandPlaceholder("Type command...");
     UI.setInputCommandType('text');
 
-    if (initialRoomDataFromHttpSelect) {
-        UI.updateGameDisplay(initialRoomDataFromHttpSelect);
-        UI.updateExitsDisplay(initialRoomDataFromHttpSelect);
-        updateGameState({ displayedRoomId: initialRoomDataFromHttpSelect.id });
-        // Pass the specific room data to fetchAndDrawMap for immediate title update
-        MapDisplay.fetchAndDrawMap(initialRoomDataFromHttpSelect); 
-    } else {
-        MapDisplay.fetchAndDrawMap(); // Will use its internal logic to find current room after fetching map
-    }
+    // Pass initialRoomData to fetchAndDrawMap. It will use its Z to fetch if not cached.
+    MapDisplay.fetchAndDrawMap(initialRoomDataFromHttpSelect); 
+    
     WebSocketService.connect(); 
     UI.focusCommandInput();
 }
@@ -236,6 +230,8 @@ async function enterGameModeWithCharacter(character, initialRoomDataFromHttpSele
 function handleLogout() {
     WebSocketService.close();
     MapDisplay.clearMap();
+    MapDisplay.currentMapDisplayData = null; // Also clear this on logout
+    MapDisplay.currentZLevel = 0;
     clearSession(); 
     startLoginProcess(); 
 }
@@ -243,18 +239,18 @@ function handleLogout() {
 async function handleHttpCommandResponse(responseData, originalCommand) {
     if (responseData.message_to_player) UI.appendToOutput(responseData.message_to_player, { styleClass: 'game-message' });
     if (responseData.room_data) {
-        const currentRoom = responseData.room_data; // This is the new current room's data
+        const currentRoom = responseData.room_data; 
         const cmdClean = originalCommand.toLowerCase().trim();
         const isLook = cmdClean.startsWith("look") || cmdClean === "l"; 
         const movedRoom = gameState.displayedRoomId !== currentRoom.id;
+        const zLevelChanged = MapDisplay.currentZLevel !== currentRoom.z;
 
         if (isLook || movedRoom) UI.updateGameDisplay(currentRoom);
         UI.updateExitsDisplay(currentRoom);
         updateGameState({ displayedRoomId: currentRoom.id });
-        // If map structure isn't loaded yet for this z-level, fetchAndDrawMap will handle it.
-        // Otherwise, redrawMapForCurrentRoom will just update highlight and title.
-        if (movedRoom || !MapDisplay.mapData || MapDisplay.mapData.current_z_level !== currentRoom.z) {
-            MapDisplay.fetchAndDrawMap(currentRoom); // Pass current room for immediate title update
+        
+        if (movedRoom || zLevelChanged || !MapDisplay.mapDataCache[currentRoom.z]) {
+            MapDisplay.fetchAndDrawMap(currentRoom); 
         } else {
             MapDisplay.redrawMapForCurrentRoom(currentRoom.id, currentRoom);
         }
@@ -385,10 +381,10 @@ async function attemptSessionResume() {
         UI.clearOutput(); 
         UI.appendToOutput("Attempting to resume session...");
         try {
-            // When resuming, we don't have initialRoomData from a fresh selectCharacterOnBackend.
-            // We rely on enterGameModeWithCharacter to call MapDisplay.fetchAndDrawMap,
-            // which will use the character's last known Z to fetch the map.
-            // The WebSocket welcome_package will provide the exact current room for title and highlight.
+            // For resume, we don't call selectCharacterOnBackend as the session token implies selection.
+            // We directly construct a partial character and enter game mode.
+            // enterGameModeWithCharacter will then call MapDisplay.fetchAndDrawMap(null)
+            // and the WebSocket welcome_package will provide the definitive current room.
             UI.appendToOutput(`Resumed session as ${gameState.selectedCharacterName}.`);
             const resumedCharacter = { 
                 id: gameState.selectedCharacterId,
@@ -399,7 +395,7 @@ async function attemptSessionResume() {
             };
             await enterGameModeWithCharacter(resumedCharacter, null); // Pass null for initialRoomData
             return true;
-        } catch (error) {
+        } catch (error) { // This catch might not be hit if error is in async enterGameMode calls
             UI.appendToOutput(`! Session resume failed: ${error.data?.detail || error.message}. Please log in.`, { styleClass: 'error-message-inline' });
             clearSession(); 
         }

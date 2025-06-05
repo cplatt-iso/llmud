@@ -1,83 +1,81 @@
-# The Unholy MUD of Tron & Allen - A Text-Based Adventure Monstrosity
+# The Unholy MUD of Tron & Allen1 (UMGTWOTRDBSREUPPDX_TPSC) - Alpha
 
-Welcome, Program, to a glorious experiment in text-based world-building, FastAPI, WebSockets, and questionable sanity.
+A text-based Multi-User Dungeon (MUD) with a Python/FastAPI backend and a Vanilla JavaScript frontend. Now with more ASCII art than strictly necessary and a map that occasionally works!
 
-## Current Status (Phase: Data-Driven Genesis)
+## Current State of Affairs (The "Holy Shit, Some of This Works" List)
 
-We have a functional, albeit compact, MUD environment. Players can create characters, explore rooms, interact with basic objects (including locked doors and levers), engage in real-time combat with mobs, use skills, and level up. The foundations are maturing, and recent efforts have focused on refactoring core systems and improving interactivity.
+We've dragged this beast kicking and screaming through several layers of digital hell, and look what we've got:
 
-**Our current major directive is to externalize all initial game content (items, mobs, classes, skills, traits, spawn points) into JSON seed files located in `backend/app/seeds/`. This will decouple game data from game logic, making content management and future LLM-based generation feasible.** Room and exit definitions are already successfully seeded from JSON.
+*   **Solid Foundations (Mostly):**
+    *   Python/FastAPI backend, PostgreSQL/SQLAlchemy ORM, JWT Authentication.
+    *   Vanilla JS frontend with distinct modules for UI, API, WebSocket, Game State, and Map.
+    *   Persistent player sessions via localStorage (token, character ID, name, class).
+*   **Improved UI:**
+    *   Character info bar (Name, Class, Level).
+    *   Vitals bars (HP, MP, XP) that update from WebSocket.
+    *   Exits and Currency display.
+    *   Scrollable terminal output with `flex-direction: column-reverse`.
+    *   Copy Log button.
+    *   **Interactive SVG Map:**
+        *   Displays rooms and connections for the current Z-level.
+        *   Highlights the player's current room.
+        *   **Zoomable** via mousewheel and +/- buttons.
+        *   **Pannable** via mouse click-and-drag.
+        *   **Y-axis flipped** for intuitive "North is up" display.
+        *   **Map Title Bar:** Shows "Map | Coords: X, Y, Z" for the current room.
+        *   **Z-Level Display Box:** Shows "Level" and the current Z-level integer in the top-left of the map viewport.
+        *   **Zone Display Bar (Placeholder):** Below the map, ready for zone name and level range.
+        *   **Room Type Icons (Emojis):** Draws icons (✨💰💪🧩💀🚪) on rooms based on their `room_type` from backend data.
+*   **Player & Character Lifecycle:**
+    *   User registration and login.
+    *   Multiple characters per account, character selection.
+    *   Character creation with name and class (from backend-defined templates).
+    *   Core attributes (Str, Dex, etc.), HP/MP, Level, XP.
+    *   Leveling up (basic stat/ability gains driven by `CharacterClassTemplate`).
+    *   Currency system (platinum, gold, silver, copper) with debug commands.
+*   **Dynamic World & Inhabitants:**
+    *   Coordinate-based rooms (`x, y, z`) with configurable exits (`Room.exits` JSONB field using `ExitDetail` schema).
+    *   `Room.interactables` JSONB field for levers, hidden panels, etc., with effects like toggling exit locks or custom events.
+    *   `MobTemplate` and `RoomMobInstance` system for creatures.
+    *   `MobSpawnDefinition` for populating rooms (type, quantity, room, respawn timers, basic roaming AI).
+    *   **World Ticker:** Handles mob respawning, basic mob AI (roaming, aggressive mob combat initiation), and player HP/MP regeneration (natural & resting state, interruptible by actions/combat).
+*   **Interactive Gameplay:**
+    *   Movement (N, S, E, W, U, D) via WebSocket, respects locked doors.
+    *   `look` command (room details, items, mobs, other players) via WebSocket.
+    *   Item system: `ItemTemplate` (from `items.json` seed), `RoomItemInstance` (items on ground), `CharacterInventoryItem` (player inventory).
+    *   **Basic Equipment & Combat Stats:** Equipping/unequipping items (e.g., weapons, armor via HTTP commands for now). Combat stats (AC, attack bonus, damage) dynamically calculated based on attributes and equipped weapon/armor. Unarmed combat defaults.
+    *   **Combat System (WebSocket):** Real-time, server-side. Player attacks, mob attacks, skill usage. Target resolution (mobs by name/number, exits by direction). Death & respawn (player to 0,0,0). XP awards and currency drops from mobs (for basic attacks and skill kills). Combat logs/echoes to player and room.
+    *   **Skills System:** Characters learn skills from `CharacterClassTemplate`. `use <skill> [target]` command (WebSocket).
+        *   `basic_punch`, `power_attack_melee` implemented.
+        *   Utility skill: `pick_lock_basic` (targets exit direction, rolls against DC, updates lock state).
+    *   Social commands (`say`, `emote`, `fart`, `ooc`) via HTTP.
+    *   Meta commands (`help`, `score`, `inventory`, `skills`, `traits`) via HTTP.
+    *   Comprehensive debug commands (spawn items/mobs, modify stats/XP/level/currency) via HTTP.
+*   **Seed Data Externalization:**
+    *   `rooms_z0.json` and `exits_z0.json` define the initial world layout.
+    *   `items.json` defines all base item templates.
+    *   CRUD seeder functions (`seed_initial_world`, `seed_initial_items`) load from these JSON files, creating/updating DB entries.
+*   **Map Data Caching (Client-Side):**
+    *   The frontend now caches map data per Z-level (`MapDisplay.mapDataCache`).
+    *   `fetchAndDrawMap` only makes an API call if the map for the target Z-level isn't already cached.
+    *   Movement within a cached Z-level primarily uses `redrawMapForCurrentRoom` with fresh room data from WebSocket for title/highlight, avoiding full map re-fetches.
 
-### Core Features:
+## Next Phase: Flesh out the damn world - Gear, Loot, and More Seeds!
 
-*   **Backend:** Python 3.9+, FastAPI, PostgreSQL, SQLAlchemy (ORM).
-*   **Frontend:** Vanilla JavaScript (ES Modules), basic HTML/CSS for a terminal-like interface.
-*   **Authentication:** User registration/login via JWT.
-*   **Characters:** Multiple characters per user, class-based system (`Warrior`, `Swindler`, `Adventurer` seeded), attributes, HP/MP, levels, XP.
-*   **World:**
-    *   Coordinate-based rooms (`x,y,z`).
-    *   Complex exits supporting locked states, keys, skill-based unlocking (`ExitDetail` JSON).
-    *   Interactable room features (levers, hidden panels) with defined effects (`InteractableDetail` JSON).
-    *   2D minimap of current Z-level.
-*   **Gameplay:**
-    *   Movement via WebSocket (`north`, `south`, `go <dir>`).
-    *   `look` command for room, items, mobs, characters.
-    *   `search` command to find hidden interactables.
-    *   Contextual commands for interactables (e.g., `pull lever`).
-    *   Item system: templates, items on ground, character inventory (backpack/equipped). Commands: `get`, `drop`, `equip`, `unequip` (all via WebSocket).
-    *   `unlock <dir> [with <item>]` command for key-based door unlocking.
-    *   Social commands: `say`, `emote`, `fart`, global `ooc`.
-    *   Meta commands: `help`, `score`, `inventory`, `skills`, `traits`.
-*   **Combat (Real-time via WebSocket):**
-    *   Server-side combat ticker.
-    *   Player-initiated attacks (`attack <target>`), skill usage (`use <skill> [target]`).
-    *   Mob-initiated attacks (for aggressive mobs).
-    *   Target resolution (by name/number).
-    *   Mob/Player death (player respawns at (0,0,0)).
-    *   XP awards and currency drops from mobs.
-    *   Combat logs (personal) and room-wide echoes.
-*   **Skills & Traits:**
-    *   Players learn skills/traits from class templates upon leveling.
-    *   Basic skill effects implemented (`basic_punch`, `power_attack_melee`).
-    *   Skill-based lockpicking (`pick_lock_basic`) implemented.
-*   **Mobs & AI:**
-    *   `MobTemplate` and `RoomMobInstance` system.
-    *   `MobSpawnDefinition` controls mob populations, respawn timers, and basic roaming/aggression.
-    *   World Ticker handles mob respawning and AI (roaming mobs move between rooms respecting locks, aggressive mobs initiate combat).
-*   **Player State:**
-    *   HP/MP regeneration (natural and enhanced via "rest" command), interruptible.
-    *   Persistent sessions via `localStorage` (token, selected character ID).
-*   **Refactoring:**
-    *   The core `combat_manager.py` has been refactored into multiple modules under `app/game_logic/combat/` for better organization.
-    *   Room and Exit definitions are now loaded from `app/seeds/rooms_z0.json` and `app/seeds/exits_z0.json`.
+The map is less of an abstract nightmare, and the core gameplay loop is... loopy. Now we need to make the interactions richer and the world feel less empty.
 
-### Next Steps: Externalize All Seed Data
+*   **Full Equipment System:** Define all equipment slots. Implement robust `equip` and `unequip` logic. Ensure stats update correctly.
+*   **Mob Loot Tables:** Mobs need to drop more than just coins. Define loot tables (specific items, random items from categories, chances).
+*   **Seed More Content (Externalize ALL THE THINGS):**
+    *   `mob_templates.json`
+    *   `character_classes.json`
+    *   `skills.json`
+    *   `traits.json`
+    *   `mob_spawn_definitions.json`
+    *   Update corresponding CRUD seeders to load from these JSONs.
+*   **Seed Initial Equipment:** Place starting gear on character creation or in initial rooms.
 
-1.  Complete the migration of all initial game content (items, mobs, classes, skills, traits, mob spawns) to JSON files in `app/seeds/`.
-2.  Update all corresponding CRUD seeder functions (`seed_initial_...`) to load from these JSON files.
-3.  Refine item placement logic in `seed_initial_world` to use item templates seeded from `items.json`.
+This will involve a lot of backend work (models, CRUD, game logic) and careful JSON schema design for the seed files.
 
-### Future Phases (Post Seed Externalization):
-
-*   **Content Expansion (LLM - Gemini Focus):**
-    *   Admin endpoints/scripts to use Gemini for generating thematic zone content (rooms, mobs, items, basic quests) based on prompts and existing templates.
-    *   Integrate LLM for dynamic NPC dialogue, richer descriptions, and potentially emergent small-scale events.
-*   **Advanced Gameplay Systems:**
-    *   Quest system.
-    *   NPCs with shops, training, dialogue.
-    *   More complex skills and status effects.
-    *   Player-to-player interaction (trade, groups - maybe).
-    *   Crafting (if we're feeling truly insane).
-
-## Development Setup
-
-(Standard FastAPI/uvicorn backend, simple static file server for frontend)
-
-```bash
-# To run backend (from ./backend directory)
-# Ensure .env file is set up with DATABASE_URL
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-# To serve frontend (from ./frontend directory, assuming a simple HTTP server)
-# Example: python -m http.server 8080
-# Or use something like live-server
+---
+Remember to run `bundle_context.sh` from the project root to generate `project_context_bundle.txt` if you're handing this off or taking a break.

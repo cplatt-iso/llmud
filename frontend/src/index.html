@@ -5,284 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Unholy MUD of Tron & Allen1</title>
-    <style>
-        body {
-            background-color: #000;
-            color: #00ff00;
-            font-family: 'Courier New', Courier, monospace;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-            padding: 10px;
-            box-sizing: border-box;
-        }
-
-        .char-class-desc {
-            font-style: italic;
-            color: #999;
-        }
-
-        .header-text {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        .header-text h1 {
-            margin: 0 0 5px 0;
-            font-size: 1.8em;
-            line-height: 1.2;
-        }
-
-        .header-text p {
-            margin: 0;
-            font-size: 0.9em;
-            color: #00cc00;
-        }
-
-        .game-area-wrapper {
-            display: flex;
-            flex-direction: row;
-            align-items: flex-start;
-            width: 100%;
-            max-width: 1200px;
-        }
-
-        .mud-container {
-            position: relative;
-            width: 100%;
-            max-width: 900px;
-            display: flex;
-            flex-direction: column;
-            border: 1px solid #005500;
-        }
-
-        #copy-output-button {
-            position: absolute;
-            top: 35px;
-            right: 5px;
-            padding: 8px 12px;
-            background-color: #333;
-            color: #0f0;
-            border: 1px solid #0f0;
-            border-radius: 4px;
-            cursor: pointer;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 0.9em;
-            z-index: 100;
-        }
-
-        #copy-output-button:hover { background-color: #444; }
-        #copy-output-button:active { background-color: #222; }
-
-        .terminal-output {
-            flex-grow: 1;
-            height: 70vh;
-            overflow-y: scroll;
-            background-color: #030303;
-            padding: 10px;
-            box-sizing: border-box;
-            white-space: pre-wrap;
-            line-height: 1.4;
-            border-bottom: 1px solid #005500;
-            display: flex;
-            flex-direction: column-reverse; /* Keep for scrolling from bottom */
-        }
-         /* Ensure individual lines/messages added to terminal output allow normal flow */
-        .terminal-output > div {     
-        }
-
-
-        .terminal-input-line {
-            display: flex;
-            align-items: center;
-            background-color: #030303;
-            padding: 8px 10px;
-        }
-
-        #prompt-text {
-            margin-right: 8px;
-            color: #00dd00;
-        }
-
-        .terminal-input {
-            scrollbar-width: thin;
-            scrollbar-color: #005500 #080808;
-            flex-grow: 1;
-            background-color: transparent;
-            border: none;
-            color: #00ff00;
-            font-family: inherit;
-            font-size: 1em;
-            outline: none;
-            padding: 0;
-        }
-
-        .terminal-output::-webkit-scrollbar { width: 10px; height: 10px; }
-        .terminal-output::-webkit-scrollbar-track { background: #080808; }
-        .terminal-output::-webkit-scrollbar-thumb { background-color: #005500; border-radius: 5px; border: 2px solid #030303; }
-        .terminal-output::-webkit-scrollbar-thumb:hover { background-color: #007700; }
-        .terminal-output::-webkit-scrollbar-corner { background: #030303; }
-
-        #vitals-monitor {
-            display: none;
-            flex-direction: row;
-            justify-content: space-around;
-            align-items: center;
-            padding: 5px 8px;
-            background-color: #1a1a1a;
-            border-bottom: 1px solid #333;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 0.9em;
-            margin-bottom: 5px;
-            height: auto;
-        }
-
-        .vital-bar-container {
-            display: flex;
-            align-items: center;
-            flex-grow: 1;
-            margin-right: 10px;
-        }
-        .vital-bar-container:last-child { margin-right: 0; }
-        .vital-label { color: #bbb; margin-right: 5px; font-size: 0.85em; }
-        .vital-bar-outer { flex-grow: 1; height: 16px; background-color: #333; border: 1px solid #555; border-radius: 3px; position: relative; overflow: hidden; }
-        .vital-bar-inner { height: 100%; transition: width 0.3s ease-out; border-radius: 2px; }
-        .vital-bar-text { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #ffffff; font-size: 0.75em; font-weight: bold; text-shadow: 1px 1px 1px #000000; white-space: nowrap; }
-
-        #map-column { /* New container for map and its title */
-            display: none; /* JS will control this */
-            flex-direction: column;
-            margin-left: 15px;
-            width: 250px; /* Fixed width for the whole column */
-            flex-shrink: 0; /* Prevent shrinking */
-        }
-
-        #map-title-bar {
-            /* Styles similar to #character-info-bar */
-            background-color: #111;
-            color: #00dd00;
-            padding: 6px 10px;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 0.9em; /* Matches char info bar */
-            border: 1px solid #005500; /* Border around */
-            border-bottom: 1px solid #005500; /* Separator before map viewport */
-            text-align: center;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            /* height: consistent with #character-info-bar if possible, else auto */
-            /* Ensure its height is considered for #map-viewport */
-        }
-        #map-title-bar span { margin: 0 3px; } /* Slightly less margin than char info */
-        .map-title-separator { color: #007700; font-weight: bold; }
-        #map-title-text { font-weight: bold; color: #ffffff;}
-        #map-coords-label { color: #bbbbbb; } /* Dimmer label for "Coords:" */
-        #map-coords-text { font-weight: bold; }
-
-
-        #map-viewport {
-            /* width: 250px; /* Width is now on #map-column */
-            /* height: 250px; /* Height can be flexible or fixed */
-            height: 228px; /* Example: 250px total - map-title-bar height. Adjust as needed */
-            border: 1px solid #00cc00;
-            border-top: none; /* Avoid double border with title bar */
-            background-color: #080808;
-            overflow: hidden;
-            /* display: none; /* Controlled by #map-column */
-            box-shadow: 0 0 10px #00cc00;
-            /* margin-left: 15px; /* Now on #map-column */
-            position: relative; 
-        }
-
-        .char-list-item { margin-left: 20px; }
-        .char-list-item .char-index { color: #ffff00; }
-        .char-list-item .char-name { color: #00ff00; }
-        .char-list-item .char-class { color: #00aaaa; }
-        .room-name-header { color: #ffff00; font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
-        .error-message-inline { color: #ff4444; font-style: italic; }
-        .game-message { color: #cccccc; display: block; } /* Ensure game messages are block */
-        .system-message-inline { color: #00aa00; font-style: italic; } /* For copy log success */
-
-
-        .inv-slot-name { color: #00ffff; font-weight: bold; }
-        .inv-backpack-number { color: #ffff00; }
-        .inv-item-name { color: #00ff00; }
-        .inv-item-qty { color: #aaaaaa; }
-        .inv-section-header { color: #f0f0f0; font-weight: bold; }
-        .char-name { color: #00ff00; }
-
-        .combat-success { color: #33cc33; font-weight: bold; }
-        .combat-miss { color: #ff9933; }
-        .combat-hit { color: #ffff00; font-weight: bold; }
-        .combat-crit { color: #ff9900; font-weight: bold; }
-        .combat-hp { color: #ffdddd; }
-        .combat-death { color: #ff3333; font-weight: bold; font-style: italic; }
-        .combat-hit-player { color: #ff6666; font-weight: bold; }
-        .combat-crit-player { color: #cc0000; font-weight: bold; }
-        .ooc-chat-message { color: #9999ff; font-style: italic; }
-        
-        #input-prompt-line { display: flex; align-items: center; padding: 0 8px; }
-
-        #character-info-bar {
-            display: none; 
-            background-color: #111;
-            color: #00dd00;
-            padding: 6px 10px;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 0.9em;
-            border-bottom: 1px solid #005500;
-            text-align: center;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            /* height: 22px; /* Example fixed height if needed */
-        }
-        #character-info-bar span { margin: 0 5px; }
-        .char-info-separator { color: #007700; font-weight: bold; }
-        #char-info-name { font-weight: bold; color: #ffffff; }
-        #char-info-class { font-style: italic; color: #00ffdd; }
-        #char-info-level { font-weight: bold; }
-
-        #bottom-info-bar {
-            display: none; 
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 5px 10px;
-            background-color: #181818;
-            border-top: 1px solid #005500;
-            border-bottom: 1px solid #005500;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 0.9em;
-            color: #00cc00;
-            margin-bottom: 5px;
-        }
-        #exits-display-container { flex-basis: 60%; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        #exits-display-container b { color: #bbb; }
-        #exits-text { color: #00dd00; }
-        #currency-display-container { flex-basis: 35%; text-align: right; white-space: nowrap; }
-        .currency { margin-left: 10px; font-weight: bold; }
-        .currency.gold { color: #FFD700; }
-        .currency.silver { color: #C0C0C0; }
-        .currency.copper { color: #B87333; }
-        .currency.platinum { color: #e5e4e2; }
-
-        /* Ensure terminal lines flow correctly */
-        .terminal-line {
-            /* white-space: pre-wrap; /* Already on .terminal-output, might not be needed here */
-            /* margin-bottom: 2px; /* Optional: small space between distinct messages */
-        }
-        .room-description { /* For multiline room descriptions */
-            /* white-space: pre-wrap; */ /* Handled by .terminal-output */
-        }
-
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-    <header class="header-text"> <!-- Renamed for clarity -->
+    <header class="header-text">
         <h1>Legend of the Solar Dragon's Tradewar</h1>
         <h2>2002 Barrels of Food Fight</h2>
         <h3>Over a Usurped Pit of Devastation (Alpha)</h3>
@@ -291,6 +18,7 @@
 
     <div class="game-area-wrapper">
         <div class="mud-container">
+            <!-- ... (mud container contents unchanged) ... -->
             <div id="character-info-bar">
                 <span id="char-info-name">Character Name</span>
                 <span class="char-info-separator">|</span>
@@ -305,7 +33,7 @@
                     <b>Exits:</b> <span id="exits-text"></span>
                 </div>
                 <div id="currency-display-container">
-                    <span class="currency platinum">0p</span> 
+                    <span class="currency platinum">0p</span>
                     <span class="currency gold">0g</span>
                     <span class="currency silver">0s</span>
                     <span class="currency copper">0c</span>
@@ -315,45 +43,60 @@
                 <div class="vital-bar-container">
                     <span class="vital-label">HP:</span>
                     <div class="vital-bar-outer" id="hp-bar-outer">
-                        <div class="vital-bar-inner" id="player-hp-bar" style="width: 100%; background-color: #d9534f;"></div>
+                        <div class="vital-bar-inner" id="player-hp-bar" style="width: 100%; background-color: #d9534f;">
+                        </div>
                         <span class="vital-bar-text" id="player-hp-text">100 / 100</span>
                     </div>
                 </div>
                 <div class="vital-bar-container">
                     <span class="vital-label">MP:</span>
                     <div class="vital-bar-outer" id="mp-bar-outer">
-                        <div class="vital-bar-inner" id="player-mp-bar" style="width: 100%; background-color: #5bc0de;"></div>
+                        <div class="vital-bar-inner" id="player-mp-bar" style="width: 100%; background-color: #5bc0de;">
+                        </div>
                         <span class="vital-bar-text" id="player-mp-text">50 / 50</span>
                     </div>
                 </div>
                 <div class="vital-bar-container">
                     <span class="vital-label">XP:</span>
                     <div class="vital-bar-outer" id="xp-bar-outer">
-                        <div class="vital-bar-inner" id="player-xp-bar" style="width: 0%; background-color: #f0ad4e;"></div>
+                        <div class="vital-bar-inner" id="player-xp-bar" style="width: 0%; background-color: #f0ad4e;">
+                        </div>
                         <span class="vital-bar-text" id="player-xp-text">0 / 100</span>
                     </div>
                 </div>
             </div>
             <div id="input-prompt-line" class="terminal-input-line">
                 <span id="prompt-text">> </span>
-                <input type="text" id="commandInput" class="terminal-input" name="mud_command_line" autofocus autocomplete="off">
+                <input type="text" id="commandInput" class="terminal-input" name="mud_command_line" autofocus
+                    autocomplete="off">
             </div>
         </div>
 
-        <div id="map-column"> <!-- Wrapped map-title-bar and map-viewport -->
+        <div id="map-column">
             <div id="map-title-bar">
                 <span id="map-title-text">Map</span>
                 <span class="map-title-separator">|</span>
                 <span id="map-coords-label">Coords:</span>
                 <span id="map-coords-text">?, ?, ?</span>
-                <!-- Future: <span class="map-title-separator">|</span> <span id="map-zone-name">Zone Name</span> -->
             </div>
-            <div id="map-viewport"> <!-- Removed inline style="position: relative;" as it's in CSS now -->
+            <div id="map-viewport">
+                <!-- NEW Z-LEVEL DISPLAY BOX -->
+                <div id="map-z-level-box">
+                    <span class="z-level-label">Level</span>
+                    <span id="map-z-level-value">-99</span>
+                </div>
                 <svg id="map-svg" width="100%" height="100%"></svg>
+            </div>
+            <!-- NEW ZONE DISPLAY BAR -->
+            <div id="map-zone-bar">
+                <span class="zone-label">Zone:</span>
+                <span id="map-zone-name-text">[Zone Name Placeholder]</span>
+                <span id="map-zone-levels-text">[Lvl ?-?]</span>
             </div>
         </div>
     </div>
 
     <script type="module" src="main.js"></script>
 </body>
+
 </html>

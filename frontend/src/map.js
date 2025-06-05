@@ -6,70 +6,45 @@ import { UI } from './ui.js';
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 export const MapDisplay = {
-    svgElement: null,
-    mapContentGroup: null, 
+    svgElement: null, mapContentGroup: null, 
+    mapDataCache: {}, currentZLevelForView: 0, currentMapDisplayData: null, 
+    currentRoomHighlightColor: 'rgba(255, 255, 0, 0.7)', defaultRoomColor: 'rgba(0, 128, 0, 0.3)',
+    connectionLineColor: 'rgba(0, 192, 0, 0.6)', roomStrokeColor: 'rgba(0,50,0,0.8)',
+    TILE_SIZE_BASE: 24, currentZoomLevel: 1.0, MIN_ZOOM_LEVEL: 0.2, MAX_ZOOM_LEVEL: 3.0, ZOOM_INCREMENT_FACTOR: 1.15,
+    mapTranslateX: 0, mapTranslateY: 0, isPanning: false, lastPanX: 0, lastPanY: 0,
+    zoomButtonsContainer: null, mapViewportElement: null,
+    minGameY: 0, maxGameY: 0, 
 
-    mapData: null, // Stores { rooms: [], current_room_id: 'guid', current_z_level: 0 }
-    currentRoomHighlightColor: 'rgba(255, 255, 0, 0.7)',
-    defaultRoomColor: 'rgba(0, 128, 0, 0.3)',
-    connectionLineColor: 'rgba(0, 192, 0, 0.6)',
-    roomStrokeColor: 'rgba(0,50,0,0.8)',
+    // Room Type Icons (Emojis)
+    roomTypeIcons: {
+        sanctuary: '✨', // Sparkles
+        shop: '💰',      // Money Bag
+        trainer: '💪',   // Flexed Biceps
+        puzzle: '🧩',    // Puzzle Piece
+        boss_lair: '💀', // Skull (assuming you add 'boss_lair' type)
+        dungeon_entrance: '🚪', // Door
+        // standard rooms won't have an icon by default
+    },
+    iconColor: 'rgba(220, 220, 255, 0.9)', // Light lavender/blue for icons
+    iconFontSizeMultiplier: 0.6, // Relative to TILE_SIZE_BASE for icon text
 
-    TILE_SIZE_BASE: 24, 
-    currentZoomLevel: 1.0,
-    MIN_ZOOM_LEVEL: 0.2,
-    MAX_ZOOM_LEVEL: 3.0,
-    ZOOM_INCREMENT_FACTOR: 1.15,
-
-    mapTranslateX: 0,
-    mapTranslateY: 0,
-
-    isPanning: false,
-    lastPanX: 0,
-    lastPanY: 0,
-
-    zoomButtonsContainer: null,
-    mapViewportElement: null,
-
-    minGameY: 0,
-    maxGameY: 0,
-
-    initialize: function() {
+    initialize: function() { /* UNCHANGED from previous - it was correct */
         this.svgElement = document.getElementById('map-svg');
         this.mapViewportElement = document.getElementById('map-viewport');
-
-        if (!this.svgElement || !this.mapViewportElement) {
-            console.error("CRITICAL: Map SVG element or viewport not found! Map will not function.");
-            return;
-        }
-
-        this.mapContentGroup = document.createElementNS(SVG_NS, "g");
-        this.mapContentGroup.id = "map-content-group";
+        if (!this.svgElement || !this.mapViewportElement) { console.error("CRITICAL: Map SVG element or viewport not found!"); return; }
+        this.mapContentGroup = document.createElementNS(SVG_NS, "g"); this.mapContentGroup.id = "map-content-group";
         this.svgElement.appendChild(this.mapContentGroup); 
-        
-        this.resizeSVG(); 
-        window.addEventListener('resize', () => this.resizeSVG());
-
+        this.resizeSVG(); window.addEventListener('resize', () => this.resizeSVG());
         if (this.mapViewportElement) { 
             this.zoomButtonsContainer = document.createElement('div');
-            this.zoomButtonsContainer.style.position = 'absolute';
-            this.zoomButtonsContainer.style.top = '5px'; 
-            this.zoomButtonsContainer.style.right = '5px'; 
-            this.zoomButtonsContainer.style.zIndex = '1001'; 
-            const zoomInButton = document.createElement('button');
-            zoomInButton.textContent = '+';
-            zoomInButton.title = 'Zoom In';
-            this._styleZoomButton(zoomInButton);
-            zoomInButton.addEventListener('click', (e) => { e.stopPropagation(); this.zoomIn(); });
-            const zoomOutButton = document.createElement('button');
-            zoomOutButton.textContent = '-';
-            zoomOutButton.title = 'Zoom Out';
-            this._styleZoomButton(zoomOutButton);
-            zoomOutButton.addEventListener('click', (e) => { e.stopPropagation(); this.zoomOut(); });
-            this.zoomButtonsContainer.appendChild(zoomInButton);
-            this.zoomButtonsContainer.appendChild(zoomOutButton);
+            this.zoomButtonsContainer.style.position = 'absolute'; this.zoomButtonsContainer.style.top = '5px'; 
+            this.zoomButtonsContainer.style.right = '5px'; this.zoomButtonsContainer.style.zIndex = '1001'; 
+            const zoomInButton = document.createElement('button'); zoomInButton.textContent = '+'; zoomInButton.title = 'Zoom In';
+            this._styleZoomButton(zoomInButton); zoomInButton.addEventListener('click', (e) => { e.stopPropagation(); this.zoomIn(); });
+            const zoomOutButton = document.createElement('button'); zoomOutButton.textContent = '-'; zoomOutButton.title = 'Zoom Out';
+            this._styleZoomButton(zoomOutButton); zoomOutButton.addEventListener('click', (e) => { e.stopPropagation(); this.zoomOut(); });
+            this.zoomButtonsContainer.appendChild(zoomInButton); this.zoomButtonsContainer.appendChild(zoomOutButton);
             this.mapViewportElement.appendChild(this.zoomButtonsContainer); 
-
             this.mapViewportElement.addEventListener('wheel', (event) => this.handleMouseWheelZoom(event), { passive: false });
             this.mapViewportElement.addEventListener('mousedown', (event) => this.handlePanStart(event));
             this.mapViewportElement.addEventListener('mousemove', (event) => this.handlePanMove(event));
@@ -78,234 +53,202 @@ export const MapDisplay = {
             this.mapViewportElement.style.cursor = 'grab'; 
         }
     },
-
-    _styleZoomButton: function(button) { 
-        button.style.background = '#333';
-        button.style.color = '#0f0';
-        button.style.border = '1px solid #0f0';
-        button.style.padding = '2px 6px';
-        button.style.margin = '2px';
-        button.style.cursor = 'pointer';
-        button.style.fontFamily = 'monospace';
-        button.style.fontSize = '14px';
-        button.style.minWidth = '25px';
+    _styleZoomButton: function(button) { /* UNCHANGED */ 
+        button.style.background = '#333'; button.style.color = '#0f0'; button.style.border = '1px solid #0f0';
+        button.style.padding = '2px 6px'; button.style.margin = '2px'; button.style.cursor = 'pointer';
+        button.style.fontFamily = 'monospace'; button.style.fontSize = '14px'; button.style.minWidth = '25px';
     },
-    
-    handlePanStart: function(event) {
-        if (event.button !== 0) return; 
-        this.isPanning = true;
-        this.lastPanX = event.clientX;
-        this.lastPanY = event.clientY;
-        this.mapViewportElement.style.cursor = 'grabbing';
-        event.preventDefault(); 
+    handlePanStart: function(event) { /* UNCHANGED */ 
+        if (event.button !== 0) return; this.isPanning = true; this.lastPanX = event.clientX; this.lastPanY = event.clientY;
+        this.mapViewportElement.style.cursor = 'grabbing'; event.preventDefault();
     },
-
-    handlePanMove: function(event) {
-        if (!this.isPanning) return;
-        const dx = event.clientX - this.lastPanX;
-        const dy = event.clientY - this.lastPanY;
-        this.mapTranslateX += dx;
-        this.mapTranslateY += dy;
-        this.lastPanX = event.clientX;
-        this.lastPanY = event.clientY;
+    handlePanMove: function(event) { /* UNCHANGED */ 
+        if (!this.isPanning) return; const dx = event.clientX - this.lastPanX; const dy = event.clientY - this.lastPanY;
+        this.mapTranslateX += dx; this.mapTranslateY += dy; this.lastPanX = event.clientX; this.lastPanY = event.clientY;
         this.applyTransform();
     },
-
-    handlePanEnd: function() {
-        if (this.isPanning) {
-            this.isPanning = false;
-            this.mapViewportElement.style.cursor = 'grab';
-        }
+    handlePanEnd: function() { /* UNCHANGED */ 
+        if (this.isPanning) { this.isPanning = false; this.mapViewportElement.style.cursor = 'grab'; }
     },
-
-    applyTransform: function() {
+    applyTransform: function() { /* UNCHANGED */ 
         if (!this.mapContentGroup) return;
-        this.mapContentGroup.setAttribute(
-            'transform',
-            `translate(${this.mapTranslateX}, ${this.mapTranslateY}) scale(${this.currentZoomLevel})`
-        );
+        this.mapContentGroup.setAttribute('transform', `translate(${this.mapTranslateX}, ${this.mapTranslateY}) scale(${this.currentZoomLevel})`);
     },
     
-    updateCenteringAndZoom: function(forceRecenter = false, specificRoomDataForTitle = null) {
+    updateCenteringAndZoom: function(forceRecenter = false, roomToCenterData = null) { /* UNCHANGED from previous - it was correctly calling UI.updateMapTitleBar */
         if (!this.mapViewportElement) return; 
-
-        const svgWidth = this.mapViewportElement.clientWidth;
-        const svgHeight = this.mapViewportElement.clientHeight;
-
-        let roomToCenterOn = null;
-        let currentZLevel = this.mapData?.current_z_level;
-
-        if (specificRoomDataForTitle) { // Data passed directly (e.g. from WS message)
-            roomToCenterOn = specificRoomDataForTitle;
-            currentZLevel = specificRoomDataForTitle.z; // Use Z from this specific room
-            UI.updateMapTitleBar(roomToCenterOn.x, roomToCenterOn.y, roomToCenterOn.z);
-        } else if (this.mapData && this.mapData.rooms && this.mapData.rooms.length > 0) {
-            const currentRoomIdFromMapData = this.mapData.current_room_id || gameState.displayedRoomId;
-            roomToCenterOn = currentRoomIdFromMapData ? this.mapData.rooms.find(r => r.id === currentRoomIdFromMapData) : null;
-            if (!roomToCenterOn && this.mapData.rooms.length > 0) roomToCenterOn = this.mapData.rooms[0];
-            
-            if (roomToCenterOn) UI.updateMapTitleBar(roomToCenterOn.x, roomToCenterOn.y, roomToCenterOn.z);
-            else UI.updateMapTitleBar(undefined, undefined, currentZLevel); // Only Z if no specific current room
-        } else { // No mapData or no rooms in mapData
-            this.mapTranslateX = svgWidth / 2; 
-            this.mapTranslateY = svgHeight / 2;
-            UI.updateMapTitleBar(undefined, undefined, currentZLevel); 
-            this.applyTransform(); 
-            return;
+        const svgWidth = this.mapViewportElement.clientWidth; const svgHeight = this.mapViewportElement.clientHeight;
+        let currentRoomForTitle = roomToCenterData; 
+        let zLevelForTitle = this.currentZLevelForView; 
+        if (!currentRoomForTitle && this.currentMapDisplayData && this.currentMapDisplayData.rooms?.length > 0) {
+            const currentRoomId = this.currentMapDisplayData.current_room_id || gameState.displayedRoomId;
+            currentRoomForTitle = currentRoomId ? this.currentMapDisplayData.rooms.find(r => r.id === currentRoomId) : null;
+            if (!currentRoomForTitle) currentRoomForTitle = this.currentMapDisplayData.rooms[0];
         }
+        if(currentRoomForTitle) zLevelForTitle = currentRoomForTitle.z; 
+        UI.updateMapTitleBar(currentRoomForTitle?.x, currentRoomForTitle?.y, zLevelForTitle);
+        // Placeholder for Zone update
+        UI.updateMapZoneBar(this.currentMapDisplayData?.zone_name, this.currentMapDisplayData?.zone_levels);
 
-        if (forceRecenter && roomToCenterOn) {
-            const gameYForCentering = this.maxGameY - roomToCenterOn.y;
-            const targetCenterX_mapCoords = roomToCenterOn.x * this.TILE_SIZE_BASE + this.TILE_SIZE_BASE / 2;
+
+        if (!this.currentMapDisplayData || !this.currentMapDisplayData.rooms?.length === 0) {
+            this.mapTranslateX = svgWidth / 2; this.mapTranslateY = svgHeight / 2; this.applyTransform(); return;
+        }
+        let roomToActuallyCenter = roomToCenterData; 
+        if (!roomToActuallyCenter) { 
+            const currentRoomId = this.currentMapDisplayData.current_room_id || gameState.displayedRoomId;
+            roomToActuallyCenter = currentRoomId ? this.currentMapDisplayData.rooms.find(r => r.id === currentRoomId) : null;
+            if (!roomToActuallyCenter && this.currentMapDisplayData.rooms.length > 0) roomToActuallyCenter = this.currentMapDisplayData.rooms[0];
+        }
+        if (forceRecenter && roomToActuallyCenter) {
+            const gameYForCentering = this.maxGameY - roomToActuallyCenter.y;
+            const targetCenterX_mapCoords = roomToActuallyCenter.x * this.TILE_SIZE_BASE + this.TILE_SIZE_BASE / 2;
             const targetCenterY_mapCoords = gameYForCentering * this.TILE_SIZE_BASE + this.TILE_SIZE_BASE / 2;
             this.mapTranslateX = (svgWidth / 2) - (targetCenterX_mapCoords * this.currentZoomLevel);
             this.mapTranslateY = (svgHeight / 2) - (targetCenterY_mapCoords * this.currentZoomLevel);
         }
         this.applyTransform();
     },
-
-    zoomIn: function() {
-        if (!this.mapViewportElement) return;
-        const newZoomLevel = this.currentZoomLevel * this.ZOOM_INCREMENT_FACTOR;
+    zoomIn: function() { /* UNCHANGED */ 
+        if (!this.mapViewportElement) return; const newZoomLevel = this.currentZoomLevel * this.ZOOM_INCREMENT_FACTOR;
         if (newZoomLevel <= this.MAX_ZOOM_LEVEL) {
-            const oldZoom = this.currentZoomLevel;
-            this.currentZoomLevel = newZoomLevel;
-            const svgCenterX = this.mapViewportElement.clientWidth / 2;
-            const svgCenterY = this.mapViewportElement.clientHeight / 2;
-            const mapXAtCenter = (svgCenterX - this.mapTranslateX) / oldZoom;
-            const mapYAtCenter = (svgCenterY - this.mapTranslateY) / oldZoom;
-            this.mapTranslateX = svgCenterX - mapXAtCenter * this.currentZoomLevel;
-            this.mapTranslateY = svgCenterY - mapYAtCenter * this.currentZoomLevel;
+            const oldZoom = this.currentZoomLevel; this.currentZoomLevel = newZoomLevel;
+            const svgCenterX = this.mapViewportElement.clientWidth / 2; const svgCenterY = this.mapViewportElement.clientHeight / 2;
+            const mapXAtCenter = (svgCenterX - this.mapTranslateX) / oldZoom; const mapYAtCenter = (svgCenterY - this.mapTranslateY) / oldZoom;
+            this.mapTranslateX = svgCenterX - mapXAtCenter * this.currentZoomLevel; this.mapTranslateY = svgCenterY - mapYAtCenter * this.currentZoomLevel;
             this.applyTransform();
         }
     },
-
-    zoomOut: function() {
-        if (!this.mapViewportElement) return;
-        const newZoomLevel = this.currentZoomLevel / this.ZOOM_INCREMENT_FACTOR;
+    zoomOut: function() { /* UNCHANGED */ 
+        if (!this.mapViewportElement) return; const newZoomLevel = this.currentZoomLevel / this.ZOOM_INCREMENT_FACTOR;
         if (newZoomLevel >= this.MIN_ZOOM_LEVEL) {
-            const oldZoom = this.currentZoomLevel;
-            this.currentZoomLevel = newZoomLevel;
-            const svgCenterX = this.mapViewportElement.clientWidth / 2;
-            const svgCenterY = this.mapViewportElement.clientHeight / 2;
-            const mapXAtCenter = (svgCenterX - this.mapTranslateX) / oldZoom;
-            const mapYAtCenter = (svgCenterY - this.mapTranslateY) / oldZoom;
-            this.mapTranslateX = svgCenterX - mapXAtCenter * this.currentZoomLevel;
-            this.mapTranslateY = svgCenterY - mapYAtCenter * this.currentZoomLevel;
+            const oldZoom = this.currentZoomLevel; this.currentZoomLevel = newZoomLevel;
+            const svgCenterX = this.mapViewportElement.clientWidth / 2; const svgCenterY = this.mapViewportElement.clientHeight / 2;
+            const mapXAtCenter = (svgCenterX - this.mapTranslateX) / oldZoom; const mapYAtCenter = (svgCenterY - this.mapTranslateY) / oldZoom;
+            this.mapTranslateX = svgCenterX - mapXAtCenter * this.currentZoomLevel; this.mapTranslateY = svgCenterY - mapYAtCenter * this.currentZoomLevel;
             this.applyTransform();
         }
     },
-
-    handleMouseWheelZoom: function(event) {
+    handleMouseWheelZoom: function(event) { /* UNCHANGED */ 
         event.preventDefault(); event.stopPropagation(); 
-        if (event.deltaY < 0) this.zoomIn();
-        else if (event.deltaY > 0) this.zoomOut();
+        if (event.deltaY < 0) this.zoomIn(); else if (event.deltaY > 0) this.zoomOut();
     },
+    resizeSVG: function() { /* UNCHANGED */ this.updateCenteringAndZoom(true); },
 
-    resizeSVG: function() {
-        this.updateCenteringAndZoom(true); 
-    },
-
-    // Modified to accept optional initialCurrentRoomData
-    fetchAndDrawMap: async function(initialCurrentRoomData = null) {
+    fetchAndDrawMap: async function(currentRoomContext = null) { /* UNCHANGED from previous version that fixed z_level property */
+        const targetZLevel = currentRoomContext ? currentRoomContext.z : this.currentZLevelForView;
+        this.currentZLevelForView = targetZLevel; 
+        if (this.mapDataCache[targetZLevel]) {
+            this.currentMapDisplayData = this.mapDataCache[targetZLevel];
+            if (currentRoomContext && this.currentMapDisplayData) {
+                this.currentMapDisplayData.current_room_id = currentRoomContext.id;
+                this.currentMapDisplayData.current_z_level = targetZLevel;
+            }
+            this.calculateMinMaxY(); this.drawMap(true, currentRoomContext); return;
+        }
         if (!gameState.currentAuthToken || !gameState.selectedCharacterId) {
-            this.clearMap(); this.drawMap(false, initialCurrentRoomData); return;
+            this.clearMap(); this.currentMapDisplayData = null; this.drawMap(false, currentRoomContext); return;
         }
         try {
             const fetchedData = await API.fetchMapData(); 
-            if (!fetchedData || !fetchedData.rooms) {
-                this.mapData = { rooms: [], current_room_id: initialCurrentRoomData?.id, current_z_level: initialCurrentRoomData?.z || 0 }; 
+            const actualFetchedZ = fetchedData.z_level; 
+            if (fetchedData && fetchedData.rooms && typeof actualFetchedZ === 'number') {
+                if (actualFetchedZ !== targetZLevel) this.currentZLevelForView = actualFetchedZ; 
+                this.mapDataCache[actualFetchedZ] = { ...fetchedData, current_z_level: actualFetchedZ };
+                if (currentRoomContext && currentRoomContext.z === actualFetchedZ) this.mapDataCache[actualFetchedZ].current_room_id = currentRoomContext.id;
             } else {
-                this.mapData = fetchedData;
-                // If initialCurrentRoomData is provided, ensure its ID is set as current_room_id in mapData
-                if (initialCurrentRoomData) {
-                    this.mapData.current_room_id = initialCurrentRoomData.id;
-                    this.mapData.current_z_level = initialCurrentRoomData.z; // And Z
-                }
-                this.minGameY = Infinity; this.maxGameY = -Infinity;
-                if (this.mapData.rooms && this.mapData.rooms.length > 0) {
-                    this.mapData.rooms.forEach(room => {
-                        this.minGameY = Math.min(this.minGameY, room.y);
-                        this.maxGameY = Math.max(this.maxGameY, room.y);
-                    });
-                } else { this.minGameY = 0; this.maxGameY = 0; }
+                this.mapDataCache[targetZLevel] = { rooms: [], current_room_id: currentRoomContext?.id, current_z_level: targetZLevel };
             }
-            // Pass initialCurrentRoomData to drawMap so title bar is updated with it, if available.
-            // Otherwise, drawMap will use this.mapData.current_room_id
-            this.drawMap(true, initialCurrentRoomData || (this.mapData.current_room_id ? this.mapData.rooms.find(r => r.id === this.mapData.current_room_id) : null) ); 
+            this.currentMapDisplayData = this.mapDataCache[this.currentZLevelForView]; 
+            this.calculateMinMaxY();
+            const roomContextForDraw = (currentRoomContext && currentRoomContext.z === this.currentZLevelForView) ? currentRoomContext : null;
+            this.drawMap(true, roomContextForDraw); 
         } catch (error) {
-            console.error("Error during fetchAndDrawMap:", error);
-            this.mapData = { rooms: [], current_room_id: initialCurrentRoomData?.id, current_z_level: initialCurrentRoomData?.z || 0 }; 
-            this.clearMap(); this.drawMap(false, initialCurrentRoomData);
+            console.error(`Error during fetchAndDrawMap for Z=${targetZLevel}:`, error);
+            this.mapDataCache[targetZLevel] = { rooms: [], current_room_id: currentRoomContext?.id, current_z_level: targetZLevel };
+            this.currentMapDisplayData = this.mapDataCache[targetZLevel];
+            this.clearMap(); this.drawMap(false, currentRoomContext);
         }
     },
-    
-    // Modified to accept newRoomFullData
-    redrawMapForCurrentRoom: function(newRoomId, newRoomFullData = null) {
-        if (this.mapData) { // Update current_room_id in our cached full map structure
-            this.mapData.current_room_id = newRoomId;
-            // If the Z level changed, we'd need to re-fetch the map for that Z.
-            // Assuming for now that redrawMapForCurrentRoom is called for same Z movements.
-            // If Z changed, fetchAndDrawMap (with newRoomFullData) should be called instead from main.js.
+    calculateMinMaxY: function() { /* UNCHANGED */
+        this.minGameY = Infinity; this.maxGameY = -Infinity;
+        if (this.currentMapDisplayData?.rooms?.length > 0) {
+            this.currentMapDisplayData.rooms.forEach(room => {
+                this.minGameY = Math.min(this.minGameY, room.y); this.maxGameY = Math.max(this.maxGameY, room.y);
+            });
+        } else { this.minGameY = 0; this.maxGameY = 0; }
+    },
+    redrawMapForCurrentRoom: function(newRoomId, newRoomFullData = null) { /* UNCHANGED from previous version with corrected syntax */
+        if (!newRoomFullData) { this.fetchAndDrawMap(null); return; }
+        if (newRoomFullData.z !== this.currentZLevelForView || !this.mapDataCache[newRoomFullData.z]) {
+            this.fetchAndDrawMap(newRoomFullData); return;
         }
-        // Pass newRoomFullData to drawMap for immediate title update and centering.
+        this.currentMapDisplayData = this.mapDataCache[newRoomFullData.z];
+        if (this.currentMapDisplayData) {
+            this.currentMapDisplayData.current_room_id = newRoomId;
+            if (this.minGameY === Infinity) this.calculateMinMaxY();
+        }
         this.drawMap(true, newRoomFullData); 
     },
-
-    clearMap: function() {
+    clearMap: function() { /* UNCHANGED */
         if (!this.mapContentGroup) return;
-        while (this.mapContentGroup.firstChild) {
-            this.mapContentGroup.removeChild(this.mapContentGroup.firstChild);
-        }
+        while (this.mapContentGroup.firstChild) this.mapContentGroup.removeChild(this.mapContentGroup.firstChild);
     },
 
-    // Modified to accept specificRoomDataForTitle
-    drawMap: function(forceRecenterOnDraw = false, specificRoomDataForTitle = null) {
+    drawMap: function(forceRecenterOnDraw = false, specificRoomDataForTitleAndCenter = null) {
         this.clearMap(); 
         const noMapTextId = "no-map-data-text-svg";
         const existingNoMapTextElement = this.svgElement ? this.svgElement.querySelector(`#${noMapTextId}`) : null;
         if (existingNoMapTextElement) this.svgElement.removeChild(existingNoMapTextElement);
 
-        // Determine which room data to use for title bar update
-        const roomForTitle = specificRoomDataForTitle || 
-                             (this.mapData && this.mapData.current_room_id ? this.mapData.rooms?.find(r => r.id === this.mapData.current_room_id) : null) ||
-                             (this.mapData && this.mapData.rooms?.length > 0 ? this.mapData.rooms[0] : null);
+        let displayData = this.currentMapDisplayData;
+        let roomForTitleAndHighlight = specificRoomDataForTitleAndCenter;
 
+        if (!roomForTitleAndHighlight && displayData && displayData.current_room_id) {
+            roomForTitleAndHighlight = displayData.rooms?.find(r => r.id === displayData.current_room_id);
+        }
+        if (!roomForTitleAndHighlight && displayData && displayData.rooms?.length > 0) {
+             roomForTitleAndHighlight = displayData.rooms[0]; 
+        }
 
-        if (!this.mapData || !this.mapData.rooms || !this.mapData.rooms.length === 0 || !this.mapContentGroup) {
+        const zForTitle = roomForTitleAndHighlight?.z ?? displayData?.current_z_level ?? this.currentZLevelForView;
+
+        if (!displayData || !displayData.rooms || displayData.rooms.length === 0 || !this.mapContentGroup) {
             if (this.svgElement) { 
-                const textElement = document.createElementNS(SVG_NS, "text");
-                textElement.id = noMapTextId;
+                const textElement = document.createElementNS(SVG_NS, "text"); textElement.id = noMapTextId;
                 textElement.setAttribute("x", "50%"); textElement.setAttribute("y", "50%");
                 textElement.setAttribute("text-anchor", "middle"); textElement.setAttribute("dominant-baseline", "middle");
                 textElement.setAttribute("fill", this.roomStrokeColor || "#0f0"); 
                 textElement.setAttribute("font-size", "12"); 
-                textElement.style.fontFamily = "monospace";
-                textElement.textContent = "No map data available.";
+                textElement.style.fontFamily = "monospace"; textElement.textContent = "No map data available.";
                 this.svgElement.appendChild(textElement);
             }
-            if (roomForTitle) UI.updateMapTitleBar(roomForTitle.x, roomForTitle.y, roomForTitle.z);
-            else UI.updateMapTitleBar(undefined, undefined, this.mapData?.current_z_level);
-            this.updateCenteringAndZoom(true, roomForTitle); 
+            UI.updateMapTitleBar(roomForTitleAndHighlight?.x, roomForTitleAndHighlight?.y, zForTitle);
+            // Update Zone Bar with placeholder or actual data if available from displayData
+            UI.updateMapZoneBar(displayData?.zone_name, displayData?.zone_levels);
+            this.updateCenteringAndZoom(true, roomForTitleAndHighlight); 
             return;
         }
         
-        // If we got this far, mapData and mapData.rooms exist.
-        // Update title bar based on roomForTitle (which might be specificRoomDataForTitle or derived)
-        if (roomForTitle) UI.updateMapTitleBar(roomForTitle.x, roomForTitle.y, roomForTitle.z);
-        else UI.updateMapTitleBar(undefined, undefined, this.mapData.current_z_level); // Fallback to Z if no specific current room
+        UI.updateMapTitleBar(roomForTitleAndHighlight?.x, roomForTitleAndHighlight?.y, zForTitle);
+        // Update Zone Bar
+        UI.updateMapZoneBar(displayData?.zone_name, displayData?.zone_levels);
 
-        const rooms = this.mapData.rooms;
-        const currentRoomIdToHighlight = specificRoomDataForTitle?.id || this.mapData.current_room_id || gameState.displayedRoomId;
+
+        const rooms = displayData.rooms;
+        const currentRoomIdToHighlight = roomForTitleAndHighlight?.id || displayData.current_room_id || gameState.displayedRoomId;
         
-        rooms.forEach(room => {
+        if ((this.minGameY === Infinity || this.maxGameY === -Infinity) && displayData?.rooms?.length > 0) {
+             this.calculateMinMaxY(); 
+        }
+
+        rooms.forEach(room => { /* Drawing lines - UNCHANGED */
             const gameDrawY = this.maxGameY - room.y; 
             if (room.exits) {
                 Object.values(room.exits).forEach(exit_info_or_id => {
                     let targetRoomId;
                     if (typeof exit_info_or_id === 'string') targetRoomId = exit_info_or_id;
                     else if (typeof exit_info_or_id === 'object' && exit_info_or_id.target_room_id) targetRoomId = exit_info_or_id.target_room_id;
-
                     if (targetRoomId) {
                         const targetRoom = rooms.find(r => r.id === targetRoomId);
                         if (targetRoom) {
@@ -315,28 +258,42 @@ export const MapDisplay = {
                             line.setAttribute("y1", gameDrawY * this.TILE_SIZE_BASE + this.TILE_SIZE_BASE / 2); 
                             line.setAttribute("x2", targetRoom.x * this.TILE_SIZE_BASE + this.TILE_SIZE_BASE / 2);
                             line.setAttribute("y2", targetGameDrawY * this.TILE_SIZE_BASE + this.TILE_SIZE_BASE / 2); 
-                            line.setAttribute("stroke", this.connectionLineColor);
-                            line.setAttribute("stroke-width", "1.5"); 
+                            line.setAttribute("stroke", this.connectionLineColor); line.setAttribute("stroke-width", "1.5"); 
                             this.mapContentGroup.appendChild(line);
                         }
                     }
                 });
             }
         });
-
-        rooms.forEach(room => {
+        rooms.forEach(room => { // Drawing room rects AND ICONS
             const gameDrawY = this.maxGameY - room.y; 
             const rect = document.createElementNS(SVG_NS, "rect");
-            rect.setAttribute("x", room.x * this.TILE_SIZE_BASE);
+            rect.setAttribute("x", room.x * this.TILE_SIZE_BASE); 
             rect.setAttribute("y", gameDrawY * this.TILE_SIZE_BASE); 
-            rect.setAttribute("width", this.TILE_SIZE_BASE);
+            rect.setAttribute("width", this.TILE_SIZE_BASE); 
             rect.setAttribute("height", this.TILE_SIZE_BASE);
             rect.setAttribute("fill", room.id === currentRoomIdToHighlight ? this.currentRoomHighlightColor : this.defaultRoomColor);
-            rect.setAttribute("stroke", this.roomStrokeColor);
+            rect.setAttribute("stroke", this.roomStrokeColor); 
             rect.setAttribute("stroke-width", "1"); 
             this.mapContentGroup.appendChild(rect);
+
+            // NEW: Draw room type icon
+            const iconChar = this.roomTypeIcons[room.room_type];
+            if (iconChar) {
+                const iconText = document.createElementNS(SVG_NS, "text");
+                iconText.setAttribute("x", room.x * this.TILE_SIZE_BASE + this.TILE_SIZE_BASE / 2);
+                iconText.setAttribute("y", gameDrawY * this.TILE_SIZE_BASE + this.TILE_SIZE_BASE / 2);
+                iconText.setAttribute("font-family", "monospace"); // Or a font known to have good emoji support
+                iconText.setAttribute("font-size", `${this.TILE_SIZE_BASE * this.iconFontSizeMultiplier}`);
+                iconText.setAttribute("fill", this.iconColor);
+                iconText.setAttribute("text-anchor", "middle");
+                iconText.setAttribute("dominant-baseline", "central"); // Vertically center emoji better
+                iconText.style.pointerEvents = "none";
+                iconText.textContent = iconChar;
+                this.mapContentGroup.appendChild(iconText);
+            }
         });
         
-        this.updateCenteringAndZoom(forceRecenterOnDraw || !this.isPanning, roomForTitle); 
+        this.updateCenteringAndZoom(forceRecenterOnDraw || !this.isPanning, roomForTitleAndHighlight); 
     }
 };

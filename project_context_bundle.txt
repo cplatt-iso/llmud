@@ -1,5 +1,5 @@
 --- SCRIPT START --- Creating bundle: project_context_bundle.txt ---
-Timestamp: Wed Jun  4 01:20:55 PM UTC 2025
+Timestamp: Thu Jun  5 04:50:23 AM UTC 2025
 
 # --- LLM INSTRUCTION ---
 # The following is a list of all potentially relevant files in the project.
@@ -96,6 +96,8 @@ backend/app/schemas/room.py
 backend/app/schemas/skill.py
 backend/app/schemas/trait.py
 backend/app/seeds/exits_z0.json
+backend/app/seeds/items.json
+backend/app/seeds/mob_templates.json
 backend/app/seeds/rooms_z0.json
 backend/app/services/__init__.py
 backend/app/services/room_service.py
@@ -115,6 +117,7 @@ frontend/src/main.js
 frontend/src/map.js
 frontend/src/script.js
 frontend/src/state.js
+frontend/src/style.css
 frontend/src/ui.js
 frontend/src/websocket.js
 --- END OF FILE LIST ---
@@ -295,24 +298,35 @@ app = FastAPI(title=settings.PROJECT_NAME)
 logger.info("--- main.py - FastAPI app instance CREATED ---")
 
 @app.on_event("startup")
-def on_startup_sync(): # Renamed to avoid clash if we make it async later
+def on_startup_sync():
     logger.info("--- main.py - START of on_startup_sync event ---")
     db: Session = next(get_db())
     logger.debug("--- main.py - on_startup_sync: Acquired DB session ---")
     try:
-        logger.info("--- main.py - on_startup_sync: Running startup event: Seeding initial world... ---")
-        seed_initial_world(db)        
-        logger.debug("--- main.py - on_startup_sync: seed_initial_world COMPLETED ---")
-        seed_initial_mob_templates(db)        
-        logger.debug("--- main.py - on_startup_sync: seed_initial_mob_templates COMPLETED ---")
+        logger.info("--- main.py - on_startup_sync: Running startup event: Seeding initial data... ---")
+        
+        # CORRECT ORDER:
+        # 1. Seed items FIRST
         seed_initial_items(db)
         logger.debug("--- main.py - on_startup_sync: seed_initial_items COMPLETED ---")
+
+        # 2. THEN seed the world (rooms/exits), which might place items
+        seed_initial_world(db)        
+        logger.debug("--- main.py - on_startup_sync: seed_initial_world COMPLETED ---")
+        
+        # 3. THEN other things
+        seed_initial_mob_templates(db)        
+        logger.debug("--- main.py - on_startup_sync: seed_initial_mob_templates COMPLETED ---")
+        
         seed_initial_character_class_templates(db)
         logger.debug("--- main.py - on_startup_sync: seed_initial_character_class_templates COMPLETED ---")
+        
         seed_initial_skill_templates(db)
         logger.debug("--- main.py - on_startup_sync: seed_initial_skill_templates COMPLETED ---")
-        seed_initial_trait_templates(db) # Make sure this is imported if you uncomment it
+        
+        seed_initial_trait_templates(db)
         logger.debug("--- main.py - on_startup_sync: seed_initial_trait_templates COMPLETED ---")
+        
         seed_initial_mob_spawn_definitions(db)
         logger.debug("--- main.py - on_startup_sync: seed_initial_mob_spawn_definitions COMPLETED ---")
         
@@ -691,96 +705,352 @@ async def websocket_game_endpoint(
 --- START OF FILE backend/app/seeds/exits_z0.json ---
 [
   {
-    "source_tag": "central_hub_0_0_0", "direction": "north", "target_tag": "north_corridor_0_1_0",
-    "details": {}
-  },
-  {
-    "source_tag": "north_corridor_0_1_0", "direction": "south", "target_tag": "central_hub_0_0_0",
-    "details": {}
-  },
-  {
     "source_tag": "central_hub_0_0_0", "direction": "east", "target_tag": "east_storage_1_0_0",
     "details": {
-      "is_locked": true,
-      "lock_id_tag": "cpu_east_door_lock",
-      "description_when_locked": "A heavy blast door to the east is sealed tight. The nearby lever might control it."
+      "is_locked": true, "lock_id_tag": "cpu_east_door_lock",
+      "description_when_locked": "A heavy blast door to the east is sealed tight. The nearby lever might control it.",
+      "description_when_unlocked": "The heavy blast door to the east stands open."
     }
   },
   {
     "source_tag": "east_storage_1_0_0", "direction": "west", "target_tag": "central_hub_0_0_0",
     "details": {
-      "is_locked": true,
-      "lock_id_tag": "cpu_east_door_lock",
-      "description_when_locked": "The blast door to the west is sealed. It seems to be controlled from the other side."
+      "is_locked": true, "lock_id_tag": "cpu_east_door_lock",
+      "description_when_locked": "The blast door to the west is sealed. It seems to be controlled from the other side.",
+      "description_when_unlocked": "The blast door to the west is open."
     }
   },
   {
-    "source_tag": "central_hub_0_0_0", "direction": "south", "target_tag": "south_corridor_0_-1_0",
-    "details": {}
+    "source_tag": "central_hub_0_0_0", "direction": "north", "target_tag": "outskirts_gate_0_1_0", "details": {}
   },
   {
-    "source_tag": "south_corridor_0_-1_0", "direction": "north", "target_tag": "central_hub_0_0_0",
-    "details": {}
+    "source_tag": "outskirts_gate_0_1_0", "direction": "south", "target_tag": "central_hub_0_0_0", "details": {}
   },
   {
-    "source_tag": "south_corridor_0_-1_0", "direction": "south", "target_tag": "deep_archive_0_-2_0",
-    "details": {
-      "is_locked": true,
-      "lock_id_tag": "deep_archive_key_lock",
-      "key_item_tag_opens": "archive_key_alpha",
-      "description_when_locked": "A formidable iron door blocks passage south. It has a complex keyhole.",
-      "skill_to_pick": {"skill_id_tag": "pick_lock_basic", "dc": 18}
-    }
+    "source_tag": "outskirts_gate_0_1_0", "direction": "north", "target_tag": "beginner_path_0_2_0", "details": {}
   },
   {
-    "source_tag": "deep_archive_0_-2_0", "direction": "north", "target_tag": "south_corridor_0_-1_0",
-    "details": {
-      "is_locked": true,
-      "lock_id_tag": "deep_archive_key_lock",
-      "key_item_tag_opens": "archive_key_alpha",
-      "description_when_locked": "The iron door to the north is locked from this side too.",
-      "skill_to_pick": {"skill_id_tag": "pick_lock_basic", "dc": 18}
-    }
+    "source_tag": "beginner_path_0_2_0", "direction": "south", "target_tag": "outskirts_gate_0_1_0", "details": {}
   },
   {
-    "source_tag": "central_hub_0_0_0", "direction": "west", "target_tag": "west_corridor_-1_0_0",
-    "details": {}
+    "source_tag": "beginner_path_0_2_0", "direction": "north", "target_tag": "ruined_shack_clearing_0_3_0", "details": {}
   },
   {
-    "source_tag": "west_corridor_-1_0_0", "direction": "east", "target_tag": "central_hub_0_0_0",
-    "details": {}
+    "source_tag": "ruined_shack_clearing_0_3_0", "direction": "south", "target_tag": "beginner_path_0_2_0", "details": {}
   },
   {
-    "source_tag": "north_corridor_0_1_0", "direction": "north", "target_tag": "nexus_junction_0_2_0",
-    "details": {}
+    "source_tag": "ruined_shack_clearing_0_3_0", "direction": "north", "target_tag": "shack_interior_0_4_0", "details": {}
   },
   {
-    "source_tag": "nexus_junction_0_2_0", "direction": "south", "target_tag": "north_corridor_0_1_0",
-    "details": {}
+    "source_tag": "shack_interior_0_4_0", "direction": "south", "target_tag": "ruined_shack_clearing_0_3_0", "details": {}
   },
   {
-    "source_tag": "nexus_junction_0_2_0", "direction": "east", "target_tag": "sanctuary_alcove_1_2_0",
-    "details": {}
+    "source_tag": "ruined_shack_clearing_0_3_0", "direction": "west", "target_tag": "thorn_thicket_west_m1_3_0", "details": {}
   },
   {
-    "source_tag": "sanctuary_alcove_1_2_0", "direction": "west", "target_tag": "nexus_junction_0_2_0",
-    "details": {}
+    "source_tag": "thorn_thicket_west_m1_3_0", "direction": "east", "target_tag": "ruined_shack_clearing_0_3_0", "details": {}
   },
   {
-    "source_tag": "sanctuary_alcove_1_2_0", "direction": "east", "target_tag": "shop_node_2_2_0",
-    "details": {}
+    "source_tag": "ruined_shack_clearing_0_3_0", "direction": "east", "target_tag": "thorn_thicket_east_1_3_0", "details": {}
   },
   {
-    "source_tag": "shop_node_2_2_0", "direction": "west", "target_tag": "sanctuary_alcove_1_2_0",
-    "details": {}
+    "source_tag": "thorn_thicket_east_1_3_0", "direction": "west", "target_tag": "ruined_shack_clearing_0_3_0", "details": {}
   },
   {
-    "source_tag": "shop_node_2_2_0", "direction": "east", "target_tag": "trainer_sim_3_2_0",
-    "details": {}
+    "source_tag": "thorn_thicket_east_1_3_0", "direction": "north", "target_tag": "rat_infested_cellar_1_4_0", "details": {}
   },
   {
-    "source_tag": "trainer_sim_3_2_0", "direction": "west", "target_tag": "shop_node_2_2_0",
-    "details": {}
+    "source_tag": "rat_infested_cellar_1_4_0", "direction": "south", "target_tag": "thorn_thicket_east_1_3_0", "details": {}
+  },
+  {
+    "source_tag": "rat_infested_cellar_1_4_0", "direction": "east", "target_tag": "deep_cellar_main_2_4_0",
+    "details": { "is_locked": false, "lock_id_tag": "cellar_door_east",
+                 "description_when_locked": "A rickety wooden door to the east is barred from the other side.",
+                 "description_when_unlocked": "The rickety wooden door to the east is slightly ajar." }
+  },
+  {
+    "source_tag": "deep_cellar_main_2_4_0", "direction": "west", "target_tag": "rat_infested_cellar_1_4_0",
+    "details": { "is_locked": false, "lock_id_tag": "cellar_door_east",
+                 "description_when_locked": "The wooden door to the west is barred.",
+                 "description_when_unlocked": "The wooden door to the west stands open." }
+  },
+  {
+    "source_tag": "deep_cellar_main_2_4_0", "direction": "north", "target_tag": "deep_cellar_nest_2_5_0", "details": {}
+  },
+  {
+    "source_tag": "deep_cellar_nest_2_5_0", "direction": "south", "target_tag": "deep_cellar_main_2_4_0", "details": {}
+  },
+  {
+    "source_tag": "shack_interior_0_4_0", "direction": "north", "target_tag": "goblin_lookout_0_5_0", "details": {}
+  },
+  {
+    "source_tag": "goblin_lookout_0_5_0", "direction": "south", "target_tag": "shack_interior_0_4_0", "details": {}
+  },
+  {
+    "source_tag": "goblin_lookout_0_5_0", "direction": "west", "target_tag": "goblin_trail_m1_5_0", "details": {}
+  },
+  {
+    "source_tag": "goblin_trail_m1_5_0", "direction": "east", "target_tag": "goblin_lookout_0_5_0", "details": {}
+  },
+  {
+    "source_tag": "goblin_trail_m1_5_0", "direction": "west", "target_tag": "goblin_camp_m2_5_0", "details": {}
+  },
+  {
+    "source_tag": "goblin_camp_m2_5_0", "direction": "east", "target_tag": "goblin_trail_m1_5_0", "details": {}
+  },
+  {
+    "source_tag": "goblin_camp_m2_5_0", "direction": "west", "target_tag": "goblin_cave_entrance_m3_5_0",
+    "details": { "is_locked": true, "lock_id_tag": "goblin_cave_flap", "key_item_tag_opens": "crude_goblin_key",
+                 "description_when_locked": "A grimy hide flap covers the cave entrance to the west, tied shut.",
+                 "description_when_unlocked": "The hide flap to the west is open, revealing a dark cave." }
+  },
+  {
+    "source_tag": "goblin_cave_entrance_m3_5_0", "direction": "east", "target_tag": "goblin_camp_m2_5_0",
+    "details": { "is_locked": true, "lock_id_tag": "goblin_cave_flap",
+                 "description_when_locked": "The hide flap to the east is secured from the other side.",
+                 "description_when_unlocked": "The hide flap to the east is open." }
+  },
+  {
+    "source_tag": "goblin_cave_entrance_m3_5_0", "direction": "north", "target_tag": "goblin_cave_storage_m3_6_0", "details": {}
+  },
+  {
+    "source_tag": "goblin_cave_storage_m3_6_0", "direction": "south", "target_tag": "goblin_cave_entrance_m3_5_0", "details": {}
+  },
+  {
+    "source_tag": "goblin_lookout_0_5_0", "direction": "north", "target_tag": "path_to_woods_0_6_0", "details": {}
+  },
+  {
+    "source_tag": "path_to_woods_0_6_0", "direction": "south", "target_tag": "goblin_lookout_0_5_0", "details": {}
+  },
+  {
+    "source_tag": "path_to_woods_0_6_0", "direction": "north", "target_tag": "woods_edge_0_7_0", "details": {}
+  },
+  {
+    "source_tag": "woods_edge_0_7_0", "direction": "south", "target_tag": "path_to_woods_0_6_0", "details": {}
+  },
+  {
+    "source_tag": "woods_edge_0_7_0", "direction": "north", "target_tag": "woods_gloomy_trail_0_8_0", "details": {}
+  },
+  {
+    "source_tag": "woods_gloomy_trail_0_8_0", "direction": "south", "target_tag": "woods_edge_0_7_0", "details": {}
+  },
+  {
+    "source_tag": "woods_gloomy_trail_0_8_0", "direction": "west", "target_tag": "woods_wolf_den_clearing_m1_8_0", "details": {}
+  },
+  {
+    "source_tag": "woods_wolf_den_clearing_m1_8_0", "direction": "east", "target_tag": "woods_gloomy_trail_0_8_0", "details": {}
+  },
+  {
+    "source_tag": "woods_wolf_den_clearing_m1_8_0", "direction": "west", "target_tag": "wolf_den_cave_m2_8_0", "details": {}
+  },
+  {
+    "source_tag": "wolf_den_cave_m2_8_0", "direction": "east", "target_tag": "woods_wolf_den_clearing_m1_8_0", "details": {}
+  },
+  {
+    "source_tag": "woods_gloomy_trail_0_8_0", "direction": "north", "target_tag": "woods_ancient_oak_0_9_0", "details": {}
+  },
+  {
+    "source_tag": "woods_ancient_oak_0_9_0", "direction": "south", "target_tag": "woods_gloomy_trail_0_8_0", "details": {}
+  },
+  {
+    "source_tag": "woods_ancient_oak_0_9_0", "direction": "east", "target_tag": "woods_spider_lair_1_9_0", "details": {}
+  },
+  {
+    "source_tag": "woods_spider_lair_1_9_0", "direction": "west", "target_tag": "woods_ancient_oak_0_9_0", "details": {}
+  },
+  {
+    "source_tag": "woods_spider_lair_1_9_0", "direction": "north", "target_tag": "woods_broodmother_web_1_10_0", "details": {}
+  },
+  {
+    "source_tag": "woods_broodmother_web_1_10_0", "direction": "south", "target_tag": "woods_spider_lair_1_9_0", "details": {}
+  },
+  {
+    "source_tag": "woods_ancient_oak_0_9_0", "direction": "west", "target_tag": "woods_hidden_shrine_m1_9_0", "details": {}
+  },
+  {
+    "source_tag": "woods_hidden_shrine_m1_9_0", "direction": "east", "target_tag": "woods_ancient_oak_0_9_0", "details": {}
+  },
+  {
+    "source_tag": "woods_hidden_shrine_m1_9_0", "direction": "west", "target_tag": "woods_shrine_niche_m2_9_0",
+    "details": { "is_locked": true, "lock_id_tag": "shrine_niche_seal",
+                 "description_when_locked": "A faint shimmering barrier blocks the niche to the west.",
+                 "description_when_unlocked": "The shimmering barrier to the west has dissipated." }
+  },
+  {
+    "source_tag": "woods_shrine_niche_m2_9_0", "direction": "east", "target_tag": "woods_hidden_shrine_m1_9_0",
+    "details": { "is_locked": true, "lock_id_tag": "shrine_niche_seal",
+                 "description_when_locked": "The way east is blocked by a shimmering barrier.",
+                 "description_when_unlocked": "The way east is clear." }
+  },
+  {
+    "source_tag": "woods_ancient_oak_0_9_0", "direction": "north", "target_tag": "woods_path_to_mine_0_10_0", "details": {}
+  },
+  {
+    "source_tag": "woods_path_to_mine_0_10_0", "direction": "south", "target_tag": "woods_ancient_oak_0_9_0", "details": {}
+  },
+  {
+    "source_tag": "woods_path_to_mine_0_10_0", "direction": "north", "target_tag": "mine_entrance_0_11_0", "details": {}
+  },
+  {
+    "source_tag": "mine_entrance_0_11_0", "direction": "south", "target_tag": "woods_path_to_mine_0_10_0", "details": {}
+  },
+  {
+    "source_tag": "mine_entrance_0_11_0", "direction": "north", "target_tag": "mine_entry_tunnel_0_12_0",
+    "details": { "is_locked": true, "lock_id_tag": "mine_gate_lock", "key_item_tag_opens": "foremans_mine_key",
+                 "description_when_locked": "A heavy iron gate, rusted shut, blocks the mine entrance to the north.",
+                 "description_when_unlocked": "The rusted iron gate to the north stands ajar." }
+  },
+  {
+    "source_tag": "mine_entry_tunnel_0_12_0", "direction": "south", "target_tag": "mine_entrance_0_11_0",
+    "details": { "is_locked": true, "lock_id_tag": "mine_gate_lock",
+                 "description_when_locked": "The iron gate to the south is locked from this side.",
+                 "description_when_unlocked": "The iron gate to the south is open." }
+  },
+  {
+    "source_tag": "mine_entry_tunnel_0_12_0", "direction": "west", "target_tag": "mine_foremans_office_m1_12_0", "details": {}
+  },
+  {
+    "source_tag": "mine_foremans_office_m1_12_0", "direction": "east", "target_tag": "mine_entry_tunnel_0_12_0", "details": {}
+  },
+  {
+    "source_tag": "mine_entry_tunnel_0_12_0", "direction": "north", "target_tag": "mine_shaft_junction_0_13_0", "details": {}
+  },
+  {
+    "source_tag": "mine_shaft_junction_0_13_0", "direction": "south", "target_tag": "mine_entry_tunnel_0_12_0", "details": {}
+  },
+  {
+    "source_tag": "mine_shaft_junction_0_13_0", "direction": "east", "target_tag": "mine_east_vein_1_13_0", "details": {}
+  },
+  {
+    "source_tag": "mine_east_vein_1_13_0", "direction": "west", "target_tag": "mine_shaft_junction_0_13_0", "details": {}
+  },
+  {
+    "source_tag": "mine_east_vein_1_13_0", "direction": "east", "target_tag": "mine_east_dead_end_2_13_0", "details": {}
+  },
+  {
+    "source_tag": "mine_east_dead_end_2_13_0", "direction": "west", "target_tag": "mine_east_vein_1_13_0", "details": {}
+  },
+  {
+    "source_tag": "mine_shaft_junction_0_13_0", "direction": "north", "target_tag": "mine_deep_shaft_0_14_0", "details": {}
+  },
+  {
+    "source_tag": "mine_deep_shaft_0_14_0", "direction": "south", "target_tag": "mine_shaft_junction_0_13_0", "details": {}
+  },
+  {
+    "source_tag": "mine_deep_shaft_0_14_0", "direction": "north", "target_tag": "mine_undead_chamber_0_15_0", "details": {}
+  },
+  {
+    "source_tag": "mine_undead_chamber_0_15_0", "direction": "south", "target_tag": "mine_deep_shaft_0_14_0", "details": {}
+  },
+  {
+    "source_tag": "mine_undead_chamber_0_15_0", "direction": "north", "target_tag": "bridge_to_sanctum_0_16_0", "details": {}
+  },
+  {
+    "source_tag": "bridge_to_sanctum_0_16_0", "direction": "south", "target_tag": "mine_undead_chamber_0_15_0", "details": {}
+  },
+  {
+    "source_tag": "bridge_to_sanctum_0_16_0", "direction": "north", "target_tag": "sanctum_gatehouse_0_17_0", "details": {}
+  },
+  {
+    "source_tag": "sanctum_gatehouse_0_17_0", "direction": "south", "target_tag": "bridge_to_sanctum_0_16_0", "details": {}
+  },
+  {
+    "source_tag": "sanctum_gatehouse_0_17_0", "direction": "north", "target_tag": "sanctum_courtyard_0_18_0",
+    "details": { "is_locked": true, "lock_id_tag": "sanctum_portcullis_lock", "key_item_tag_opens": "ornate_sanctum_key",
+                 "description_when_locked": "A massive iron portcullis blocks the way north. It looks incredibly heavy.",
+                 "description_when_unlocked": "The massive iron portcullis to the north has been raised." }
+  },
+  {
+    "source_tag": "sanctum_courtyard_0_18_0", "direction": "south", "target_tag": "sanctum_gatehouse_0_17_0",
+    "details": { "is_locked": true, "lock_id_tag": "sanctum_portcullis_lock",
+                 "description_when_locked": "The portcullis to the south is down, blocking the way.",
+                 "description_when_unlocked": "The portcullis to the south is raised." }
+  },
+  {
+    "source_tag": "sanctum_courtyard_0_18_0", "direction": "west", "target_tag": "sanctum_west_wing_m1_18_0", "details": {}
+  },
+  {
+    "source_tag": "sanctum_west_wing_m1_18_0", "direction": "east", "target_tag": "sanctum_courtyard_0_18_0", "details": {}
+  },
+  {
+    "source_tag": "sanctum_west_wing_m1_18_0", "direction": "west", "target_tag": "sanctum_library_m2_18_0", "details": {}
+  },
+  {
+    "source_tag": "sanctum_library_m2_18_0", "direction": "east", "target_tag": "sanctum_west_wing_m1_18_0", "details": {}
+  },
+  {
+    "source_tag": "sanctum_library_m2_18_0", "direction": "west", "target_tag": "sanctum_secret_study_m3_18_0",
+    "details": { "is_locked": true, "lock_id_tag": "library_secret_passage",
+                 "description_when_locked": "One of the bookshelves to the west looks like it might move, but it's firmly in place.",
+                 "description_when_unlocked": "A section of the western bookshelf has slid aside, revealing a passage."}
+  },
+  {
+    "source_tag": "sanctum_secret_study_m3_18_0", "direction": "east", "target_tag": "sanctum_library_m2_18_0",
+    "details": { "is_locked": true, "lock_id_tag": "library_secret_passage",
+                 "description_when_locked": "The passage to the east is hidden behind a bookshelf.",
+                 "description_when_unlocked": "The passage to the east is open."}
+  },
+  {
+    "source_tag": "sanctum_courtyard_0_18_0", "direction": "east", "target_tag": "sanctum_east_wing_1_18_0", "details": {}
+  },
+  {
+    "source_tag": "sanctum_east_wing_1_18_0", "direction": "west", "target_tag": "sanctum_courtyard_0_18_0", "details": {}
+  },
+  {
+    "source_tag": "sanctum_east_wing_1_18_0", "direction": "north", "target_tag": "sanctum_barracks_1_19_0", "details": {}
+  },
+  {
+    "source_tag": "sanctum_barracks_1_19_0", "direction": "south", "target_tag": "sanctum_east_wing_1_18_0", "details": {}
+  },
+  {
+    "source_tag": "sanctum_courtyard_0_18_0", "direction": "north", "target_tag": "sanctum_main_hall_0_19_0", "details": {}
+  },
+  {
+    "source_tag": "sanctum_main_hall_0_19_0", "direction": "south", "target_tag": "sanctum_courtyard_0_18_0", "details": {}
+  },
+  {
+    "source_tag": "sanctum_main_hall_0_19_0", "direction": "north", "target_tag": "sanctum_altar_chamber_0_20_0", "details": {}
+  },
+  {
+    "source_tag": "sanctum_altar_chamber_0_20_0", "direction": "south", "target_tag": "sanctum_main_hall_0_19_0", "details": {}
+  },
+  {
+    "source_tag": "sanctum_altar_chamber_0_20_0", "direction": "north", "target_tag": "sanctum_inner_sanctum_0_21_0",
+    "details": { "is_locked": true, "lock_id_tag": "altar_barrier_seal",
+                 "description_when_locked": "A crackling barrier of dark energy blocks passage further north beyond the altar.",
+                 "description_when_unlocked": "The dark energy barrier to the north has faded." }
+  },
+  {
+    "source_tag": "sanctum_inner_sanctum_0_21_0", "direction": "south", "target_tag": "sanctum_altar_chamber_0_20_0",
+    "details": { "is_locked": true, "lock_id_tag": "altar_barrier_seal",
+                 "description_when_locked": "The way south is blocked by a crackling energy barrier.",
+                 "description_when_unlocked": "The way south is clear." }
+  },
+  {
+    "source_tag": "central_hub_0_0_0", "direction": "south", "target_tag": "south_corridor_0_m1_0", "details": {}
+  },
+  {
+    "source_tag": "south_corridor_0_m1_0", "direction": "north", "target_tag": "central_hub_0_0_0", "details": {}
+  },
+  {
+    "source_tag": "south_corridor_0_m1_0", "direction": "south", "target_tag": "deep_archive_0_m2_0",
+    "details": { "is_locked": true, "lock_id_tag": "deep_archive_key_lock", "key_item_tag_opens": "archive_key_alpha",
+                 "description_when_locked": "A formidable iron door blocks passage south. It has a complex keyhole.",
+                 "description_when_unlocked": "The formidable iron door to the south is unlocked.",
+                 "skill_to_pick": {"skill_id_tag": "pick_lock_basic", "dc": 18} }
+  },
+  {
+    "source_tag": "deep_archive_0_m2_0", "direction": "north", "target_tag": "south_corridor_0_m1_0",
+    "details": { "is_locked": true, "lock_id_tag": "deep_archive_key_lock", "key_item_tag_opens": "archive_key_alpha",
+                 "description_when_locked": "The iron door to the north is locked from this side too.",
+                 "description_when_unlocked": "The iron door to the north is open.",
+                 "skill_to_pick": {"skill_id_tag": "pick_lock_basic", "dc": 18} }
+  },
+  {
+    "source_tag": "central_hub_0_0_0", "direction": "west", "target_tag": "west_corridor_m1_0_0", "details": {}
+  },
+  {
+    "source_tag": "west_corridor_m1_0_0", "direction": "east", "target_tag": "central_hub_0_0_0", "details": {}
   }
 ]
 --- END OF FILE backend/app/seeds/exits_z0.json ---
@@ -791,7 +1061,7 @@ async def websocket_game_endpoint(
     "unique_tag": "central_hub_0_0_0",
     "data": {
       "name": "Central Processing Unit (CPU)",
-      "description": "The air hums. Corridors branch off. A sturdy-looking door to the east is currently closed. A faint inscription reads 'Sector 0,0,0'.",
+      "description": "The air hums. Corridors branch off. [DYNAMIC_EXIT_EAST]. A faint inscription reads 'Sector 0,0,0'. This appears to be some kind of nexus or entry point.",
       "x": 0, "y": 0, "z": 0,
       "room_type": "standard",
       "interactables": [
@@ -799,8 +1069,6 @@ async def websocket_game_endpoint(
           "id_tag": "cpu_east_lever",
           "name": "a sturdy metal lever",
           "description": "A heavy metal lever is set into the wall, currently in the 'up' position.",
-          "is_hidden": false,
-          "reveal_dc_perception": null,
           "action_verb": "pull",
           "on_interact_effect": {
             "type": "toggle_exit_lock",
@@ -809,122 +1077,452 @@ async def websocket_game_endpoint(
             "message_success_others": "{character_name} pulls the lever. A distant clunk is heard."
           }
         }
-      ],
-      "exits": {}
-    }
-  },
-  {
-    "unique_tag": "north_corridor_0_1_0",
-    "data": {
-      "name": "North Data Conduit Alpha",
-      "description": "A sterile corridor stretches northwards. Panel N-1. The walls are smooth and featureless for the most part.",
-      "x": 0, "y": 1, "z": 0,
-      "room_type": "standard",
-      "interactables": [
-        {
-          "id_tag": "loose_panel_north_wall",
-          "name": "a slightly loose wall panel",
-          "description": "Upon closer inspection, one of the wall panels seems slightly askew. You could probably pry it open.",
-          "is_hidden": true,
-          "reveal_dc_perception": 15, 
-          "revealed_to_char_ids": [],
-          "action_verb": "pry", 
-          "on_interact_effect": {
-            "type": "custom_event", 
-            "message_success_self": "You pry the loose panel open. Tucked inside, you find a datachip labeled 'Emergency Exit Override Codes - Obsolete'. It crumbles to dust as you touch it.",
-            "message_success_others": "{character_name} pries open a loose wall panel, finding something that quickly turns to dust."
-          }
-        }
-      ],
-      "exits": {}
+      ]
     }
   },
   {
     "unique_tag": "east_storage_1_0_0",
     "data": {
       "name": "Secure Storage Vault Epsilon",
-      "description": "Dust motes dance in the dim light. Shelves line the walls, mostly empty. Panel E-1.",
+      "description": "Dust motes dance in the dim light. Shelves line the walls, mostly empty. Panel E-1. [DYNAMIC_EXIT_WEST]",
       "x": 1, "y": 0, "z": 0,
-      "room_type": "standard",
-      "interactables": [],
-      "exits": {}
+      "room_type": "standard"
     }
   },
   {
-    "unique_tag": "south_corridor_0_-1_0",
+    "unique_tag": "outskirts_gate_0_1_0",
     "data": {
-      "name": "South Maintenance Tunnel 7",
-      "description": "Dimly lit and smelling faintly of burnt coffee. A heavy iron door blocks the way south. Panel S-1.",
-      "x": 0, "y": -1, "z": 0,
-      "room_type": "standard",
-      "interactables": [],
-      "exits": {}
+      "name": "Dilapidated Northern Gate",
+      "description": "A crumbling stone archway marks what might have once been a northern exit from the central complex. The path beyond is overgrown and disappears into a tangle of thorny bushes.",
+      "x": 0, "y": 1, "z": 0,
+      "room_type": "standard"
     }
   },
   {
-    "unique_tag": "deep_archive_0_-2_0",
+    "unique_tag": "beginner_path_0_2_0",
+    "data": {
+      "name": "Overgrown Path",
+      "description": "Thorny bushes and grasping weeds choke this narrow path. The air is damp and smells of decay. Small creatures skitter in the undergrowth.",
+      "x": 0, "y": 2, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "ruined_shack_clearing_0_3_0",
+    "data": {
+      "name": "Ruined Shack Clearing",
+      "description": "The path opens into a small clearing where the remains of a wooden shack slowly rot. A rusty water pump stands askew nearby.",
+      "x": 0, "y": 3, "z": 0,
+      "room_type": "standard",
+      "interactables": [
+        {
+          "id_tag": "shack_pump_handle",
+          "name": "a rusty pump handle",
+          "description": "The handle of the old water pump is stiff but might still move.",
+          "action_verb": "pump",
+          "on_interact_effect": {
+            "type": "custom_event",
+            "message_success_self": "You work the pump handle. After a few groaning protests, a trickle of brackish water sputters out.",
+            "message_success_others": "{character_name} works the pump handle, producing a trickle of murky water."
+          }
+        }
+      ]
+    }
+  },
+  {
+    "unique_tag": "shack_interior_0_4_0",
+    "data": {
+      "name": "Inside Ruined Shack",
+      "description": "The interior of the shack is damp and filled with cobwebs. Most of the roof has caved in, offering a view of the sky. A tattered mat lies in one corner.",
+      "x": 0, "y": 4, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "thorn_thicket_west_m1_3_0",
+    "data": {
+      "name": "Thorny Thicket (West)",
+      "description": "An almost impassable thicket of thorny vines blocks easy passage further west. You can hear buzzing insects.",
+      "x": -1, "y": 3, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "thorn_thicket_east_1_3_0",
+    "data": {
+      "name": "Thorny Thicket (East)",
+      "description": "The thorny vines are particularly dense here, scraping at your clothes as you push through.",
+      "x": 1, "y": 3, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "rat_infested_cellar_1_4_0",
+    "data": {
+      "name": "Rat-Infested Cellar Entrance",
+      "description": "A collapsed section of ground near the eastern thicket reveals a dark opening leading down into what might be a cellar. It stinks of vermin. [DYNAMIC_EXIT_EAST_CELLAR_DOOR]",
+      "x": 1, "y": 4, "z": 0,
+      "room_type": "dungeon_entrance"
+    }
+  },
+  {
+    "unique_tag": "deep_cellar_main_2_4_0",
+    "data": {
+      "name": "Deep Cellar - Main Chamber",
+      "description": "This small, damp cellar chamber is filled with refuse and the gnawed bones of small animals. The air is heavy with the stench of rats.",
+      "x": 2, "y": 4, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "deep_cellar_nest_2_5_0",
+    "data": {
+      "name": "Deep Cellar - Rat Nest",
+      "description": "A particularly rank corner of the cellar, piled high with shredded cloth and filth. This is clearly a nest for something unpleasant.",
+      "x": 2, "y": 5, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "goblin_lookout_0_5_0",
+    "data": {
+      "name": "Goblin Lookout Point",
+      "description": "North of the ruined shack, the path climbs slightly to a rocky outcrop. Crude goblin symbols are daubed on the rocks.",
+      "x": 0, "y": 5, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "goblin_trail_m1_5_0",
+    "data": {
+      "name": "Goblin Trail West",
+      "description": "A crudely marked trail leads west from the lookout, littered with discarded bones and scraps of leather.",
+      "x": -1, "y": 5, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "goblin_camp_m2_5_0",
+    "data": {
+      "name": "Small Goblin Camp",
+      "description": "A small, messy encampment is hidden here, with a poorly tended fire pit and a few crude hide tents. [DYNAMIC_EXIT_WEST_CAVE]",
+      "x": -2, "y": 5, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "goblin_cave_entrance_m3_5_0",
+    "data": {
+      "name": "Goblin Cave Entrance",
+      "description": "A narrow opening in the rocks, reeking of goblin filth, leads into a dark cave.",
+      "x": -3, "y": 5, "z": 0,
+      "room_type": "dungeon_entrance"
+    }
+  },
+  {
+    "unique_tag": "goblin_cave_storage_m3_6_0",
+    "data": {
+      "name": "Goblin Cave - Storage Nook",
+      "description": "This small nook in the cave is piled with stolen junk and rotting food.",
+      "x": -3, "y": 6, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "path_to_woods_0_6_0",
+    "data": {
+      "name": "Path to the Whispering Woods",
+      "description": "The overgrown path continues north from the goblin lookout, gradually becoming overshadowed by larger, darker trees. The air grows cooler.",
+      "x": 0, "y": 6, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "woods_edge_0_7_0",
+    "data": {
+      "name": "Edge of the Whispering Woods",
+      "description": "You stand at the verge of a dark and ancient forest. Twisted trees loom, their branches like skeletal fingers. The sounds of the outskirts fade behind you.",
+      "x": 0, "y": 7, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "woods_gloomy_trail_0_8_0",
+    "data": {
+      "name": "Gloomy Trail",
+      "description": "A barely discernible trail winds deeper into the woods. Sunlight struggles to penetrate the thick canopy above.",
+      "x": 0, "y": 8, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "woods_wolf_den_clearing_m1_8_0",
+    "data": {
+      "name": "Wolf Den Clearing",
+      "description": "The trail opens into a small clearing. The ground is paw-printed, and a low growl emanates from a shadowed cleft in some rocks to the west.",
+      "x": -1, "y": 8, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "wolf_den_cave_m2_8_0",
+    "data": {
+      "name": "Inside the Wolf Den",
+      "description": "A shallow cave, littered with bones and smelling strongly of wet fur. This is undoubtedly a wolf den.",
+      "x": -2, "y": 8, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "woods_ancient_oak_0_9_0",
+    "data": {
+      "name": "Ancient Oak",
+      "description": "A colossal, ancient oak tree dominates this part of the woods. Its gnarled branches are draped with moss, and its roots heave up the earth.",
+      "x": 0, "y": 9, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "woods_spider_lair_1_9_0",
+    "data": {
+      "name": "Spider-Infested Grove",
+      "description": "Thick, sticky webs hang between the trees here, glistening with dew. The silence is broken only by the rustling of something large in the higher branches.",
+      "x": 1, "y": 9, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "woods_broodmother_web_1_10_0",
+    "data": {
+      "name": "Broodmother's Web",
+      "description": "A massive, funnel-shaped web fills a hollow between several large trees. The air is thick with the smell of decay and the chitinous clicking of many legs.",
+      "x": 1, "y": 10, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "woods_hidden_shrine_m1_9_0",
+    "data": {
+      "name": "Hidden Forest Shrine",
+      "description": "Tucked away behind a curtain of ivy to the west of the ancient oak, you find a small, moss-covered stone shrine, seemingly forgotten by time. [DYNAMIC_EXIT_WEST_SHRINE_NICHE]",
+      "x": -1, "y": 9, "z": 0,
+      "room_type": "sanctuary"
+    }
+  },
+  {
+    "unique_tag": "woods_shrine_niche_m2_9_0",
+    "data": {
+      "name": "Shrine Niche",
+      "description": "A small alcove within the hidden shrine. A faint, almost imperceptible humming emanates from the stone.",
+      "x": -2, "y": 9, "z": 0,
+      "room_type": "puzzle"
+    }
+  },
+  {
+    "unique_tag": "woods_path_to_mine_0_10_0",
+    "data": {
+      "name": "Path to the Old Mine",
+      "description": "The trail grows rockier and begins to ascend slightly, heading towards a cliff face visible through the trees to the north.",
+      "x": 0, "y": 10, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "mine_entrance_0_11_0",
+    "data": {
+      "name": "Old Mine Entrance",
+      "description": "A dark, foreboding mine entrance gapes in the cliffside. Rotting timbers support the opening, and the air smells of damp earth and something metallic. [DYNAMIC_EXIT_NORTH_MINE_GATE]",
+      "x": 0, "y": 11, "z": 0,
+      "room_type": "dungeon_entrance"
+    }
+  },
+  {
+    "unique_tag": "mine_entry_tunnel_0_12_0",
+    "data": {
+      "name": "Mine Entry Tunnel",
+      "description": "The tunnel is dark and supported by creaking wooden beams. Water drips from the ceiling, and the sound of skittering echoes from deeper within.",
+      "x": 0, "y": 12, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "mine_foremans_office_m1_12_0",
+    "data": {
+      "name": "Foreman's Office (Ruined)",
+      "description": "A small, caved-in chamber off the main tunnel. A rickety desk and a broken chair are all that remain of what might have been an office.",
+      "x": -1, "y": 12, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "mine_shaft_junction_0_13_0",
+    "data": {
+      "name": "Mine Shaft Junction",
+      "description": "The tunnel opens into a larger area where several mine shafts converge. Most are collapsed, but one leads east, and another continues deeper north.",
+      "x": 0, "y": 13, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "mine_east_vein_1_13_0",
+    "data": {
+      "name": "East Vein Tunnel",
+      "description": "This narrow tunnel follows a vein of some glittering, unfamiliar ore. The air is stale.",
+      "x": 1, "y": 13, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "mine_east_dead_end_2_13_0",
+    "data": {
+      "name": "East Vein - Dead End",
+      "description": "The tunnel ends abruptly in a rockfall. It seems this vein was worked out or abandoned.",
+      "x": 2, "y": 13, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "mine_deep_shaft_0_14_0",
+    "data": {
+      "name": "Deep Mine Shaft",
+      "description": "This shaft descends steeply into darkness. The air is noticeably colder, and an unnerving silence hangs in the air.",
+      "x": 0, "y": 14, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "mine_undead_chamber_0_15_0",
+    "data": {
+      "name": "Undead Miners' Chamber",
+      "description": "This large cavern is littered with broken mining tools and the skeletal remains of miners, still clad in tattered work clothes. A chilling aura pervades the room.",
+      "x": 0, "y": 15, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "bridge_to_sanctum_0_16_0",
+    "data": {
+      "name": "Crumbling Stone Bridge",
+      "description": "North of the deepest part of the mine, a natural chasm is spanned by a dangerously weathered stone bridge. Far below, you can hear the faint sound of rushing water. The air feels charged.",
+      "x": 0, "y": 16, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_gatehouse_0_17_0",
+    "data": {
+      "name": "Sanctum Gatehouse",
+      "description": "Beyond the bridge stands a formidable stone gatehouse, its portcullis rusted shut. Strange symbols are carved above the archway. [DYNAMIC_EXIT_NORTH_SANCTUM_PORTCULLIS]",
+      "x": 0, "y": 17, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_courtyard_0_18_0",
+    "data": {
+      "name": "Corrupted Sanctum Courtyard",
+      "description": "The flagstones of this courtyard are cracked and overgrown with sickly weeds. Defaced statues stand in alcoves, and an oppressive atmosphere hangs heavy.",
+      "x": 0, "y": 18, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_west_wing_m1_18_0",
+    "data": {
+      "name": "Sanctum - West Wing Antechamber",
+      "description": "A once-grand antechamber, now fallen into ruin. Tapestries hang in tatters, and dust coats every surface.",
+      "x": -1, "y": 18, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_library_m2_18_0",
+    "data": {
+      "name": "Sanctum Library (Desecrated)",
+      "description": "Bookshelves line the walls, their contents mostly burned or torn. Pages skitter across the floor in the draft. A large, rune-covered lectern stands in the center. [DYNAMIC_EXIT_WEST_SECRET_PASSAGE]",
+      "x": -2, "y": 18, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_secret_study_m3_18_0",
+    "data": {
+      "name": "Sanctum Secret Study",
+      "description": "A hidden study, remarkably preserved. Books on dark arts and forbidden lore line the shelves. A single, guttering candle illuminates a desk.",
+      "x": -3, "y": 18, "z": 0,
+      "room_type": "puzzle"
+    }
+  },
+  {
+    "unique_tag": "sanctum_east_wing_1_18_0",
+    "data": {
+      "name": "Sanctum - East Wing Hallway",
+      "description": "This hallway echoes with an unsettling silence. Doors leading off it are mostly broken or hanging from single hinges.",
+      "x": 1, "y": 18, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_barracks_1_19_0",
+    "data": {
+      "name": "Sanctum Barracks (Haunted)",
+      "description": "Rotting bunks line the walls of this former barracks. The air is icy cold, and a palpable sense of dread fills the room.",
+      "x": 1, "y": 19, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_main_hall_0_19_0",
+    "data": {
+      "name": "Sanctum Main Hall",
+      "description": "A vast, domed hall that must have once been breathtaking. Now, rubble litters the floor, and ominous shadows dance in the dim light filtering from cracks in the dome.",
+      "x": 0, "y": 19, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_altar_chamber_0_20_0",
+    "data": {
+      "name": "Sanctum Altar Chamber",
+      "description": "At the northernmost end of the sanctum lies a raised dais upon which a massive, dark stone altar stands. The air crackles with a malevolent energy. [DYNAMIC_EXIT_NORTH_ALTAR_BARRIER]",
+      "x": 0, "y": 20, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "sanctum_inner_sanctum_0_21_0",
+    "data": {
+      "name": "Inner Sanctum",
+      "description": "Beyond the altar, this chamber hums with concentrated dark power. Disturbing runes cover every surface, glowing faintly.",
+      "x": 0, "y": 21, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "south_corridor_0_m1_0",
+    "data": {
+      "name": "South Maintenance Tunnel",
+      "description": "Dimly lit and smelling faintly of burnt coffee. A heavy iron door blocks the way further south. Panel S-1. [DYNAMIC_EXIT_SOUTH_ARCHIVE]",
+      "x": 0, "y": -1, "z": 0,
+      "room_type": "standard"
+    }
+  },
+  {
+    "unique_tag": "deep_archive_0_m2_0",
     "data": {
       "name": "Deep Archive Sector 42",
-      "description": "Ancient, whirring machinery fills this chamber. It feels important. Panel S-2.",
+      "description": "Ancient, whirring machinery fills this chamber. It feels important. Panel S-2. [DYNAMIC_EXIT_NORTH_ARCHIVE]",
       "x": 0, "y": -2, "z": 0,
-      "room_type": "puzzle",
-      "interactables": [],
-      "exits": {}
+      "room_type": "puzzle"
     }
   },
   {
-    "unique_tag": "west_corridor_-1_0_0",
+    "unique_tag": "west_corridor_m1_0_0",
     "data": {
       "name": "West Logic Gate Array",
       "description": "To the west, a series of humming conduits. Panel W-1.",
       "x": -1, "y": 0, "z": 0,
-      "room_type": "standard",
-      "interactables": [],
-      "exits": {}
-    }
-  },
-  {
-    "unique_tag": "nexus_junction_0_2_0",
-    "data": {
-      "name": "Nexus Junction N-2",
-      "description": "A wider intersection of data conduits.",
-      "x": 0, "y": 2, "z": 0,
-      "room_type": "standard",
-      "interactables": [],
-      "exits": {}
-    }
-  },
-  {
-    "unique_tag": "sanctuary_alcove_1_2_0",
-    "data": {
-      "name": "Quiet Reflection Alcove",
-      "description": "A surprisingly calm alcove. Soft light emanates from the walls. You feel a sense of peace here.",
-      "x": 1, "y": 2, "z": 0,
-      "room_type": "sanctuary",
-      "interactables": [],
-      "exits": {}
-    }
-  },
-  {
-    "unique_tag": "shop_node_2_2_0",
-    "data": {
-      "name": "Automated Goods Dispenser Node",
-      "description": "A humming terminal offers various wares for digital currency. A holographic shopkeeper glitches occasionally.",
-      "x": 2, "y": 2, "z": 0,
-      "room_type": "shop",
-      "interactables": [],
-      "exits": {}
-    }
-  },
-  {
-    "unique_tag": "trainer_sim_3_2_0",
-    "data": {
-      "name": "Combat Simulation Pod",
-      "description": "A sleek pod invites users to hone their skills. A sign reads: 'Skill Enhancement Services'.",
-      "x": 3, "y": 2, "z": 0,
-      "room_type": "trainer",
-      "interactables": [],
-      "exits": {}
+      "room_type": "standard"
     }
   }
 ]
@@ -1799,16 +2397,17 @@ class Room(Base):
 import json
 import os 
 import uuid
+import logging # Import logging
 from typing import Optional, Dict, List, Any 
 from sqlalchemy.orm import Session, attributes 
 
-from .. import models, schemas, crud # crud for item seeding
-from ..schemas.common_structures import ExitDetail, ExitSkillToPickDetail # Ensure sub-models are available if needed directly
+from .. import models, schemas, crud 
+from ..schemas.common_structures import ExitDetail, ExitSkillToPickDetail
 
-# Path to the seeds directory
+logger = logging.getLogger(__name__) # Get a logger for this module
+
 SEED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "seeds")
-
-_SEED_ROOM_UUIDS_CACHE: Dict[str, uuid.UUID] = {} # Cache for UUIDs based on unique_tag
+_SEED_ROOM_UUIDS_CACHE: Dict[str, uuid.UUID] = {}
 
 def _load_seed_data(filename: str) -> List[Dict[str, Any]]:
     filepath = os.path.join(SEED_DIR, filename)
@@ -1816,10 +2415,10 @@ def _load_seed_data(filename: str) -> List[Dict[str, Any]]:
         with open(filepath, 'r') as f:
             return json.load(f)
     except FileNotFoundError:
-        print(f"ERROR: Seed file not found: {filepath}")
+        logger.error(f"Seed file not found: {filepath}")
         return []
     except json.JSONDecodeError as e:
-        print(f"ERROR: Could not decode JSON from {filepath}: {e}")
+        logger.error(f"Could not decode JSON from {filepath}: {e}")
         return []
 
 def get_room_by_id(db: Session, room_id: uuid.UUID) -> Optional[models.Room]:
@@ -1839,178 +2438,178 @@ def create_room(db: Session, *, room_in: schemas.RoomCreate) -> models.Room:
     db_room_data = room_in.model_dump(exclude_unset=True)
     if 'exits' not in db_room_data: db_room_data['exits'] = {}
     if 'interactables' not in db_room_data: db_room_data['interactables'] = []
-    
-    # Ensure room_type is correctly passed as Enum member if it's a string from JSON
     if 'room_type' in db_room_data and isinstance(db_room_data['room_type'], str):
         try:
             db_room_data['room_type'] = models.RoomTypeEnum(db_room_data['room_type'])
         except ValueError:
-            print(f"Warning: Invalid room_type '{db_room_data['room_type']}' in create_room. Defaulting to STANDARD.")
+            logger.warning(f"Invalid room_type '{db_room_data['room_type']}' in create_room. Defaulting to STANDARD.")
             db_room_data['room_type'] = models.RoomTypeEnum.STANDARD
-            
     db_room = models.Room(**db_room_data)
-    db.add(db_room)
+    db.add(db_room) 
     return db_room
 
 def update_room(db: Session, *, db_room: models.Room, room_in: schemas.RoomUpdate) -> models.Room:
     update_data = room_in.model_dump(exclude_unset=True)
     changed = False
     for field, value in update_data.items():
-        # Handle room_type enum conversion for updates
         if field == 'room_type' and isinstance(value, str):
             try:
                 value = models.RoomTypeEnum(value)
             except ValueError:
-                print(f"Warning: Invalid room_type '{value}' in update_room. Skipping update for this field.")
-                continue # Skip updating room_type if invalid
-
+                logger.warning(f"Invalid room_type '{value}' in update_room. Skipping update.")
+                continue
         if getattr(db_room, field) != value:
             setattr(db_room, field, value)
             if field in ["exits", "interactables"]: 
                 attributes.flag_modified(db_room, field)
             changed = True
     if changed:
-        db.add(db_room)
+        db.add(db_room) 
     return db_room
 
 def seed_initial_world(db: Session):
-    print("Attempting to seed initial world from JSON files...")
+    logger.info("Attempting to seed initial world (rooms and exits) from JSON files...")
     _SEED_ROOM_UUIDS_CACHE.clear()
 
     room_definitions_from_file = _load_seed_data("rooms_z0.json")
     if not room_definitions_from_file:
-        print("No room definitions found or error loading. Aborting room seeding.")
+        logger.warning("No room definitions found. Aborting room seeding.")
         return
+    logger.info(f"Loaded {len(room_definitions_from_file)} room definitions.")
+    
+    processed_room_tags_coords = {} 
 
-    print(f"Loaded {len(room_definitions_from_file)} room definitions from file.")
     for room_entry in room_definitions_from_file:
         unique_tag = room_entry.get("unique_tag")
         room_data_dict = room_entry.get("data")
-
         if not unique_tag or not room_data_dict:
-            print(f"Skipping malformed room entry (no tag/data): {room_entry}")
+            logger.warning(f"Skipping malformed room entry: {room_entry}")
             continue
-        
         try:
             room_create_schema = schemas.RoomCreate(**room_data_dict)
+            processed_room_tags_coords[unique_tag] = (room_create_schema.x, room_create_schema.y, room_create_schema.z)
         except Exception as e_pydantic_room:
-            print(f"ERROR: Pydantic validation failed for room '{unique_tag}' data: {room_data_dict}. Error: {e_pydantic_room}")
+            logger.error(f"Pydantic validation for room '{unique_tag}': {e_pydantic_room}")
             continue
             
         existing_room = get_room_by_coords(db, x=room_create_schema.x, y=room_create_schema.y, z=room_create_schema.z)
-        
         if not existing_room:
-            print(f"Creating room '{room_create_schema.name}' (tag: {unique_tag})...")
-            created_room_orm = create_room(db, room_in=room_create_schema)
-            db.commit() 
-            db.refresh(created_room_orm)
-            _SEED_ROOM_UUIDS_CACHE[unique_tag] = created_room_orm.id
+            logger.info(f"Staging creation: '{room_create_schema.name}' (tag: {unique_tag})")
+            create_room(db, room_in=room_create_schema)
         else:
-            print(f"Room '{existing_room.name}' (tag: {unique_tag}) already exists. Updating...")
-            update_payload_data = room_create_schema.model_dump(exclude_defaults=False, exclude_unset=False) # Get all fields for update
-            
-            # Ensure interactables and exits are present in the update_payload_data if they are in room_create_schema
-            # This is to make sure they get updated correctly even if they are empty lists/dicts.
-            if 'interactables' not in update_payload_data and hasattr(room_create_schema, 'interactables'):
-                update_payload_data['interactables'] = room_create_schema.interactables
-            if 'exits' not in update_payload_data and hasattr(room_create_schema, 'exits'):
-                update_payload_data['exits'] = room_create_schema.exits
-
+            logger.info(f"Staging update: '{existing_room.name}' (tag: {unique_tag})")
+            update_payload_data = room_create_schema.model_dump(exclude_unset=False, exclude_defaults=True)
             room_update_schema = schemas.RoomUpdate(**update_payload_data)
             update_room(db, db_room=existing_room, room_in=room_update_schema)
-            db.commit() 
-            db.refresh(existing_room)
-            _SEED_ROOM_UUIDS_CACHE[unique_tag] = existing_room.id
-    
+
+    logger.info("Flushing staged room data to assign IDs...")
+    try:
+        db.flush()
+    except Exception as e_flush:
+        logger.error(f"ERROR during db.flush() for rooms: {e_flush}. Rolling back.", exc_info=True)
+        db.rollback()
+        return
+    logger.info("Populating room UUID cache...")
+    for tag, coords_tuple in processed_room_tags_coords.items():
+        room_orm_after_flush = get_room_by_coords(db, x=coords_tuple[0], y=coords_tuple[1], z=coords_tuple[2])
+        if room_orm_after_flush and room_orm_after_flush.id:
+            _SEED_ROOM_UUIDS_CACHE[tag] = room_orm_after_flush.id
+        else:
+            logger.warning(f"Room tag '{tag}' at {coords_tuple} not found or ID missing after flush. Cannot cache.")
+            
+    logger.info("Committing room creations/updates...")
+    try:
+        db.commit()
+        logger.info("Room data committed.")
+    except Exception as e_commit_rooms:
+        logger.error(f"ERROR committing rooms: {e_commit_rooms}. Rolling back.", exc_info=True)
+        db.rollback()
+        return
+
     exits_data_from_file = _load_seed_data("exits_z0.json")
     if not exits_data_from_file:
-        print("No exits data found or error loading. Skipping exit linking.")
+        logger.warning("No exits data found. Skipping exit linking.")
     else:
-        print(f"Loaded {len(exits_data_from_file)} exit definitions from file.")
+        logger.info(f"Loaded {len(exits_data_from_file)} exit definitions.")
+        exit_updates_staged = False
         for exit_def in exits_data_from_file:
-            source_tag = exit_def.get("source_tag")
-            direction_str = exit_def.get("direction")
-            target_tag = exit_def.get("target_tag")
-            exit_details_override_dict = exit_def.get("details", {})
-
-            if not source_tag or not direction_str or not target_tag:
-                print(f"Skipping malformed exit entry (missing tag/direction/target): {exit_def}")
+            source_tag, direction_str, target_tag = exit_def.get("source_tag"), exit_def.get("direction"), exit_def.get("target_tag")
+            details_override = exit_def.get("details", {})
+            if not (source_tag and direction_str and target_tag):
+                logger.warning(f"Skipping malformed exit: {exit_def}")
                 continue
 
-            if source_tag in _SEED_ROOM_UUIDS_CACHE and target_tag in _SEED_ROOM_UUIDS_CACHE:
-                source_room_orm = get_room_by_id(db, room_id=_SEED_ROOM_UUIDS_CACHE[source_tag])
-                if source_room_orm:
-                    if source_room_orm.exits is None: 
-                        source_room_orm.exits = {}
-                    
-                    target_uuid = _SEED_ROOM_UUIDS_CACHE[target_tag]
-                    
-                    # EXPLICITLY build the data for ExitDetail, respecting Pydantic defaults
-                    data_for_exit_detail_model = {
-                        "target_room_id": target_uuid,
-                        "is_locked": exit_details_override_dict.get("is_locked", schemas.ExitDetail.model_fields["is_locked"].default),
-                        "lock_id_tag": exit_details_override_dict.get("lock_id_tag", schemas.ExitDetail.model_fields["lock_id_tag"].default),
-                        "key_item_tag_opens": exit_details_override_dict.get("key_item_tag_opens", schemas.ExitDetail.model_fields["key_item_tag_opens"].default),
-                        # For skill_to_pick, if it's in overrides, Pydantic will parse the dict. If not, it defaults to None.
-                        "skill_to_pick": exit_details_override_dict.get("skill_to_pick", schemas.ExitDetail.model_fields["skill_to_pick"].default),
-                        "description_when_locked": exit_details_override_dict.get("description_when_locked", schemas.ExitDetail.model_fields["description_when_locked"].default),
-                        "force_open_dc": exit_details_override_dict.get("force_open_dc", schemas.ExitDetail.model_fields["force_open_dc"].default)
-                    }
-                    # If skill_to_pick is a dict, ensure it's correctly formed for ExitSkillToPickDetail
-                    if isinstance(data_for_exit_detail_model["skill_to_pick"], dict):
-                        try:
-                            # Validate/parse the skill_to_pick sub-dict
-                            data_for_exit_detail_model["skill_to_pick"] = ExitSkillToPickDetail(**data_for_exit_detail_model["skill_to_pick"])
-                        except Exception as e_skill_pick:
-                             print(f"  ERROR: Pydantic validation for skill_to_pick in exit {source_tag}->{direction_str} failed: {e_skill_pick}. Data: {data_for_exit_detail_model['skill_to_pick']}")
-                             data_for_exit_detail_model["skill_to_pick"] = None # Set to None if parsing fails
-
-                    try:
-                        exit_detail_pydantic = schemas.ExitDetail(**data_for_exit_detail_model)
-                        
-                        current_exits = dict(source_room_orm.exits) 
-                        current_exits[direction_str] = exit_detail_pydantic.model_dump(mode='json')
-                        source_room_orm.exits = current_exits 
-                        
-                        attributes.flag_modified(source_room_orm, "exits") 
-                        db.add(source_room_orm)
-                    except Exception as e_pydantic_exit:
-                        print(f"  ERROR: Pydantic validation for exit {source_tag}->{direction_str} failed: {e_pydantic_exit}. Input data to Pydantic: {data_for_exit_detail_model}")
-                else:
-                    print(f"  Warning: Source room ORM object for tag '{source_tag}' not found in DB.")
-            else:
-                print(f"  Warning: Could not link exit {source_tag} -> {target_tag}. One or both tags not found in UUID cache: {list(_SEED_ROOM_UUIDS_CACHE.keys())}")
-        
-        db.commit() 
-
-    print("World seeding from JSON files complete.")
-
-    key_item_source_tag = "east_storage_1_0_0"
-    if key_item_source_tag in _SEED_ROOM_UUIDS_CACHE:
-        key_item_name = "Archive Key Alpha"
-        # This assumes crud.crud_item is available and its create_item, get_item_by_name are defined
-        # and crud.crud_room_item.add_item_to_room is defined.
-        existing_key_template = crud.crud_item.get_item_by_name(db, name=key_item_name)
-        if not existing_key_template:
-            key_data = {
-                "name": key_item_name, 
-                "description": "A small, intricately carved metal key. Sector 42.",
-                "item_type": "key", "slot": None,
-                "properties": {"item_tag": "archive_key_alpha"}, 
-                "weight": 0.1, "value": 0, "stackable": False
-            }
-            key_template = crud.crud_item.create_item(db, item_in=schemas.ItemCreate(**key_data))
-            db.commit() 
-            print(f"Seeded key item: {key_template.name}")
+            source_id, target_id = _SEED_ROOM_UUIDS_CACHE.get(source_tag), _SEED_ROOM_UUIDS_CACHE.get(target_tag)
+            if not source_id or not target_id:
+                logger.warning(f"Missing ID for exit {source_tag}->{target_tag}. Source cached: {bool(source_id)}, Target cached: {bool(target_id)}")
+                continue
             
-            room_to_place_key_id = _SEED_ROOM_UUIDS_CACHE[key_item_source_tag]
-            crud.crud_room_item.add_item_to_room(db, room_id=room_to_place_key_id, item_id=key_template.id, quantity=1)
-            print(f"Placed '{key_template.name}' in room '{key_item_source_tag}'.")
-            db.commit()
+            source_room_orm = get_room_by_id(db, room_id=source_id)
+            if not source_room_orm:
+                logger.warning(f"Source room ORM for tag '{source_tag}' (ID: {source_id}) not found in DB for exit link.")
+                continue
+
+            if source_room_orm.exits is None: source_room_orm.exits = {}
+            
+            exit_data = {
+                "target_room_id": target_id,
+                "is_locked": details_override.get("is_locked", schemas.ExitDetail.model_fields["is_locked"].default),
+                "lock_id_tag": details_override.get("lock_id_tag", schemas.ExitDetail.model_fields["lock_id_tag"].default),
+                "key_item_tag_opens": details_override.get("key_item_tag_opens", schemas.ExitDetail.model_fields["key_item_tag_opens"].default),
+                "skill_to_pick": details_override.get("skill_to_pick", schemas.ExitDetail.model_fields["skill_to_pick"].default),
+                "description_when_locked": details_override.get("description_when_locked", schemas.ExitDetail.model_fields["description_when_locked"].default),
+                "force_open_dc": details_override.get("force_open_dc", schemas.ExitDetail.model_fields["force_open_dc"].default)
+            }
+            if isinstance(exit_data["skill_to_pick"], dict):
+                try:
+                    exit_data["skill_to_pick"] = ExitSkillToPickDetail(**exit_data["skill_to_pick"])
+                except Exception as e:
+                    logger.error(f"Pydantic for skill_to_pick in exit {source_tag}->{direction_str}: {e}. Data: {exit_data['skill_to_pick']}", exc_info=True)
+                    exit_data["skill_to_pick"] = None
+            try:
+                exit_detail_pydantic = schemas.ExitDetail(**exit_data)
+                current_exits = dict(source_room_orm.exits)
+                new_exit_json = exit_detail_pydantic.model_dump(mode='json')
+                if current_exits.get(direction_str) != new_exit_json:
+                    current_exits[direction_str] = new_exit_json
+                    source_room_orm.exits = current_exits
+                    attributes.flag_modified(source_room_orm, "exits")
+                    db.add(source_room_orm)
+                    exit_updates_staged = True
+            except Exception as e:
+                logger.error(f"Pydantic for exit {source_tag}->{direction_str}: {e}. Input: {exit_data}", exc_info=True)
+        
+        if exit_updates_staged:
+            logger.info("Committing exit updates...")
+            try:
+                db.commit()
+                logger.info("Exit updates committed.")
+            except Exception as e:
+                logger.error(f"ERROR committing exits: {e}. Rolling back.", exc_info=True)
+                db.rollback()
         else:
-            print(f"Key item '{key_item_name}' already exists.")
+            logger.info("No exit updates were needed.")
+            
+    key_room_tag, key_name = "east_storage_1_0_0", "Archive Key Alpha"
+    key_room_id = _SEED_ROOM_UUIDS_CACHE.get(key_room_tag)
+    if not key_room_id:
+        logger.warning(f"Room tag '{key_room_tag}' for key placement not in cache.")
     else:
-        print(f"Warning: Room with tag '{key_item_source_tag}' for key placement not found in cache.")
+        key_template = crud.crud_item.get_item_by_name(db, name=key_name)
+        if not key_template:
+            logger.warning(f"Item template '{key_name}' not found. Cannot place.")
+        else:
+            target_room = get_room_by_id(db, key_room_id)
+            if target_room and not any(item.item_id == key_template.id for item in target_room.items_on_ground):
+                logger.info(f"Placing item '{key_template.name}' in room '{key_room_tag}'.")
+                crud.crud_room_item.add_item_to_room(db, room_id=key_room_id, item_id=key_template.id, quantity=1)
+                db.commit() 
+            elif target_room:
+                logger.info(f"Key '{key_template.name}' already in room '{target_room.name}'. Skipping.")
+            else:
+                logger.warning(f"Target room for key placement (ID: {key_room_id}) not found.")
+    
+    logger.info("World seeding process finished.")
 --- END OF FILE backend/app/crud/crud_room.py ---
 
 --- START OF FILE frontend/src/main.js ---
@@ -2021,118 +2620,82 @@ import { WebSocketService } from './websocket.js';
 import { MapDisplay } from './map.js';
 import { gameState, saveSession, loadSession, clearSession, updateGameState } from './state.js';
 
-// This function handles messages received over WebSocket
-// It's defined here because it orchestrates calls to UI, MapDisplay, and updates gameState.
 export function handleWebSocketMessage(serverData) {
-    let charVitals = null; // To hold character vitals if present in the message
+    let charVitals = null; 
 
-    // Consolidate extraction of character_vitals
-    if (serverData.type === "welcome_package" && serverData.character_vitals) {
-        charVitals = serverData.character_vitals;
-    } else if (serverData.type === "combat_update" && serverData.character_vitals) {
-        charVitals = serverData.character_vitals;
-    } else if (serverData.type === "vitals_update") { // vitals_update sends them at root level of serverData
-        charVitals = serverData; // The whole serverData object is the vitals payload here
-    }
+    if (serverData.type === "welcome_package" && serverData.character_vitals) charVitals = serverData.character_vitals;
+    else if (serverData.type === "combat_update" && serverData.character_vitals) charVitals = serverData.character_vitals;
+    else if (serverData.type === "vitals_update") charVitals = serverData; 
 
-    // If we have character vitals from any source, update relevant UI components
     if (charVitals) {
-        if (typeof UI.updatePlayerVitals === 'function') {
-            UI.updatePlayerVitals(
-                charVitals.current_hp, charVitals.max_hp,
-                charVitals.current_mp, charVitals.max_mp,
-                charVitals.current_xp, charVitals.next_level_xp
-            );
-        }
-        if (typeof UI.updateCharacterInfoBar === 'function') {
-            // Use gameState for name/class as they are more stable during session
-            // Level comes from charVitals as it can change
-            UI.updateCharacterInfoBar(
-                gameState.selectedCharacterName,
-                gameState.selectedCharacterClass,
-                charVitals.level // Assumes 'level' is present in charVitals
-            );
-        }
-        if (typeof UI.updateCurrencyDisplay === 'function' && charVitals &&
-            (typeof charVitals.platinum !== 'undefined' ||
-                typeof charVitals.gold !== 'undefined' ||
-                typeof charVitals.silver !== 'undefined' ||
-                typeof charVitals.copper !== 'undefined')
-        ) {
-            UI.updateCurrencyDisplay(
-                charVitals.platinum,
-                charVitals.gold,
-                charVitals.silver,
-                charVitals.copper
-            );
+        UI.updatePlayerVitals(
+            charVitals.current_hp, charVitals.max_hp,
+            charVitals.current_mp, charVitals.max_mp,
+            charVitals.current_xp, charVitals.next_level_xp
+        );
+        UI.updateCharacterInfoBar(gameState.selectedCharacterName, gameState.selectedCharacterClass, charVitals.level);
+        if (charVitals.platinum !== undefined) { 
+            UI.updateCurrencyDisplay(charVitals.platinum, charVitals.gold, charVitals.silver, charVitals.copper);
         }
     }
 
-    // Handle specific message types for logs, room data, and other events
     switch (serverData.type) {
         case "welcome_package":
-            if (serverData.log && serverData.log.length > 0) {
-                UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
-            }
+            if (serverData.log && serverData.log.length > 0) UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
             if (serverData.room_data) {
-                UI.updateGameDisplay(serverData.room_data);
-                UI.updateExitsDisplay(serverData.room_data);
-                updateGameState({ displayedRoomId: serverData.room_data.id });
-                MapDisplay.fetchAndDrawMap(); // Initial map draw
+                const currentRoom = serverData.room_data;
+                UI.updateGameDisplay(currentRoom);
+                UI.updateExitsDisplay(currentRoom);
+                updateGameState({ displayedRoomId: currentRoom.id });
+                // Pass currentRoom data for immediate title/highlight and to determine target Z
+                MapDisplay.fetchAndDrawMap(currentRoom); 
             }
-            // Vitals already handled by the common charVitals block above
             break;
-
-        case "combat_update":
+        case "combat_update": 
             if (serverData.room_data) {
-                const movedRoom = gameState.displayedRoomId !== serverData.room_data.id;
-                UI.updateGameDisplay(serverData.room_data);
-                UI.updateExitsDisplay(serverData.room_data);
-                updateGameState({ displayedRoomId: serverData.room_data.id });
-                if (movedRoom) MapDisplay.redrawMapForCurrentRoom(serverData.room_data.id);
+                const currentRoom = serverData.room_data; 
+                const movedRoom = gameState.displayedRoomId !== currentRoom.id;
+                const zLevelChanged = MapDisplay.currentZLevel !== currentRoom.z;
+                
+                UI.updateGameDisplay(currentRoom); 
+                UI.updateExitsDisplay(currentRoom);
+                updateGameState({ displayedRoomId: currentRoom.id });
+
+                if (movedRoom || zLevelChanged || !MapDisplay.mapDataCache[currentRoom.z]) {
+                    // console.log(`Map update triggered: moved=${movedRoom}, zChanged=${zLevelChanged}, notCached=${!MapDisplay.mapDataCache[currentRoom.z]}`);
+                    MapDisplay.fetchAndDrawMap(currentRoom);
+                } else {
+                    MapDisplay.redrawMapForCurrentRoom(currentRoom.id, currentRoom);
+                }
             }
-            if (serverData.log && serverData.log.length > 0) {
-                UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
-            }
+            if (serverData.log && serverData.log.length > 0) UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
             updateGameState({ isInCombat: !serverData.combat_over });
-            // Vitals already handled by the common charVitals block above
             break;
-
-        case "vitals_update":
-            // Vitals (HP, MP, XP, Currency, Level) already handled by the common charVitals block above.
-            // No further specific action needed here unless there are logs associated with only vitals_update.
-            break;
-
-        case "ooc_message":
-            UI.appendToOutput(serverData.message, { styleClass: "ooc-chat-message" });
-            break;
-
-        case "game_event":
-            if (serverData.message) UI.appendToOutput(serverData.message, { styleClass: "game-message" });
-            break;
-
+        case "vitals_update": break;
+        case "ooc_message": UI.appendToOutput(serverData.message, { styleClass: "ooc-chat-message" }); break;
+        case "game_event": if (serverData.message) UI.appendToOutput(serverData.message, { styleClass: "game-message" }); break;
         default:
-            // Fallback for messages that have a 'message' field but unknown type
-            if (serverData.message) {
-                UI.appendToOutput(`GS (${serverData.type}): ${serverData.message}`, { styleClass: "game-message" });
-            } else { // Fallback for completely unrecognized structures
-                UI.appendToOutput(`GS (unparsed type: ${serverData.type}): ${JSON.stringify(serverData)}`, { styleClass: "game-message" });
-            }
+            if (serverData.message) UI.appendToOutput(`GS (${serverData.type}): ${serverData.message}`, { styleClass: "game-message" });
+            else UI.appendToOutput(`GS (unparsed type: ${serverData.type}): ${JSON.stringify(serverData)}`, { styleClass: "game-message" });
             break;
     }
 }
 
-// --- Game Flow and State Management Functions ---
+// ... (startLoginProcess, promptForPassword, etc. remain largely unchanged from previous correct version) ...
+// Make sure they call UI.showAppropriateView() AFTER updateGameState loginState changes.
 
 async function startLoginProcess() {
-    clearSession(); // Resets gameState and clears localStorage
-    updateGameState({ loginState: 'PROMPT_USER' });
+    clearSession(); 
+    updateGameState({ loginState: 'PROMPT_USER' }); 
     WebSocketService.close();
-    MapDisplay.clearMap();
-    UI.showAppropriateView(); // Hides game UI elements
+    MapDisplay.clearMap(); 
+    MapDisplay.currentMapDisplayData = null; // Clear current display data
+    MapDisplay.currentZLevel = 0; // Reset Z
+    MapDisplay.drawMap();  
+    UI.showAppropriateView(); 
     UI.clearOutput();
     UI.appendToOutput("Welcome to The Unholy MUD of Tron & Allen1.");
-    UI.appendToOutput("Version: Refactored & Ready to Rumble!"); // New version string
+    UI.appendToOutput("Version: Refactored & Ready to Rumble!"); 
     UI.appendToOutput("-------------------------------------------------");
     UI.appendToOutput("Username (or type 'new' to register): ", { isPrompt: true });
     UI.setInputCommandPlaceholder("Enter username or 'new'");
@@ -2142,6 +2705,7 @@ async function startLoginProcess() {
 
 async function promptForPassword() {
     updateGameState({ loginState: 'PROMPT_PASSWORD' });
+    UI.showAppropriateView(); 
     UI.appendToOutput("Password: ", { isPrompt: true, noNewLineBefore: true });
     UI.setInputCommandPlaceholder("Enter password");
     UI.setInputCommandType('password');
@@ -2150,6 +2714,7 @@ async function promptForPassword() {
 
 async function promptForRegistrationUsername() {
     updateGameState({ loginState: 'REGISTER_PROMPT_USER' });
+    UI.showAppropriateView(); 
     UI.appendToOutput("Registering new user.");
     UI.appendToOutput("Desired username: ", { isPrompt: true });
     UI.setInputCommandPlaceholder("Enter desired username");
@@ -2159,6 +2724,7 @@ async function promptForRegistrationUsername() {
 
 async function promptForRegistrationPassword() {
     updateGameState({ loginState: 'REGISTER_PROMPT_PASSWORD' });
+    UI.showAppropriateView(); 
     UI.appendToOutput("Desired password (min 8 chars): ", { isPrompt: true, noNewLineBefore: true });
     UI.setInputCommandPlaceholder("Enter desired password");
     UI.setInputCommandType('password');
@@ -2167,41 +2733,34 @@ async function promptForRegistrationPassword() {
 
 async function displayCharacterSelection() {
     updateGameState({ loginState: 'CHAR_SELECT_PROMPT' });
-    UI.showAppropriateView();
+    UI.showAppropriateView(); 
     if (!gameState.currentAuthToken) {
         UI.appendToOutput("! Authentication token missing. Please log in.", { styleClass: 'error-message-inline' });
-        handleLogout(); // Should take back to login start
-        return;
+        handleLogout(); return;
     }
     UI.appendToOutput("\nFetching character list...");
     try {
         const characters = await API.fetchCharacters();
         updateGameState({ availableCharacters: characters });
         UI.appendToOutput("\n--- Character Selection ---");
-        if (characters.length === 0) {
-            UI.appendToOutput("No characters found for your account.");
-        } else {
+        if (characters.length === 0) UI.appendToOutput("No characters found for your account.");
+        else {
             UI.appendToOutput("Your characters:");
-            characters.forEach((char, index) => {
-                UI.appendToOutput(`<span class="char-list-item"><span class="char-index">${index + 1}.</span> <span class="char-name">${char.name}</span> (<span class="char-class">${char.class_name}</span> - Lvl ${char.level})</span>`);
-            });
+            characters.forEach((char, index) => UI.appendToOutput(`<span class="char-list-item"><span class="char-index">${index + 1}.</span> <span class="char-name">${char.name}</span> (<span class="char-class">${char.class_name}</span> - Lvl ${char.level})</span>`));
         }
         UI.appendToOutput("Enter character # to play, or type 'new' to create one: ", { isPrompt: true });
         UI.setInputCommandPlaceholder("Enter # or 'new'");
     } catch (error) {
         UI.appendToOutput(`! Error fetching characters: ${error.message}`, { styleClass: 'error-message-inline' });
-        if (error.response && error.response.status === 401) { // Unauthorized
-            UI.appendToOutput("! Your session may have expired. Please log in again.", { styleClass: 'error-message-inline' });
-            handleLogout();
-        } else {
-            startLoginProcess(); // Fallback for other errors
-        }
+        if (error.response && error.response.status === 401) handleLogout();
+        else startLoginProcess(); 
     }
     UI.focusCommandInput();
 }
 
 async function promptForNewCharacterName() {
     updateGameState({ loginState: 'CHAR_CREATE_PROMPT_NAME', tempCharName: '' });
+    UI.showAppropriateView(); 
     UI.appendToOutput("\n--- New Character Creation ---");
     UI.appendToOutput("Enter character name: ", { isPrompt: true });
     UI.setInputCommandPlaceholder("Character Name (3-50 chars)");
@@ -2211,6 +2770,7 @@ async function promptForNewCharacterName() {
 
 async function displayClassSelection() {
     updateGameState({ loginState: 'CHAR_CREATE_PROMPT_CLASS' });
+    UI.showAppropriateView(); 
     UI.appendToOutput(`\nFetching available classes for ${gameState.tempCharName}...`);
     try {
         const classes = await API.fetchAvailableClasses();
@@ -2218,13 +2778,10 @@ async function displayClassSelection() {
         if (classes.length === 0) {
             UI.appendToOutput("! No character classes available. Defaulting to 'Adventurer'.", { styleClass: 'error-message-inline' });
             updateGameState({ tempCharClassName: 'Adventurer' });
-            await createCharacterWithSelectedClass();
-            return;
+            await createCharacterWithSelectedClass(); return;
         }
         UI.appendToOutput("Available Classes:");
-        classes.forEach((charClass, index) => {
-            UI.appendToOutput(`<span class="char-list-item"><span class="char-index">${index + 1}.</span> <span class="char-name">${charClass.name}</span> - <span class="char-class-desc">${charClass.description || 'A mysterious path.'}</span></span>`);
-        });
+        classes.forEach((charClass, index) => UI.appendToOutput(`<span class="char-list-item"><span class="char-index">${index + 1}.</span> <span class="char-name">${charClass.name}</span> - <span class="char-class-desc">${charClass.description || 'A mysterious path.'}</span></span>`));
         UI.appendToOutput(`Select class for '${gameState.tempCharName}' by number: `, { isPrompt: true });
         UI.setInputCommandPlaceholder("Enter class #");
     } catch (error) {
@@ -2242,10 +2799,10 @@ async function createCharacterWithSelectedClass() {
     try {
         await API.createCharacter(charName, charClassName);
         UI.appendToOutput("Character created successfully!");
-        await displayCharacterSelection(); // Refresh character list
+        await displayCharacterSelection(); 
     } catch (error) {
         UI.appendToOutput(`! Error creating character: ${error.data?.detail || error.message}`, { styleClass: 'error-message-inline' });
-        await displayCharacterSelection(); // Go back to char select on error
+        await displayCharacterSelection(); 
     }
 }
 
@@ -2253,13 +2810,7 @@ async function selectCharacterAndStartGame(character) {
     UI.appendToOutput(`\nSelecting character: ${character.name}...`);
     try {
         const initialRoomData = await API.selectCharacterOnBackend(character.id);
-        saveSession(
-            gameState.currentAuthToken,
-            character.id,
-            character.name,
-            character.class_name || 'Adventurer' // Save class name from the selected character object
-        );
-        // Pass the full character object from selection which includes level for initial info bar
+        saveSession(gameState.currentAuthToken, character.id, character.name, character.class_name || 'Adventurer');
         await enterGameModeWithCharacter(character, initialRoomData);
     } catch (error) {
         UI.appendToOutput(`! Error selecting character: ${error.message}`, { styleClass: 'error-message-inline' });
@@ -2272,54 +2823,53 @@ async function enterGameModeWithCharacter(character, initialRoomDataFromHttpSele
         selectedCharacterId: character.id,
         selectedCharacterName: character.name,
         selectedCharacterClass: character.class_name || 'Adventurer',
-        loginState: 'IN_GAME'
+        loginState: 'IN_GAME' 
     });
+    UI.showAppropriateView(); 
+    
+    UI.updateCharacterInfoBar(character.name, character.class_name, character.level); 
+    UI.updateCurrencyDisplay(character.platinum_coins || 0, character.gold_coins || 0, character.silver_coins || 0, character.copper_coins || 0); 
 
-    // Update Character Info Bar with potentially more complete data from 'character' object
-    UI.updateCharacterInfoBar(character.name, character.class_name, character.level); // character.level from fetchCharacters
-    UI.updateCurrencyDisplay(character.platinum_coins || 0, character.gold_coins || 0, character.silver_coins || 0, character.copper_coins || 0); // From fetchCharacters
-
-    UI.showAppropriateView();
     UI.clearOutput();
     UI.appendToOutput(`Playing as: <span class="char-name">${character.name}</span>, the <span class="char-class">${character.class_name || 'Adventurer'}</span> (Lvl ${character.level || 1})`);
     UI.setInputCommandPlaceholder("Type command...");
     UI.setInputCommandType('text');
 
-    if (initialRoomDataFromHttpSelect) {
-        UI.updateGameDisplay(initialRoomDataFromHttpSelect);
-        UI.updateExitsDisplay(initialRoomDataFromHttpSelect);
-        updateGameState({ displayedRoomId: initialRoomDataFromHttpSelect.id });
-        MapDisplay.fetchAndDrawMap();
-    }
-    WebSocketService.connect(); // This will trigger "welcome_package" which also updates vitals/UI
+    // Pass initialRoomData to fetchAndDrawMap. It will use its Z to fetch if not cached.
+    MapDisplay.fetchAndDrawMap(initialRoomDataFromHttpSelect); 
+    
+    WebSocketService.connect(); 
     UI.focusCommandInput();
 }
 
 function handleLogout() {
     WebSocketService.close();
     MapDisplay.clearMap();
-    clearSession(); // Resets gameState and clears localStorage
-    console.log("Logged out.");
-    startLoginProcess();
+    MapDisplay.currentMapDisplayData = null; // Also clear this on logout
+    MapDisplay.currentZLevel = 0;
+    clearSession(); 
+    startLoginProcess(); 
 }
 
 async function handleHttpCommandResponse(responseData, originalCommand) {
-    if (responseData.message_to_player) {
-        UI.appendToOutput(responseData.message_to_player, { styleClass: 'game-message' });
-    }
+    if (responseData.message_to_player) UI.appendToOutput(responseData.message_to_player, { styleClass: 'game-message' });
     if (responseData.room_data) {
+        const currentRoom = responseData.room_data; 
         const cmdClean = originalCommand.toLowerCase().trim();
-        const isLook = cmdClean.startsWith("look") || cmdClean === "l"; // 'look' via HTTP should still update
-        const movedRoom = gameState.displayedRoomId !== responseData.room_data.id;
+        const isLook = cmdClean.startsWith("look") || cmdClean === "l"; 
+        const movedRoom = gameState.displayedRoomId !== currentRoom.id;
+        const zLevelChanged = MapDisplay.currentZLevel !== currentRoom.z;
 
-        if (isLook || movedRoom) {
-            UI.updateGameDisplay(responseData.room_data);
+        if (isLook || movedRoom) UI.updateGameDisplay(currentRoom);
+        UI.updateExitsDisplay(currentRoom);
+        updateGameState({ displayedRoomId: currentRoom.id });
+        
+        if (movedRoom || zLevelChanged || !MapDisplay.mapDataCache[currentRoom.z]) {
+            MapDisplay.fetchAndDrawMap(currentRoom); 
+        } else {
+            MapDisplay.redrawMapForCurrentRoom(currentRoom.id, currentRoom);
         }
-        UI.updateExitsDisplay(responseData.room_data);
-        updateGameState({ displayedRoomId: responseData.room_data.id });
-        if (movedRoom) MapDisplay.redrawMapForCurrentRoom(responseData.room_data.id);
     }
-    // No combat_over or vitals expected from HTTP commands anymore
 }
 
 async function handleInputSubmission() {
@@ -2334,8 +2884,8 @@ async function handleInputSubmission() {
         echoOptions.noNewLineBefore = true;
     } else if (gameState.loginState === 'IN_GAME' && inputText) {
         echoText = `> ${inputText}`;
-    } else if (inputText) {
-        echoOptions.noNewLineBefore = true;
+    } else if (inputText) { 
+        echoOptions.noNewLineBefore = true; 
     }
 
     if (inputText || gameState.loginState === 'PROMPT_PASSWORD' || gameState.loginState === 'REGISTER_PROMPT_PASSWORD') {
@@ -2348,19 +2898,19 @@ async function handleInputSubmission() {
             case 'PROMPT_USER':
                 if (inputText.toLowerCase() === 'new') await promptForRegistrationUsername();
                 else if (inputText) { updateGameState({ tempUsername: inputText }); await promptForPassword(); }
-                else UI.appendToOutput("Username (or 'new'): ", { isPrompt: true, noNewLineBefore: true });
+                else { UI.appendToOutput("Username (or 'new'): ", { isPrompt: true, noNewLineBefore: true }); UI.focusCommandInput(); } 
                 break;
             case 'PROMPT_PASSWORD':
                 UI.appendToOutput("\nAttempting login...");
                 const loginData = await API.loginUser(gameState.tempUsername, inputText);
-                saveSession(loginData.access_token, null, null, null); // Token only for now
+                saveSession(loginData.access_token, null, null, null); 
                 UI.appendToOutput("Login successful!");
                 UI.setInputCommandType('text');
                 await displayCharacterSelection();
                 break;
             case 'REGISTER_PROMPT_USER':
                 if (inputText) { updateGameState({ tempUsername: inputText }); await promptForRegistrationPassword(); }
-                else UI.appendToOutput("Desired username: ", { isPrompt: true, noNewLineBefore: true });
+                else { UI.appendToOutput("Desired username: ", { isPrompt: true, noNewLineBefore: true }); UI.focusCommandInput(); }
                 break;
             case 'REGISTER_PROMPT_PASSWORD':
                 updateGameState({ tempPassword: inputText });
@@ -2368,10 +2918,12 @@ async function handleInputSubmission() {
                 await API.registerUser(gameState.tempUsername, gameState.tempPassword);
                 UI.appendToOutput("Registration successful!");
                 UI.appendToOutput(`Now, please log in as '${gameState.tempUsername}'.`);
-                updateGameState({ loginState: 'PROMPT_PASSWORD' });
+                updateGameState({ loginState: 'PROMPT_PASSWORD' }); 
+                UI.showAppropriateView(); 
                 UI.appendToOutput("Password: ", { isPrompt: true, noNewLineBefore: true });
                 UI.setInputCommandPlaceholder("Enter password");
                 UI.setInputCommandType('password');
+                UI.focusCommandInput(); 
                 break;
             case 'CHAR_SELECT_PROMPT':
                 if (inputText.toLowerCase() === 'new') await promptForNewCharacterName();
@@ -2382,13 +2934,14 @@ async function handleInputSubmission() {
                     } else {
                         UI.appendToOutput("! Invalid selection.", { styleClass: 'error-message-inline' });
                         UI.appendToOutput("Enter character #, or 'new': ", { isPrompt: true, noNewLineBefore: true });
+                        UI.focusCommandInput();
                     }
                 }
                 break;
             case 'CHAR_CREATE_PROMPT_NAME':
                 if (!inputText || inputText.length < 3 || inputText.length > 50) {
                     UI.appendToOutput("! Invalid name (3-50 chars). Name: ", { isPrompt: true, styleClass: 'error-message-inline', noNewLineBefore: true });
-                    break;
+                    UI.focusCommandInput(); break;
                 }
                 updateGameState({ tempCharName: inputText });
                 await displayClassSelection();
@@ -2402,52 +2955,26 @@ async function handleInputSubmission() {
                 } else {
                     UI.appendToOutput("! Invalid class selection. Please enter a valid number.", { styleClass: 'error-message-inline' });
                     UI.appendToOutput(`Select class for ${gameState.tempCharName} by number: `, { isPrompt: true, noNewLineBefore: true });
+                    UI.focusCommandInput();
                 }
                 break;
             case 'IN_GAME':
-                if (!inputText) break;
+                if (!inputText) { UI.focusCommandInput(); break; } 
                 const lowerInputText = inputText.toLowerCase();
                 const commandVerb = lowerInputText.split(" ")[0];
 
                 if (commandVerb === "logout") { handleLogout(); break; }
 
-                const webSocketHandledVerbs = [
-                    "attack", "atk", "kill", "k",
-                    "flee",
-                    "look", "l",
-                    "rest",
-                    "use", "skill", "cast",
-                    "get", "take", 
-                    "unlock",       
-                    "search", "examine",                     
-                    "pull", "push", "turn", "pry", "activate",
-                    "n", "s", "e", "w", "north", "south", "east", "west", "up", "down", "u", "d", "go"
-                ];
+                const webSocketHandledVerbs = ["attack","atk","kill","k","flee","look","l","rest","use","skill","cast","get","take","unlock","search","examine","pull","push","turn","pry","activate","n","s","e","w","north","south","east","west","up","down","u","d","go"];
                 if (webSocketHandledVerbs.includes(commandVerb)) {
                     WebSocketService.sendMessage({ type: "command", command_text: inputText });
                 } else {
-                    // These commands might still go via HTTP if you have specific endpoints/handlers
-                    // For example, complex UI-driven things or pure info displays.
-                    // If 'help', 'score', 'inventory' etc. are implemented as HTTP endpoints:
-                    const httpOkayVerbs = [
-                        "spawnmob", "mod_xp", "set_hp",
-                        "help", 
-                        "ooc", "say", 
-                        "score", 
-                        "inventory", "i", 
-                        "skills", "traits", "status", "st", "sc", "sk", "tr", 
-                        "?", 
-                        "equip", "unequip", "wear", "remove", "eq"];
+                    const httpOkayVerbs = ["spawnmob","mod_xp","set_hp","help","ooc","say","score","inventory","i","skills","traits","status","st","sc","sk","tr","?","equip","unequip","wear","remove","eq"];
                     if (httpOkayVerbs.includes(commandVerb)) {
                         const httpResponse = await API.sendHttpCommand(inputText);
                         handleHttpCommandResponse(httpResponse, inputText);
                     } else {
-                        // If it's not in WS list and not in HTTP list, it's truly unknown by client
-                        UI.appendToOutput(`> ${inputText}`); // Echo the command
-                        UI.appendToOutput(`Hmm, '${commandVerb}'? Not sure if that goes to WS or HTTP, or if it's valid. Assuming WS for now.`);
-                        WebSocketService.sendMessage({ type: "command", command_text: inputText });
-                        // Or, be stricter:
-                        // UI.appendToOutput(`! Unknown command routing for '${commandVerb}'.`);
+                        UI.appendToOutput(`Unrecognized command: '${inputText}'. Try 'help'.`);
                     }
                 }
                 break;
@@ -2458,45 +2985,41 @@ async function handleInputSubmission() {
     } catch (error) {
         console.error("Error during input submission:", error);
         UI.appendToOutput(`\n! Error: ${error.data?.detail || error.message || 'An unknown error occurred.'}`, { styleClass: 'error-message-inline' });
-        // Fallback based on state to avoid getting stuck
         if (gameState.loginState === 'PROMPT_PASSWORD') await promptForPassword();
         else if (gameState.loginState.includes('CHAR_')) await displayCharacterSelection();
         else if (gameState.loginState.includes('REGISTER_')) await promptForRegistrationUsername();
-        // else startLoginProcess(); // Last resort
     }
-    UI.focusCommandInput();
 }
 
 async function attemptSessionResume() {
     if (loadSession() && gameState.currentAuthToken && gameState.selectedCharacterId) {
-        UI.clearOutput(); // Clear before attempting resume
+        UI.clearOutput(); 
         UI.appendToOutput("Attempting to resume session...");
         try {
-            const initialRoomData = await API.selectCharacterOnBackend(gameState.selectedCharacterId);
+            // For resume, we don't call selectCharacterOnBackend as the session token implies selection.
+            // We directly construct a partial character and enter game mode.
+            // enterGameModeWithCharacter will then call MapDisplay.fetchAndDrawMap(null)
+            // and the WebSocket welcome_package will provide the definitive current room.
             UI.appendToOutput(`Resumed session as ${gameState.selectedCharacterName}.`);
-            const resumedCharacter = { // Construct enough data for enterGameMode
+            const resumedCharacter = { 
                 id: gameState.selectedCharacterId,
                 name: gameState.selectedCharacterName,
                 class_name: gameState.selectedCharacterClass,
-                // Level and currency should come from welcome_package from WS after connect
-                // OR fetch full character details here if needed before WS connect for some reason.
-                // For now, let's assume welcome_package will provide full initial stats.
-                level: 1, // Placeholder, will be updated by welcome_package
-                platinum_coins: 0, gold_coins: 0, silver_coins: 0, copper_coins: 0 // Placeholders
+                level: 1, 
+                platinum_coins: 0, gold_coins: 0, silver_coins: 0, copper_coins: 0 
             };
-            await enterGameModeWithCharacter(resumedCharacter, initialRoomData);
+            await enterGameModeWithCharacter(resumedCharacter, null); // Pass null for initialRoomData
             return true;
-        } catch (error) {
+        } catch (error) { // This catch might not be hit if error is in async enterGameMode calls
             UI.appendToOutput(`! Session resume failed: ${error.data?.detail || error.message}. Please log in.`, { styleClass: 'error-message-inline' });
-            clearSession(); // Important: clear invalid/stale session data
+            clearSession(); 
         }
     }
     return false;
 }
 
-// --- Initial Setup (DOMContentLoaded) ---
 document.addEventListener('DOMContentLoaded', async () => {
-    if (!UI.initializeElements()) return; // Critical UI elements check
+    if (!UI.initializeElements()) return; 
     MapDisplay.initialize();
 
     const commandInputEl = UI.getCommandInput();

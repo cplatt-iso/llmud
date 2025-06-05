@@ -48,31 +48,47 @@ echo "" >> "$OUTPUT_FILE"
 # Define a smaller set of core files to include in the bundle.
 # Adjust this list as needed to provide essential starting context.
 CORE_FILES_TO_BUNDLE=(
-    "bundle_context.sh"  # Include the script itself for context on the bundling process
+    "bundle_context.sh"
 
     # Backend - Core application & setup
     "$BACKEND_APP_DIR/main.py"
     "$BACKEND_APP_DIR/core/config.py"
-    "$BACKEND_APP_DIR/websocket_router.py"
+    "$BACKEND_APP_DIR/api/v1/endpoints/map.py" # For /map/level_data endpoint
+    "$BACKEND_APP_DIR/websocket_router.py"     # For how room_data is sent
 
-    # Seed examples
-    "$BACKEND_APP_DIR/seeds/exits_z0.json"
-    "$BACKEND_APP_DIR/seeds/rooms_z0.json"
-
-    # Backend - Key game logic (example)
-    "$BACKEND_APP_DIR/game_logic/combat/combat_round_processor.py"
-    "$BACKEND_APP_DIR/game_logic/combat/skill_resolver.py" # Example of another key file
-
-    # Backend - Key models (example)
+    # Backend - Models (Crucial for equipment, loot, room_types)
     "$BACKEND_APP_DIR/models/character.py"
-    "$BACKEND_APP_DIR/models/room.py"
+    "$BACKEND_APP_DIR/models/item.py" 
+    "$BACKEND_APP_DIR/models/room.py" # Includes RoomTypeEnum
+    "$BACKEND_APP_DIR/models/mob_template.py" # For loot tables later
+    "$BACKEND_APP_DIR/models/character_inventory_item.py" # For equipment
+    "$BACKEND_APP_DIR/models/character_class_template.py" # For starting gear/skills
 
-    # Backend - Key CRUD (example)
-    "$BACKEND_APP_DIR/crud/crud_room.py"
+    # Backend - CRUD (For seeding and creating new items/mobs)
+    "$BACKEND_APP_DIR/crud/crud_item.py"
+    "$BACKEND_APP_DIR/crud/crud_room.py" 
+    "$BACKEND_APP_DIR/crud/crud_character.py" # Might need for equipping
+    "$BACKEND_APP_DIR/crud/crud_mob.py" # For mob loot logic
+    "$BACKEND_APP_DIR/crud/crud_character_inventory.py" # For managing inventory/equipment
 
-    # Frontend - Main entry point (example, if it exists)
+    # Backend - Schemas (Relevant to map data and item properties)
+    "$BACKEND_APP_DIR/schemas/map.py" # Shows what /map/level_data returns
+    "$BACKEND_APP_DIR/schemas/item.py"
+    "$BACKEND_APP_DIR/schemas/room.py"
+
+    # Seed examples (current ones)
+    "$BACKEND_APP_DIR/seeds/rooms_z0.json"
+    "$BACKEND_APP_DIR/seeds/exits_z0.json"
+    "$BACKEND_APP_DIR/seeds/items.json" # Our newly externalized items!
+
+    # Frontend - Map and UI are key for recent changes
     "$FRONTEND_SRC_DIR/main.js"
-    "$FRONTEND_SRC_DIR/websocket.js"
+    "$FRONTEND_SRC_DIR/map.js"
+    "$FRONTEND_SRC_DIR/ui.js"
+    "$FRONTEND_SRC_DIR/state.js"
+    "$FRONTEND_SRC_DIR/api.js" # For API.fetchMapData
+    "$FRONTEND_SRC_DIR/index.html" # For map HTML structure
+    "$FRONTEND_SRC_DIR/style.css" # For map CSS
 )
 
 echo "--- START OF CORE BUNDLED FILES ---" >> "$OUTPUT_FILE"
