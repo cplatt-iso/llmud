@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, attributes
 
 from app import crud, models, schemas
 from app.commands.utils import roll_dice
-
+from .combat_utils import handle_mob_death_loot_and_cleanup
 
 # combat sub-package imports
 from .combat_state_manager import (
@@ -125,7 +125,7 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
                             updated_mob = crud.crud_mob.update_mob_instance_health(db, mob_instance.id, -damage)
                         if updated_mob and updated_mob.current_health <= 0:
                             round_log.append(f"<span class='combat-death'>The {mob_template.name} DIES! Fucking finally.</span>")
-                            await broadcast_combat_event(db, current_room_id_for_action_broadcasts, player_id,
+                            """ await broadcast_combat_event(db, current_room_id_for_action_broadcasts, player_id,
                                                           f"The <span class='inv-item-name'>{mob_template.name}</span> DIES!")
                             
                             # XP Award
@@ -162,11 +162,20 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
                                 if drop_msg_parts_attack:
                                      round_log.append(f"The {mob_template.name} drops: {', '.join(drop_msg_parts_attack)}.")
                                      round_log.append(currency_message) # "You gained X. Current balance: Y"
-                            # >>> END CURRENCY DROP LOGIC <<<
-                            
-                            # TODO: Item drops for basic attacks
+                            # >>> END CURRENCY DROP LOGIC <<< """
 
-                            crud.crud_mob.despawn_mob_from_room(db, updated_mob.id)
+                            character_after_attack_loot = await handle_mob_death_loot_and_cleanup(
+                                db,
+                                character, # The character who made the kill
+                                updated_mob, # The mob instance that just died
+                                round_log, # The list of log messages for this round
+                                player_id, # The player_id
+                                current_room_id_for_action_broadcasts # The room ID
+                            )
+                            if character_after_attack_loot:
+                                character = character_after_attack_loot 
+
+                            # crud.crud_mob.despawn_mob_from_room(db, updated_mob.id)
                             active_combats.get(character_id, set()).discard(updated_mob.id)
                             if updated_mob.id in mob_targets: mob_targets.pop(updated_mob.id, None)
                             elif updated_mob:

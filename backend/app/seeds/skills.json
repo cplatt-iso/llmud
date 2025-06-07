@@ -1,0 +1,154 @@
+[
+  {
+    "skill_id_tag": "basic_punch",
+    "name": "Basic Punch",
+    "description": "A simple, untrained punch. It's better than harsh language. Usually.",
+    "skill_type": "COMBAT_ACTIVE",
+    "target_type": "ENEMY_MOB",
+    "effects_data": {"mana_cost": 0, "damage_dice_override": "1d2", "attack_bonus_add": 0, "damage_bonus_add": 0, "uses_strength_for_bonus": true},
+    "requirements_data": {"min_level": 1},
+    "cooldown": 0
+  },
+  {
+    "skill_id_tag": "power_attack_melee",
+    "name": "Power Attack",
+    "description": "A forceful melee attack that is harder to land but deals more damage with your equipped weapon.",
+    "skill_type": "COMBAT_ACTIVE",
+    "target_type": "ENEMY_MOB",
+    "effects_data": {
+        "mana_cost": 5, 
+        "attack_roll_modifier": -2,
+        "damage_modifier_flat": 3,
+        "uses_equipped_weapon": true 
+    },
+    "requirements_data": {"min_level": 2, "required_stats": {"strength": 12}},
+    "cooldown": 2
+  },
+  {
+    "skill_id_tag": "pick_lock_basic",
+    "name": "Pick Lock (Basic)",
+    "description": "Attempt to pick a simple lock on a door or container. Requires lockpicks.",
+    "skill_type": "UTILITY_OOC",
+    "target_type": "DOOR", 
+    "effects_data": {
+        "check_attribute": "dexterity", 
+        "base_dc_override_for_skill": null,
+        "requires_item_tag_equipped_or_inventory": "basic_lockpicks"
+    },
+    "requirements_data": {"min_level": 1},
+    "cooldown": 10 
+  },
+  {
+    "skill_id_tag": "shield_bash_active",
+    "name": "Shield Bash",
+    "description": "Slam your shield into an opponent, potentially dazing them.",
+    "skill_type": "COMBAT_ACTIVE",
+    "target_type": "ENEMY_MOB",
+    "effects_data": {
+        "mana_cost": 8,
+        "damage_dice_override": "1d4",
+        "attack_bonus_add": 0,
+        "damage_bonus_add_from_stat": "strength",
+        "status_effect_apply": {"effect_tag": "dazed", "duration_rounds": 1, "chance_percent": 30},
+        "requires_item_type_equipped": "shield"
+    },
+    "requirements_data": {"min_level": 3, "required_stats": {"strength": 13}},
+    "cooldown": 3
+  },
+  {
+    "skill_id_tag": "cleave_melee_active",
+    "name": "Cleave",
+    "description": "Swing your weapon in a wide arc, hitting an additional nearby enemy if one is present.",
+    "skill_type": "COMBAT_ACTIVE",
+    "target_type": "ENEMY_MOB",
+    "effects_data": {
+        "mana_cost": 10,
+        "uses_equipped_weapon": true,
+        "aoe_targets_additional": 1, 
+        "aoe_shape": "arc_front"
+    },
+    "requirements_data": {"min_level": 5, "required_stats": {"strength": 14}},
+    "cooldown": 4
+  },
+  {
+    "skill_id_tag": "backstab_melee_active",
+    "name": "Backstab",
+    "description": "Exploit an opponent's distraction for a devastating attack. Requires stealth or target to be unaware.",
+    "skill_type": "COMBAT_ACTIVE",
+    "target_type": "ENEMY_MOB",
+    "effects_data": {
+        "mana_cost": 7,
+        "damage_multiplier": 2.0, 
+        "uses_equipped_weapon": true,
+        "requires_condition": ["target_unaware", "user_stealthed"] 
+    },
+    "requirements_data": {"min_level": 2, "required_stats": {"dexterity": 13}},
+    "cooldown": 1
+  },
+  {
+    "skill_id_tag": "hide_in_shadows_utility",
+    "name": "Hide in Shadows",
+    "description": "Attempt to melt into the shadows, becoming harder to detect.",
+    "skill_type": "UTILITY_OOC", 
+    "target_type": "SELF",
+    "effects_data": {
+        "mana_cost": 5,
+        "status_effect_apply": {"effect_tag": "stealthed", "duration_seconds": 60, "check_vs_perception_dc": 10}
+    },
+    "requirements_data": {"min_level": 4, "required_stats": {"dexterity": 14}},
+    "cooldown": 30
+  },
+  {
+    "skill_id_tag": "minor_heal_active",
+    "name": "Minor Heal",
+    "description": "A weak divine spell that mends minor wounds.",
+    "skill_type": "COMBAT_ACTIVE", 
+    "target_type": "FRIENDLY_CHAR_OR_SELF",
+    "effects_data": {"mana_cost": 6, "heal_dice": "1d6", "heal_bonus_from_stat": "wisdom"},
+    "requirements_data": {"min_level": 1},
+    "cooldown": 1
+  },
+  {
+    "skill_id_tag": "bless_buff_active",
+    "name": "Bless",
+    "description": "Invoke divine favor upon an ally, improving their combat prowess.",
+    "skill_type": "COMBAT_ACTIVE",
+    "target_type": "FRIENDLY_CHAR_OR_SELF",
+    "effects_data": {
+        "mana_cost": 10,
+        "status_effect_apply": {"effect_tag": "blessed_buff", "duration_rounds": 5, "bonuses": {"attack_roll": 1, "damage_roll": 1}}
+    },
+    "requirements_data": {"min_level": 1, "required_stats": {"wisdom": 12}},
+    "cooldown": 0
+  },
+  {
+    "skill_id_tag": "magic_missile_active",
+    "name": "Magic Missile",
+    "description": "Launch a missile of magical energy that unerringly strikes its target.",
+    "skill_type": "COMBAT_ACTIVE",
+    "target_type": "ENEMY_MOB",
+    "effects_data": {"mana_cost": 4, "damage_dice_override": "1d4+1", "damage_type": "force", "always_hits": true},
+    "requirements_data": {"min_level": 1},
+    "cooldown": 0
+  },
+  {
+    "skill_id_tag": "light_cantrip_utility",
+    "name": "Light",
+    "description": "Create a hovering light source that illuminates the area.",
+    "skill_type": "UTILITY_OOC",
+    "target_type": "SELF",
+    "effects_data": {"mana_cost": 2, "status_effect_apply": {"effect_tag": "magical_light", "duration_seconds": 300}},
+    "requirements_data": {"min_level": 1},
+    "cooldown": 5
+  },
+  {
+    "skill_id_tag": "first_aid_basic_utility",
+    "name": "Basic First Aid",
+    "description": "Apply basic bandaging to stop bleeding and slightly mend wounds outside of combat.",
+    "skill_type": "UTILITY_OOC",
+    "target_type": "SELF", 
+    "effects_data": {"heal_amount_fixed": 5, "cooldown_seconds": 60, "requires_item_tag_consumed": "bandages_basic", "consume_chance": 75},
+    "requirements_data": {"min_level": 2},
+    "cooldown": 60
+  }
+]

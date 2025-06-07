@@ -29,7 +29,94 @@ async def handle_ws_get_take(
     current_room_data_dict["description"] = dynamic_desc
     current_room_schema_with_dynamic_desc = schemas.RoomInDB(**current_room_data_dict)
 
-    if not args_str:
+    if args_str.lower() == "all":
+        items_on_ground_orm = crud.crud_room_item.get_items_in_room(db, room_id=current_room_orm.id)
+        if not items_on_ground_orm:
+            await combat.send_combat_log(player.id, ["There is nothing on the ground here to get."], room_data=current_room_schema_with_dynamic_desc)
+            return
+
+        picked_up_item_messages = []
+        failed_to_pick_up_messages = []
+        picked_up_item_names_for_broadcast = []
+        anything_actually_picked_up = False
+
+        for room_item_instance in items_on_ground_orm:
+            if not room_item_instance.item:  # Ensure ItemTemplate is loaded
+                logger.warning(f"RoomItemInstance {room_item_instance.id} in room {current_room_orm.id} has no associated ItemTemplate. Skipping for 'get all'.")
+                continue
+
+            # Check if the item is gettable (assuming ItemTemplate has is_gettable attribute)
+            if not getattr(room_item_instance.item, 'is_gettable', True): # Default to True if attr missing, for safety, but ideally it's always there
+                # You could inform the player about ungettable items if desired:
+                # failed_to_pick_up_messages.append(f"Cannot pick up {room_item_instance.item.name} (not gettable).")
+                continue
+            
+            _inv_add_entry, add_message = crud.crud_character_inventory.add_item_to_character_inventory(
+                db, character_obj=current_char_state,
+                item_id=room_item_instance.item_id, # This is the ItemTemplate ID
+                quantity=room_item_instance.quantity
+            )
+
+            if _inv_add_entry:
+                # Successfully added to inventory, now remove from room
+                crud.crud_room_item.remove_item_from_room(
+                    db, room_item_instance_id=room_item_instance.id,
+                    quantity_to_remove=room_item_instance.quantity
+                )
+                item_name_with_qty = room_item_instance.item.name
+                if room_item_instance.quantity > 1:
+                    item_name_with_qty += f" (x{room_item_instance.quantity})"
+                
+                # Use a more direct message for "all"
+                picked_up_item_messages.append(f"You take the {item_name_with_qty}.")
+                picked_up_item_names_for_broadcast.append(item_name_with_qty)
+                anything_actually_picked_up = True
+            else:
+                failed_to_pick_up_messages.append(f"Could not take {room_item_instance.item.name}: {add_message.replace('You pick up the ', '').replace('You add ', '').replace(' to your inventory.', '')}")
+
+        if not anything_actually_picked_up and not failed_to_pick_up_messages:
+            await combat.send_combat_log(player.id, ["There was nothing gettable on the ground."], room_data=current_room_schema_with_dynamic_desc)
+            return
+        
+        db.commit()
+        db.refresh(current_char_state)
+        refreshed_room_orm = crud.crud_room.get_room_by_id(db, current_room_orm.id)
+
+        updated_room_schema_for_response = current_room_schema_with_dynamic_desc # Default
+        if refreshed_room_orm:
+            updated_dynamic_desc = get_dynamic_room_description(refreshed_room_orm)
+            updated_room_data_dict = schemas.RoomInDB.from_orm(refreshed_room_orm).model_dump()
+            updated_room_data_dict["description"] = updated_dynamic_desc
+            updated_room_schema_for_response = schemas.RoomInDB(**updated_room_data_dict)
+        
+        final_log_to_player = []
+        if picked_up_item_messages:
+            final_log_to_player.extend(picked_up_item_messages)
+        if failed_to_pick_up_messages:
+            final_log_to_player.extend(failed_to_pick_up_messages)
+        
+        if not final_log_to_player: # Should be covered by the "nothing gettable" case
+            final_log_to_player.append("No items were picked up.")
+
+        xp_for_next = crud.crud_character.get_xp_for_level(current_char_state.level + 1)
+        vitals_payload = {
+            "current_hp": current_char_state.current_health, "max_hp": current_char_state.max_health,
+            "current_mp": current_char_state.current_mana, "max_mp": current_char_state.max_mana,
+            "current_xp": current_char_state.experience_points,
+            "next_level_xp": int(xp_for_next) if xp_for_next != float('inf') else -1,
+            "level": current_char_state.level, "platinum": current_char_state.platinum_coins,
+            "gold": current_char_state.gold_coins, "silver": current_char_state.silver_coins,
+            "copper": current_char_state.copper_coins
+        }
+        await combat.send_combat_log(player.id, final_log_to_player, room_data=updated_room_schema_for_response, character_vitals=vitals_payload)
+
+        if picked_up_item_names_for_broadcast:
+            broadcast_get_msg = f"<span class='char-name'>{current_char_state.name}</span> picks up: {', '.join(picked_up_item_names_for_broadcast)}."
+            await combat.broadcast_to_room_participants(db, current_room_orm.id, broadcast_get_msg, exclude_player_id=player.id)
+        return
+
+    # --- Existing logic for single item "get" ---
+    if not args_str: # This check is now effectively part of the single item logic path
         await combat.send_combat_log(player.id, ["Get what?"], room_data=current_room_schema_with_dynamic_desc)
         return
     
@@ -46,8 +133,13 @@ async def handle_ws_get_take(
         await combat.send_combat_log(player.id, [f"Cannot find '{args_str}' on the ground here."], room_data=current_room_schema_with_dynamic_desc)
         return
     
+    # Check if the single item is gettable
+    if not getattr(target_room_item_instance.item, 'is_gettable', True):
+        await combat.send_combat_log(player.id, [f"You cannot pick up the {target_room_item_instance.item.name}."], room_data=current_room_schema_with_dynamic_desc)
+        return
+        
     _inv_add_entry, add_message = crud.crud_character_inventory.add_item_to_character_inventory(
-        db, character_id=current_char_state.id,
+        db, character_obj=current_char_state,
         item_id=target_room_item_instance.item_id,
         quantity=target_room_item_instance.quantity
     )
@@ -59,20 +151,21 @@ async def handle_ws_get_take(
         db, room_item_instance_id=target_room_item_instance.id,
         quantity_to_remove=target_room_item_instance.quantity
     )
-    final_pickup_message = add_message 
+    final_pickup_message = add_message # This message comes from add_item_to_character_inventory
     
     db.commit() 
     db.refresh(current_char_state) 
     refreshed_room_orm = crud.crud_room.get_room_by_id(db, current_room_orm.id)
     
     # Prepare updated room schema with dynamic description for the final response
+    updated_room_schema_for_response = current_room_schema_with_dynamic_desc # Default
     if refreshed_room_orm:
         updated_dynamic_desc = get_dynamic_room_description(refreshed_room_orm)
         updated_room_data_dict = schemas.RoomInDB.from_orm(refreshed_room_orm).model_dump()
         updated_room_data_dict["description"] = updated_dynamic_desc
         updated_room_schema_for_response = schemas.RoomInDB(**updated_room_data_dict)
-    else: # Fallback
-        updated_room_schema_for_response = current_room_schema_with_dynamic_desc
+    # else: # Fallback already handled by setting default above
+        # updated_room_schema_for_response = current_room_schema_with_dynamic_desc
         
     xp_for_next = crud.crud_character.get_xp_for_level(current_char_state.level + 1)
     vitals_payload = {

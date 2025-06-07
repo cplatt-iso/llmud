@@ -1,0 +1,131 @@
+[
+  {
+    "name": "Warrior",
+    "description": "A stalwart fighter, skilled in the arts of melee combat and enduring hardship. Warriors excel at both dealing and absorbing damage on the front lines.",
+    "base_stat_modifiers": {"strength": 2, "constitution": 1, "intelligence": -1, "charisma": -1},
+    "starting_health_bonus": 10,
+    "starting_mana_bonus": -5,
+    "skill_tree_definition": {
+        "core_skills_by_level": {
+            "1": ["basic_punch"],
+            "2": ["power_attack_melee"],
+            "3": ["shield_bash_active"],
+            "5": ["cleave_melee_active"]
+        },
+        "core_traits_by_level": {
+            "1": ["tough_hide"],
+            "2": ["weapon_focus_swords_passive"],
+            "4": ["improved_vitality_passive"]
+        }
+    },
+    "starting_equipment_refs": ["Rusty Sword", "Wooden Shield", "Cloth Tunic"],
+    "playstyle_tags": ["melee", "tank", "physical_dps", "durable"],
+    "stat_gains_per_level": {
+        "hp": 6, 
+        "mp": 1, 
+        "base_attack_bonus": 0.75
+    }
+  },
+  {
+    "name": "Swindler",
+    "description": "A cunning rogue who relies on wit, agility, and a sharp blade. Swindlers are masters of stealth, deception, and exploiting weaknesses.",
+    "base_stat_modifiers": {"dexterity": 2, "luck": 1, "strength": -1, "wisdom": -1},
+    "starting_health_bonus": -5,
+    "starting_mana_bonus": 5,
+    "skill_tree_definition": {
+        "core_skills_by_level": {
+            "1": ["basic_punch", "pick_lock_basic"],
+            "2": ["backstab_melee_active"],
+            "4": ["hide_in_shadows_utility"]
+        },
+        "core_traits_by_level": {
+            "1": ["nimble_fingers_passive"],
+            "3": ["opportunist_passive"],
+            "5": ["evasion_expert_passive"]
+        }
+    },
+    "starting_equipment_refs": ["Dagger", "Lockpicks", "Cloth Tunic"],
+    "playstyle_tags": ["melee", "stealth", "utility", "debuff", "skill_monkey"],
+    "stat_gains_per_level": {
+        "hp": 4, 
+        "mp": 2, 
+        "base_attack_bonus": 0.5 
+    }
+  },
+  {
+    "name": "Acolyte",
+    "description": "A devout follower of a divine power, wielding faith as both shield and weapon. Acolytes can mend wounds, bolster allies, and smite the unholy.",
+    "base_stat_modifiers": {"wisdom": 2, "charisma": 1, "dexterity": -1, "strength": -1},
+    "starting_health_bonus": 0,
+    "starting_mana_bonus": 10,
+    "skill_tree_definition": {
+        "core_skills_by_level": {
+            "1": ["minor_heal_active", "bless_buff_active"],
+            "3": ["smite_evil_active"],
+            "5": ["turn_undead_active"]
+        },
+        "core_traits_by_level": {
+            "1": ["divine_fortitude_passive"],
+            "2": ["healing_touch_improved_passive"],
+            "4": ["divine_guidance_passive"]
+        }
+    },
+    "starting_equipment_refs": ["Wooden Mace", "Holy Symbol", "Cloth Robes"],
+    "playstyle_tags": ["caster", "healer", "support", "divine", "anti_undead"],
+    "stat_gains_per_level": {
+        "hp": 3, 
+        "mp": 3, 
+        "base_attack_bonus": 0.33 
+    }
+  },
+  {
+    "name": "Hedge Wizard",
+    "description": "A self-taught practitioner of the arcane arts, drawing power from raw talent and forbidden lore. Hedge Wizards command elemental forces and subtle illusions.",
+    "base_stat_modifiers": {"intelligence": 2, "wisdom": 1, "constitution": -1, "strength": -1},
+    "starting_health_bonus": -5,
+    "starting_mana_bonus": 15,
+    "skill_tree_definition": {
+        "core_skills_by_level": {
+            "1": ["magic_missile_active", "light_cantrip_utility"],
+            "3": ["fireball_small_active"],
+            "5": ["invisibility_short_utility"]
+        },
+        "core_traits_by_level": {
+            "1": ["arcane_attunement_passive"],
+            "2": ["spell_penetration_minor_passive"],
+            "4": ["elemental_focus_fire_passive"]
+        }
+    },
+    "starting_equipment_refs": ["Quarterstaff", "Spellbook (Blank)", "Cloth Robes"],
+    "playstyle_tags": ["caster", "arcane", "elemental_dps", "utility_magic", "glass_cannon"],
+    "stat_gains_per_level": {
+        "hp": 2, 
+        "mp": 4, 
+        "base_attack_bonus": 0.33
+    }
+  },
+  {
+    "name": "Adventurer",
+    "description": "A jack-of-all-trades, master of none. Ready for anything, prepared for nothing. The path of the Adventurer is one of versatility and adaptability.",
+    "base_stat_modifiers": {}, 
+    "starting_health_bonus": 0,
+    "starting_mana_bonus": 0,
+    "skill_tree_definition": {
+        "core_skills_by_level": {
+            "1": ["basic_punch"],
+            "2": ["first_aid_basic_utility"] 
+        },
+        "core_traits_by_level": {
+            "1": ["jack_of_all_trades_xp_bonus_passive"],
+            "3": ["hardy_survivor_passive"]
+        }
+    },
+    "starting_equipment_refs": ["Dagger", "Cloth Tunic", "Basic Healing Draught"],
+    "playstyle_tags": ["versatile", "generalist", "beginner_friendly"],
+    "stat_gains_per_level": {
+        "hp": 4, 
+        "mp": 2, 
+        "base_attack_bonus": 0.5
+    }
+  }
+]

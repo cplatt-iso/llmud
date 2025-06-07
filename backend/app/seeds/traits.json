@@ -1,0 +1,100 @@
+[
+  {
+    "trait_id_tag": "tough_hide",
+    "name": "Tough Hide",
+    "description": "Your skin is naturally resilient, granting a small bonus to your Armor Class.",
+    "trait_type": "PASSIVE", 
+    "effects_data": {"ac_bonus_natural": 1}
+  },
+  {
+    "trait_id_tag": "weapon_focus_swords_passive",
+    "name": "Weapon Focus (Swords)",
+    "description": "You are more accurate when wielding swords.",
+    "trait_type": "PASSIVE",
+    "effects_data": {"conditional_bonus": {"condition_item_type_equipped": "sword", "attack_bonus": 1}}
+  },
+  {
+    "trait_id_tag": "improved_vitality_passive",
+    "name": "Improved Vitality",
+    "description": "You gain more health points per level.",
+    "trait_type": "PASSIVE",
+    "effects_data": {"hp_gain_per_level_bonus": 1}
+  },
+  {
+    "trait_id_tag": "nimble_fingers_passive",
+    "name": "Nimble Fingers",
+    "description": "You are adept at tasks requiring fine motor skills, such as picking locks.",
+    "trait_type": "PASSIVE",
+    "effects_data": {"skill_check_bonus": {"skill_type_tags": ["lockpicking", "disarm_trap"], "bonus_amount": 2}}
+  },
+  {
+    "trait_id_tag": "opportunist_passive",
+    "name": "Opportunist",
+    "description": "You deal extra damage against distracted or flanked opponents.",
+    "trait_type": "PASSIVE",
+    "effects_data": {"conditional_damage_bonus_flat": {"condition_target_status": ["dazed", "stunned", "flanked"], "damage_bonus": 2}}
+  },
+  {
+    "trait_id_tag": "evasion_expert_passive",
+    "name": "Evasion Expert",
+    "description": "You are skilled at avoiding area attacks.",
+    "trait_type": "PASSIVE",
+    "effects_data": {"save_bonus_vs_aoe_type": {"effect_type_tags": ["area_effect", "trap_damage"], "bonus_amount": 2}}
+  },
+  {
+    "trait_id_tag": "divine_fortitude_passive",
+    "name": "Divine Fortitude",
+    "description": "Your faith grants you enhanced resilience to negative effects.",
+    "trait_type": "PASSIVE",
+    "effects_data": {"save_bonus_vs_negative_status": {"status_tags": ["disease", "poison", "curse"], "bonus_amount": 1}}
+  },
+  {
+    "trait_id_tag": "healing_touch_improved_passive",
+    "name": "Improved Healing Touch",
+    "description": "Your healing spells are more potent.",
+    "trait_type": "PASSIVE",
+    "effects_data": {"healing_spell_potency_bonus_flat": 2}
+  },
+  {
+    "trait_id_tag": "divine_guidance_passive",
+    "name": "Divine Guidance",
+    "description": "Your connection to the divine enhances your wisdom.",
+    "trait_type": "PASSIVE",
+    "effects_data": {"stat_bonus_permanent": {"wisdom": 1}}
+  },
+  {
+    "trait_id_tag": "arcane_attunement_passive",
+    "name": "Arcane Attunement",
+    "description": "You have a greater pool of magical energy.",
+    "trait_type": "PASSIVE",
+    "effects_data": {"max_mana_bonus_flat": 10}
+  },
+  {
+    "trait_id_tag": "spell_penetration_minor_passive",
+    "name": "Minor Spell Penetration",
+    "description": "Your offensive spells are slightly more effective against resistant foes.",
+    "trait_type": "PASSIVE",
+    "effects_data": {"spell_penetration_value": 1}
+  },
+  {
+    "trait_id_tag": "elemental_focus_fire_passive",
+    "name": "Elemental Focus (Fire)",
+    "description": "Your fire-based spells deal more damage.",
+    "trait_type": "PASSIVE",
+    "effects_data": {"conditional_damage_bonus_percent": {"spell_damage_type": "fire", "bonus_percent": 10}}
+  },
+  {
+    "trait_id_tag": "jack_of_all_trades_xp_bonus_passive",
+    "name": "Jack of All Trades",
+    "description": "You learn quickly from a variety of experiences, gaining a small bonus to all experience earned.",
+    "trait_type": "PASSIVE",
+    "effects_data": {"xp_gain_modifier_percent": 3}
+  },
+  {
+    "trait_id_tag": "hardy_survivor_passive",
+    "name": "Hardy Survivor",
+    "description": "Years of adventuring have made you tougher, granting a small bonus to your maximum health.",
+    "trait_type": "PASSIVE",
+    "effects_data": {"max_health_bonus_flat": 5}
+  }
+]

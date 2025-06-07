@@ -10,7 +10,7 @@ async def handle_giveme(context: CommandContext) -> schemas.CommandResponse:
         item_template = crud.crud_item.get_item_by_name(context.db, name=item_name_to_give)
         if item_template:
             _, add_message = crud.crud_character_inventory.add_item_to_character_inventory(
-                context.db, character_id=context.active_character.id, item_id=item_template.id, quantity=1
+                context.db, character_obj=context.active_character, item_id=item_template.id, quantity=1
             )
             message_to_player = add_message
         else:

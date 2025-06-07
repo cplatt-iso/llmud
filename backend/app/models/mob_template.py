@@ -19,18 +19,18 @@ class MobTemplate(Base):
 
     level: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=1)
     base_health: Mapped[int] = mapped_column(Integer, nullable=False, default=10)
-    base_mana: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=0) # <<< NEW
+    base_mana: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=0) # <<< MODIFIED
     base_attack: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, comment="e.g., 1d6") 
     base_defense: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=10, comment="e.g., Armor Class")
     
-    attack_speed_secs: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=3.0) # <<< NEW
-    aggro_radius: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=5) # <<< NEW
-    roam_radius: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=0) # <<< NEW
+    attack_speed_secs: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=3.0) # <<< MODIFIED
+    aggro_radius: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=5) # <<< MODIFIED
+    roam_radius: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=0) # <<< MODIFIED
     
     xp_value: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     
     # loot_table_ref: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, comment="Placeholder for loot table reference") # Replaced by loot_table_tags
-    loot_table_tags: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: []) # <<< NEW (JSONB for list of strings)
+    loot_table_tags: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: []) # <<< MODIFIED (JSONB for list of strings)
     
     currency_drop: Mapped[Optional[Dict[str, Any]]] = mapped_column(
         JSONB, 
@@ -38,9 +38,9 @@ class MobTemplate(Base):
         comment="Defines currency drop. E.g., {'c_min':0, ...}"
     ) # Default can be set by Pydantic model if not provided in JSON
     
-    dialogue_lines: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: []) # <<< NEW
-    faction_tags: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: []) # <<< NEW
-    special_abilities: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: []) # <<< NEW
+    dialogue_lines: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: []) # <<< MODIFIED
+    faction_tags: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: []) # <<< MODIFIED
+    special_abilities: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: []) # <<< MODIFIED
     
     properties: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True, default=lambda: {})
     

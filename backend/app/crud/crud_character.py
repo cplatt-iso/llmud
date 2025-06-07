@@ -1,40 +1,41 @@
 # backend/app/crud/crud_character.py
 from sqlalchemy.orm import Session, attributes
 import uuid
+import logging # Added logging
 from typing import Any, Dict, Optional, List, Tuple, Union 
 
-from .. import models, schemas, crud # <<< ADDED crud FOR crud_character_class
+from .. import models, schemas, crud 
 
+logger = logging.getLogger(__name__)
+
+# Base stats for a character before any class modifiers are applied.
+# Class templates will modify these.
 DEFAULT_STATS = {
     "strength": 10, "dexterity": 10, "constitution": 10,
     "intelligence": 10, "wisdom": 10, "charisma": 10, "luck": 5,
-    "current_health": 20, "max_health": 20,
-    "current_mana": 10, "max_mana": 10,
+    "current_health": 20, "max_health": 20, # These will be further adjusted by class bonuses
+    "current_mana": 10, "max_mana": 10,   # These will be further adjusted by class bonuses
     "level": 1, "experience_points": 0,
-    "base_ac": 10, "base_attack_bonus": 0,
-    "base_damage_dice": "1d4", "base_damage_bonus": 0,
-    "learned_skills": [], "learned_traits": []
+    "base_ac": 10, 
+    "base_attack_bonus": 0, # This is a flat bonus, attribute modifiers are added separately
+    "base_damage_dice": "1d4", # Default unarmed/improvised weapon
+    "base_damage_bonus": 0,    # Flat damage bonus, attribute modifiers added separately
+    "learned_skills": [], 
+    "learned_traits": []
 }
 
 XP_THRESHOLDS = {
-    1: 0,       # Start at level 1 with 0 XP
-    2: 100,
-    3: 300,     # Need 200 more XP from level 2 (100+200)
-    4: 600,     # Need 300 more XP from level 3 (300+300)
-    5: 1000,    # Need 400 more XP
-    # ... add more levels as needed
+    1: 0, 2: 100, 3: 300, 4: 600, 5: 1000, 6: 1500, 7: 2100, 8: 2800, 9: 3600, 
+    10: 4500, 11: 5500, 12: 6600, 13: 7800, 14: 9100, 15: 10500, 16: 12000, 
+    17: 13600, 18: 15300, 19: 17100, 20: 19000
+    # 21: float('inf') # Example for a hard cap
 }
 
 COPPER_PER_SILVER = 100
 SILVER_PER_GOLD = 100
 GOLD_PER_PLATINUM = 100
 
-CLASS_LEVEL_BONUSES = {
-    "Warrior": {"hp_per_level": 5, "mp_per_level": 1, "base_attack_bonus_per_level": 0.5}, # BAB increases every 2 levels
-    "Swindler": {"hp_per_level": 3, "mp_per_level": 2, "base_attack_bonus_per_level": 0.5},
-    "Adventurer": {"hp_per_level": 4, "mp_per_level": 1, "base_attack_bonus_per_level": 0.5}, # Default
-    # Add other seeded classes
-}
+# CLASS_LEVEL_BONUSES dictionary is REMOVED as this data now comes from CharacterClassTemplate.stat_gains_per_level
 
 def update_character_currency(
     db: Session, 
@@ -43,16 +44,11 @@ def update_character_currency(
     gold_change: int = 0, 
     silver_change: int = 0, 
     copper_change: int = 0
-) -> Tuple[Optional[models.Character], str]: # Returns char and a message
-    """
-    Updates a character's currency. Handles negative changes by attempting to make change.
-    Returns the updated character and a status message.
-    """
+) -> Tuple[Optional[models.Character], str]:
     character = get_character(db, character_id=character_id)
     if not character:
         return None, "Character not found."
 
-    # Convert all existing currency and changes to the smallest unit (copper)
     current_total_copper = (character.platinum_coins * GOLD_PER_PLATINUM * SILVER_PER_GOLD * COPPER_PER_SILVER) + \
                            (character.gold_coins * SILVER_PER_GOLD * COPPER_PER_SILVER) + \
                            (character.silver_coins * COPPER_PER_SILVER) + \
@@ -68,43 +64,34 @@ def update_character_currency(
 
     new_total_copper = current_total_copper + change_total_copper
 
-    # Convert back to platinum, gold, silver, copper
     new_platinum = new_total_copper // (GOLD_PER_PLATINUM * SILVER_PER_GOLD * COPPER_PER_SILVER)
     remainder_after_platinum = new_total_copper % (GOLD_PER_PLATINUM * SILVER_PER_GOLD * COPPER_PER_SILVER)
-    
     new_gold = remainder_after_platinum // (SILVER_PER_GOLD * COPPER_PER_SILVER) 
     remainder_after_gold = remainder_after_platinum % (SILVER_PER_GOLD * COPPER_PER_SILVER)    
-    
     new_silver = remainder_after_gold // COPPER_PER_SILVER
     new_copper = remainder_after_gold % COPPER_PER_SILVER
 
-    character.platinum_coins = new_platinum # Store platinum
+    character.platinum_coins = new_platinum
     character.gold_coins = new_gold
     character.silver_coins = new_silver
     character.copper_coins = new_copper
 
-    db.add(character)
-    db.commit()
-    db.refresh(character)
+    db.add(character) # Stage the change
+    # db.commit() # <<< REMOVED
+    # db.refresh(character) # <<< REMOVED
     
-    # Construct a message about the change
     change_parts = []
-    if platinum_change != 0: change_parts.append(f"{abs(platinum_change)}p") # Add platinum to change parts
+    if platinum_change != 0: change_parts.append(f"{abs(platinum_change)}p")
     if gold_change != 0: change_parts.append(f"{abs(gold_change)}g")
     if silver_change != 0: change_parts.append(f"{abs(silver_change)}s")
     if copper_change != 0: change_parts.append(f"{abs(copper_change)}c")
-    
     action = "gained" if change_total_copper > 0 else "lost" if change_total_copper < 0 else "changed by"
-    
-    # Construct current balance string
     balance_parts = []
     if new_platinum > 0: balance_parts.append(f"{new_platinum}p")
     if new_gold > 0: balance_parts.append(f"{new_gold}g")
     if new_silver > 0: balance_parts.append(f"{new_silver}s")
-    # Always show copper if it's the only currency or if other denominations are zero
     if new_copper > 0 or not balance_parts: balance_parts.append(f"{new_copper}c")
     current_balance_str = " ".join(balance_parts) if balance_parts else "0c"
-
 
     if not change_parts and change_total_copper == 0:
         message = "Currency unchanged."
@@ -115,12 +102,12 @@ def update_character_currency(
 
     return character, message
 
-def get_xp_for_level(level: int) -> Union[int, float]: # <<< CHANGED RETURN TYPE
-    """Returns the total XP required to attain the specified level."""
-    return XP_THRESHOLDS.get(level, float('inf')) # <<< USE float('inf')
-
+def get_xp_for_level(level: int) -> Union[int, float]:
+    return XP_THRESHOLDS.get(level, float('inf'))
 
 def get_character(db: Session, character_id: uuid.UUID) -> Optional[models.Character]:
+    # Ensure class_template_ref is loaded if needed frequently after fetching a character.
+    # Consider adding options(joinedload(models.Character.class_template_ref)) if it's always used.
     return db.query(models.Character).filter(models.Character.id == character_id).first()
 
 def get_character_by_name(db: Session, name: str) -> Optional[models.Character]:
@@ -129,63 +116,51 @@ def get_character_by_name(db: Session, name: str) -> Optional[models.Character]:
 def get_characters_by_player(db: Session, player_id: uuid.UUID, skip: int = 0, limit: int = 100) -> List[models.Character]:
     return db.query(models.Character).filter(models.Character.player_id == player_id).offset(skip).limit(limit).all()
 
+def _fetch_class_template_for_character(db: Session, character: models.Character) -> Optional[models.CharacterClassTemplate]:
+    """Ensures the character.class_template_ref is populated."""
+    if character.class_template_ref and character.class_template_ref.id == character.character_class_template_id:
+        return character.class_template_ref
+    if character.character_class_template_id:
+        class_template = crud.crud_character_class.get_character_class_template(db, class_template_id=character.character_class_template_id)
+        if class_template:
+            character.class_template_ref = class_template # Cache it on the character object for this session
+            return class_template
+    logger.warning(f"Character {character.name} (ID: {character.id}) has no class_template_id or template not found.")
+    return None
+
 def _grant_abilities_for_level(db: Session, character: models.Character, level_to_grant_for: int) -> List[str]:
-    """Grants skills/traits for a specific level. Called by create_character for L1, and _apply_level_up for L2+."""
     granted_messages = []
     level_str = str(level_to_grant_for)
-    # --- Debug prints to add if still having issues ---
-    # print(f"DEBUG GrantAbilities: Char '{character.name}', Attempting for Level: {level_str}")
-
-    class_template: Optional[models.CharacterClassTemplate] = None
-    if character.character_class_template_id:
-        if character.class_template_ref and character.class_template_ref.id == character.character_class_template_id:
-            class_template = character.class_template_ref
-        else:
-            class_template = crud.crud_character_class.get_character_class_template(db, class_template_id=character.character_class_template_id)
     
-    # --- Debug prints ---
-    # if class_template:
-    #     print(f"DEBUG GrantAbilities: Found class template '{class_template.name}' with skill tree: {class_template.skill_tree_definition is not None}")
-    #     if class_template.skill_tree_definition: print(f"DEBUG GrantAbilities: Skill tree: {class_template.skill_tree_definition}")
-    # else:
-    #     print(f"DEBUG GrantAbilities: No class template found for character {character.name} (template_id: {character.character_class_template_id})")
-    #     return granted_messages
-
-
+    class_template = _fetch_class_template_for_character(db, character)
+        
     if class_template and class_template.skill_tree_definition:
         skill_tree: Dict[str, Any] = class_template.skill_tree_definition
-
-        # Grant Core Skills
         core_skills_for_level: List[str] = skill_tree.get("core_skills_by_level", {}).get(level_str, [])
-        # print(f"DEBUG GrantAbilities: Skills for level '{level_str}': {core_skills_for_level}")
         if core_skills_for_level:
-            if character.learned_skills is None: character.learned_skills = []
-            learned_new = False
+            if character.learned_skills is None: character.learned_skills = [] # Initialize if None
+            learned_new_skill = False
             for skill_tag in core_skills_for_level:
                 skill_def = crud.crud_skill.get_skill_template_by_tag(db, skill_id_tag=skill_tag)
-                # print(f"DEBUG GrantAbilities: Trying skill '{skill_tag}', found def: {skill_def is not None}")
                 if skill_def and skill_tag not in character.learned_skills:
                     character.learned_skills.append(skill_tag)
                     granted_messages.append(f"You have learned skill: {skill_def.name}!")
-                    learned_new = True
-            if learned_new: attributes.flag_modified(character, "learned_skills")
+                    learned_new_skill = True
+            if learned_new_skill: attributes.flag_modified(character, "learned_skills")
 
-        # Grant Core Traits
         core_traits_for_level: List[str] = skill_tree.get("core_traits_by_level", {}).get(level_str, [])
-        # print(f"DEBUG GrantAbilities: Traits for level '{level_str}': {core_traits_for_level}")
         if core_traits_for_level:
-            if character.learned_traits is None: character.learned_traits = []
-            learned_new = False
+            if character.learned_traits is None: character.learned_traits = [] # Initialize if None
+            learned_new_trait = False
             for trait_tag in core_traits_for_level:
                 trait_def = crud.crud_trait.get_trait_template_by_tag(db, trait_id_tag=trait_tag)
-                # print(f"DEBUG GrantAbilities: Trying trait '{trait_tag}', found def: {trait_def is not None}")
                 if trait_def and trait_tag not in character.learned_traits:
                     character.learned_traits.append(trait_tag)
                     granted_messages.append(f"You have gained trait: {trait_def.name}!")
-                    learned_new = True
-            if learned_new: attributes.flag_modified(character, "learned_traits")
-    # else:
-        # print(f"DEBUG GrantAbilities: No class template or skill tree for character {character.name} at level '{level_str}'")
+                    learned_new_trait = True
+            if learned_new_trait: attributes.flag_modified(character, "learned_traits")
+    elif not class_template:
+        logger.warning(f"Cannot grant abilities for level {level_to_grant_for} to character {character.name}: No class template loaded.")
         
     return granted_messages
 
@@ -196,132 +171,171 @@ def create_character(
     initial_room_id: uuid.UUID
 ) -> models.Character:
     db_character_data = character_in.model_dump(exclude_unset=True)
-    final_char_args = DEFAULT_STATS.copy()
-    class_template_id_to_set: Optional[uuid.UUID] = None
-    class_name_to_set = db_character_data.get("class_name", "Adventurer") # Changed default to Adventurer to match class bonuses
-    class_template: Optional[models.CharacterClassTemplate] = None
+    
+    # Start with base defaults
+    final_char_args = DEFAULT_STATS.copy() 
+    # Ensure JSONB fields from defaults are mutable lists/dicts if needed downstream directly
+    final_char_args["learned_skills"] = list(final_char_args["learned_skills"]) 
+    final_char_args["learned_traits"] = list(final_char_args["learned_traits"])
 
-    if class_name_to_set and class_name_to_set != "Adventurer": # Match the default
-        class_template = crud.crud_character_class.get_character_class_template_by_name(db, name=class_name_to_set)
-        if class_template:
-            class_template_id_to_set = class_template.id
-            class_name_to_set = class_template.name
-            if class_template.base_stat_modifiers:
-                for stat, modifier in class_template.base_stat_modifiers.items():
-                    if stat in final_char_args: final_char_args[stat] += modifier
-            final_char_args["max_health"] += class_template.starting_health_bonus
-            final_char_args["current_health"] = final_char_args["max_health"]
-            final_char_args["max_mana"] += class_template.starting_mana_bonus
-            final_char_args["current_mana"] = final_char_args["max_mana"]
-        else:
-            print(f"Warning: Character class template '{class_name_to_set}' not found. Defaulting to Adventurer stats.")
-            class_name_to_set = "Adventurer"
-            
+    class_template_id_to_set: Optional[uuid.UUID] = None
+    class_name_from_input = db_character_data.get("class_name", "Adventurer") 
+    
+    # Fetch the class template; "Adventurer" is the default if none specified or found
+    class_template: Optional[models.CharacterClassTemplate] = crud.crud_character_class.get_character_class_template_by_name(db, name=class_name_from_input)
+    if not class_template and class_name_from_input != "Adventurer": # If a specific class was requested but not found, try Adventurer
+        logger.warning(f"Character class template '{class_name_from_input}' not found. Attempting to default to 'Adventurer'.")
+        class_template = crud.crud_character_class.get_character_class_template_by_name(db, name="Adventurer")
+
+    effective_class_name = "Adventurer" # Fallback name
+
+    if class_template:
+        class_template_id_to_set = class_template.id
+        effective_class_name = class_template.name # Use the name from the template
+        
+        # Apply base stat modifiers from class template
+        if class_template.base_stat_modifiers:
+            for stat, modifier in class_template.base_stat_modifiers.items():
+                if stat in final_char_args: 
+                    final_char_args[stat] = final_char_args.get(stat, 0) + modifier # Use .get for safety if stat wasn't in DEFAULT_STATS
+        
+        # Apply starting health/mana bonuses
+        final_char_args["max_health"] = final_char_args.get("max_health", 0) + class_template.starting_health_bonus
+        final_char_args["current_health"] = final_char_args["max_health"] # Full health at creation
+        final_char_args["max_mana"] = final_char_args.get("max_mana", 0) + class_template.starting_mana_bonus
+        final_char_args["current_mana"] = final_char_args["max_mana"] # Full mana at creation
+    else:
+        logger.warning(f"No class template found for '{class_name_from_input}' or 'Adventurer'. Character will use raw default stats.")
+        # effective_class_name remains "Adventurer" or could be set to something generic
+
     db_character = models.Character(
         name=db_character_data["name"],
-        class_name=class_name_to_set,
+        class_name=effective_class_name,
         player_id=player_id,
         current_room_id=initial_room_id,
         character_class_template_id=class_template_id_to_set,
-        **final_char_args
+        **final_char_args 
     )
-    db.add(db_character)
-    db.commit()
-    db.refresh(db_character)
+    db.add(db_character) # db_character is now pending
 
-    # --- Crucial: Grant Level 1 Abilities AFTER character is in DB and refreshed ---
-    # Ensure class_template is available for _grant_abilities_for_level
-    # The refresh above might not populate db_character.class_template_ref if not configured for eager loading.
-    # So, we re-use the 'class_template' variable we fetched earlier if it's valid.
-    # If 'class_template' is None (e.g. for "Adventurer" if no template defined or for a class not found),
-    # then _grant_abilities_for_level will try to fetch it again using db_character.character_class_template_id
-    if class_template: # If we had fetched a valid class template earlier
-        db_character.class_template_ref = class_template # Explicitly assign to the instance for _grant_abilities_for_level
+    if class_template: 
+        db_character.class_template_ref = class_template
 
-    initial_ability_messages = _grant_abilities_for_level(db, db_character, 1) # Grant for Level 1
-    
-    # If abilities were granted, the lists in db_character are modified.
-    # We need to add to session again and commit.
-    if initial_ability_messages: # Check if any messages were generated (implies changes)
-        print(f"Character '{db_character.name}' initial abilities granted: {', '.join(initial_ability_messages)}")
-        db.add(db_character) 
-        db.commit()
-        db.refresh(db_character) # Refresh again to get the latest state with learned skills/traits
+    initial_ability_messages = _grant_abilities_for_level(db, db_character, 1) 
+    if initial_ability_messages:
+        logger.info(f"Character '{db_character.name}' initial abilities granted: {', '.join(initial_ability_messages)}")
 
     # Grant starting equipment
     if class_template and class_template.starting_equipment_refs:
-        for item_ref_name in class_template.starting_equipment_refs:
-            item_template_to_add = crud.crud_item.get_item_by_name(db, name=item_ref_name)
+        logger.info(f"Attempting to grant starting equipment for {db_character.name} (ID pending: {db_character.id})")
+        for item_ref_name_or_tag in class_template.starting_equipment_refs:
+            item_template_to_add = crud.crud_item.get_item_by_name(db, name=item_ref_name_or_tag)
+            if not item_template_to_add: 
+                 item_template_to_add = crud.crud_item.get_item_by_item_tag(db, item_tag=item_ref_name_or_tag)
+
             if item_template_to_add:
-                crud.crud_character_inventory.add_item_to_character_inventory(
-                    db, character_id=db_character.id, item_id=item_template_to_add.id, quantity=1
+                # Call the modified add_item_to_character_inventory, passing the character_obj
+                # This function will now append to db_character.inventory_items
+                _, msg = crud.crud_character_inventory.add_item_to_character_inventory(
+                    db, character_obj=db_character, item_id=item_template_to_add.id, quantity=1
                 )
-        db.commit()
-        db.refresh(db_character)
-        
+                logger.info(f"Staging starting item '{item_template_to_add.name}' for '{db_character.name}'. Inv Msg: {msg}")
+            else:
+                logger.warning(f"Starting equipment item/tag '{item_ref_name_or_tag}' not found for class '{class_template.name}'.")
+    
+    # Before commit, let's see if items are in the pending list
+    if hasattr(db_character, 'inventory_items') and db_character.inventory_items:
+        logger.info(f"Character {db_character.name} has {len(db_character.inventory_items)} items in inventory_items relationship before commit.")
+        for idx, item_entry in enumerate(db_character.inventory_items):
+            logger.debug(f"  Item {idx}: Item ID {item_entry.item_id}, Qty {item_entry.quantity}, Char ID (on entry) {item_entry.character_id}")
+    else:
+        logger.warning(f"Character {db_character.name} has NO items in inventory_items relationship before commit.")
+
+    db.commit() 
+    db.refresh(db_character) 
+    # After refresh, inventory_items should be populated from DB if commit was successful
+    if hasattr(db_character, 'inventory_items') and db_character.inventory_items:
+         logger.info(f"Character {db_character.name} has {len(db_character.inventory_items)} items in inventory_items AFTER commit & refresh.")
+    else:
+        logger.info(f"Character {db_character.name} has NO items in inventory_items AFTER commit & refresh.")
+
+    logger.info(f"Character '{db_character.name}' created successfully with ID {db_character.id}.")
     return db_character
 
 def update_character_room(db: Session, character_id: uuid.UUID, new_room_id: uuid.UUID) -> Optional[models.Character]:
     db_character = get_character(db, character_id=character_id)
     if db_character:
-        db_character.current_room_id = new_room_id # Direct assignment is fine
-        db.add(db_character) # Add to session to mark as dirty
-        db.commit()
-        db.refresh(db_character)
+        db_character.current_room_id = new_room_id
+        db.add(db_character) # Stage the change
+        # db.commit() # <<< REMOVED
+        # db.refresh(db_character) # <<< REMOVED
         return db_character
     return None
 
 def update_character_health(db: Session, character_id: uuid.UUID, amount_change: int) -> Optional[models.Character]:
-    """Updates character's current health by amount_change. Clamps between 0 and max_health."""
     character = get_character(db, character_id=character_id)
     if not character:
         return None
     
     character.current_health += amount_change
-    if character.current_health < 0:
-        character.current_health = 0
-    if character.current_health > character.max_health:
-        character.current_health = character.max_health
+    character.current_health = max(0, min(character.current_health, character.max_health))
         
-    db.add(character)
-    db.commit()
-    db.refresh(character)
+    db.add(character) # Stage the change
+    # db.commit() # <<< REMOVED
+    # db.refresh(character) # <<< REMOVED
     return character
 
-# Conceptual: def level_up_character(db: Session, character: models.Character): ...
 def _apply_level_up(db: Session, character: models.Character) -> List[str]:
     level_up_messages = []
     
-    current_max_defined_level = max(XP_THRESHOLDS.keys()) if XP_THRESHOLDS else 0 # Ensure XP_THRESHOLDS is not empty
+    current_max_defined_level = max(XP_THRESHOLDS.keys()) if XP_THRESHOLDS else 0
     if character.level >= current_max_defined_level and get_xp_for_level(character.level + 1) == float('inf'):
          level_up_messages.append(f"You are already at the maximum defined level ({character.level}). Cannot level up further.")
          return level_up_messages
 
     character.level += 1
-    new_level_str = str(character.level)
     level_up_messages.append(f"Ding! You have reached Level {character.level}!")
 
-    class_bonuses = CLASS_LEVEL_BONUSES.get(character.class_name, CLASS_LEVEL_BONUSES["Adventurer"])
+    # Get stat gains from class template
+    class_template = _fetch_class_template_for_character(db, character)
+    hp_gain_from_class = 0
+    mp_gain_from_class = 0
+    # bab_gain_from_class = 0 # Not directly adding to character.base_attack_bonus, as that's flat.
+                            # BAB is usually calculated dynamically or traits/feats grant it.
+                            # If you have a character.base_attack_bonus_per_level field, update it here.
+
+    if class_template and class_template.stat_gains_per_level:
+        sgl = class_template.stat_gains_per_level
+        hp_gain_from_class = int(sgl.get("hp", 3)) # Default to 3 if not specified
+        mp_gain_from_class = int(sgl.get("mp", 1)) # Default to 1
+        # bab_from_class_per_level = float(sgl.get("base_attack_bonus", 0.0))
+        # character.base_attack_bonus += bab_from_class_per_level # Example if you store BAB progression this way
+                                                                # Ensure base_attack_bonus is Float if so.
+    else: # Fallback if no template or no stat_gains defined (e.g. very basic Adventurer)
+        logger.warning(f"No stat_gains_per_level found for class '{character.class_name}' on level up for {character.name}. Using fallback.")
+        hp_gain_from_class = 3 # Generic fallback
+        mp_gain_from_class = 1 # Generic fallback
+
     con_mod = character.get_attribute_modifier("constitution")
-    hp_gain = max(1, con_mod + class_bonuses.get("hp_per_level", 3)) 
-    character.max_health += hp_gain
-    level_up_messages.append(f"Your maximum health increases by {hp_gain}!")
+    hp_gain_total = max(1, con_mod + hp_gain_from_class) 
+    character.max_health += hp_gain_total
+    level_up_messages.append(f"Your maximum health increases by {hp_gain_total}!")
 
-    int_mod = character.get_attribute_modifier("intelligence")
-    mp_gain = max(0, int_mod + class_bonuses.get("mp_per_level", 1)) 
-    character.max_mana += mp_gain
-    if mp_gain > 0:
-        level_up_messages.append(f"Your maximum mana increases by {mp_gain}!")
+    # Example: Mana gain could also be influenced by a primary casting stat like intelligence or wisdom
+    int_mod = character.get_attribute_modifier("intelligence") # Or relevant mana attribute for the class
+    mp_gain_total = max(0, int_mod + mp_gain_from_class) 
+    character.max_mana += mp_gain_total
+    if mp_gain_total > 0 or mp_gain_from_class > 0 : # Only message if there was potential for mana gain
+        level_up_messages.append(f"Your maximum mana increases by {mp_gain_total}!")
 
-    character.current_health = character.max_health
-    character.current_mana = character.max_mana
+    character.current_health = character.max_health # Full heal on level up
+    character.current_mana = character.max_mana   # Full mana on level up
     level_up_messages.append("You feel invigorated!")
     
-    # Grant abilities for the NEW level achieved
-    ability_messages = _grant_abilities_for_level(db, character, character.level) # Pass the new level
+    ability_messages = _grant_abilities_for_level(db, character, character.level)
     level_up_messages.extend(ability_messages)
     
-    db.add(character)
+    db.add(character) # Stage changes from level up
     return level_up_messages
 
 
@@ -330,23 +344,32 @@ def _apply_level_down(db: Session, character: models.Character) -> List[str]:
         return ["You cannot de-level below level 1, you pathetic worm."]
     
     level_down_messages = []
-    
-    # Store previous level's XP requirement BEFORE changing level
     xp_for_new_lower_level = get_xp_for_level(character.level - 1)
     if xp_for_new_lower_level == float('inf'): # Should not happen if level > 1
-        xp_for_new_lower_level = XP_THRESHOLDS.get(character.level -1, 0) # Failsafe
+        xp_for_new_lower_level = XP_THRESHOLDS.get(character.level -1, 0)
 
+    # Estimate loss based on what was gained. This is tricky without storing historical gains.
+    # Simplification: remove gains as if they were from the class template for the *new lower level*.
+    class_template = _fetch_class_template_for_character(db, character)
+    hp_loss_from_class = 3 # Default
+    mp_loss_from_class = 1 # Default
 
-    class_bonuses = CLASS_LEVEL_BONUSES.get(character.class_name, CLASS_LEVEL_BONUSES["Adventurer"])
-    con_mod = character.get_attribute_modifier("constitution") 
-    hp_loss_estimate = max(1, con_mod + class_bonuses.get("hp_per_level", 3))
+    if class_template and class_template.stat_gains_per_level:
+        sgl = class_template.stat_gains_per_level
+        hp_loss_from_class = int(sgl.get("hp", 3))
+        mp_loss_from_class = int(sgl.get("mp", 1))
+    else:
+        logger.warning(f"No stat_gains_per_level for class '{character.class_name}' on level down for {character.name}. Using fallback loss.")
+
+    con_mod = character.get_attribute_modifier("constitution")
+    hp_loss_estimate = max(1, con_mod + hp_loss_from_class)
     character.max_health = max(1, character.max_health - hp_loss_estimate) 
     level_down_messages.append(f"Your maximum health decreases by {hp_loss_estimate}.")
 
     int_mod = character.get_attribute_modifier("intelligence")
-    mp_loss_estimate = max(0, int_mod + class_bonuses.get("mp_per_level", 1))
+    mp_loss_estimate = max(0, int_mod + mp_loss_from_class)
     character.max_mana = max(0, character.max_mana - mp_loss_estimate)
-    if mp_loss_estimate > 0:
+    if mp_loss_estimate > 0 or mp_loss_from_class > 0:
         level_down_messages.append(f"Your maximum mana decreases by {mp_loss_estimate}.")
 
     character.current_health = min(character.current_health, character.max_health)
@@ -354,73 +377,69 @@ def _apply_level_down(db: Session, character: models.Character) -> List[str]:
 
     character.level -= 1
     level_down_messages.append(f"You feel weaker... You have de-leveled to Level {character.level}.")
-    
-    character.experience_points = int(xp_for_new_lower_level) # XP at start of new (lower) level
+    character.experience_points = int(xp_for_new_lower_level) 
 
-    db.add(character)
+    # TODO: Logic to remove skills/traits learned at the level lost. This is complex.
+    # For now, skills/traits are not removed on de-level.
+
+    db.add(character) # Stage changes from level down
     return level_down_messages
 
 
 def add_experience(db: Session, character_id: uuid.UUID, amount: int) -> Tuple[Optional[models.Character], List[str]]:
-
-    
     character = get_character(db, character_id=character_id)
     if not character:
         return None, ["Character not found."]
-
     messages = []
-    if amount == 0:
-        return character, ["No experience gained or lost. How pointless."]
+    if amount == 0: # Check if still needed or handled by caller
+        # return character, ["No experience gained or lost. How pointless."] 
+        pass # Allow 0 for potential future effects, combat loop might filter this.
 
     initial_level = character.level
     character.experience_points += amount
-    if amount !=0 : # only print if xp actually changed
+    if amount !=0 : # Only message if XP actually changed
       messages.append(f"{'Gained' if amount > 0 else 'Lost'} {abs(amount)} experience points. Current XP: {character.experience_points}")
 
-
-    # Handle Leveling Up
+    # Level up loop
     xp_for_next_level = get_xp_for_level(character.level + 1)
     while character.experience_points >= xp_for_next_level and xp_for_next_level != float('inf'):
-        overflow_xp = character.experience_points - int(xp_for_next_level) # xp_for_next_level is total for that level
-        
-        # Temporarily set XP to what's needed for the level up, so _apply_level_up has correct context if it needs it.
-        # character.experience_points = int(xp_for_next_level) # Not strictly necessary with current _apply_level_up
-        
-        level_up_messages = _apply_level_up(db, character) # character.level is incremented inside
+        overflow_xp = character.experience_points - int(xp_for_next_level) # XP beyond what's needed for next level
+        level_up_messages = _apply_level_up(db, character) # _apply_level_up stages changes
         messages.extend(level_up_messages)
         
-        # After level up, new character.level is set.
-        # XP should be the XP requirement for this new level + any overflow from the previous.
+        # Set XP to the start of the new current level, plus overflow
         xp_at_start_of_new_level = get_xp_for_level(character.level)
-        character.experience_points = int(xp_at_start_of_new_level) + overflow_xp
+        if xp_at_start_of_new_level == float('inf'): # Should not happen if level up occurred
+            character.experience_points = 0
+        else:
+            character.experience_points = int(xp_at_start_of_new_level) + overflow_xp
         
-        xp_for_next_level = get_xp_for_level(character.level + 1) # Update for potential multi-level up
+        xp_for_next_level = get_xp_for_level(character.level + 1) # Recalculate for potential multi-level up
 
-    # Handle De-Leveling
+    # De-level loop (only if XP is negative or below current level's threshold)
     xp_required_for_current_level = get_xp_for_level(character.level)
     while character.level > 1 and character.experience_points < xp_required_for_current_level :
-        # Note: _apply_level_down sets XP to the start of the new lower level.
-        delevel_messages = _apply_level_down(db, character) # character.level is decremented
+        # Note: If XP becomes negative, this loop will run.
+        # _apply_level_down will set XP to the start of the new lower level.
+        delevel_messages = _apply_level_down(db, character) # _apply_level_down stages changes
         messages.extend(delevel_messages)
-        xp_required_for_current_level = get_xp_for_level(character.level) # Update for new (lower) current level
+        xp_required_for_current_level = get_xp_for_level(character.level) # For the new, lower level
 
-    # Clamp XP if it went negative after de-leveling to level 1
+    # Ensure XP doesn't go below 0 for level 1 characters
     if character.level == 1 and character.experience_points < 0:
         character.experience_points = 0
-        # messages.append("Your experience cannot fall below zero at level 1.") # Already part of _apply_level_down potentially
 
-    db.add(character)
-    db.commit()
-    db.refresh(character)
-    if character.level != initial_level and not any("Ding!" in m or "de-leveled" in m for m in messages): # Ensure level change message is there
+    db.add(character) # Ensure character is staged after all XP and level modifications
+    # db.commit() # <<< REMOVED - Caller (e.g. skill_resolver or command handler) commits
+    # db.refresh(character) # <<< REMOVED
+    
+    # Add a generic level change message if specific Ding/Delevel messages weren't generated
+    # (e.g. if level changed via admin command without going through xp gain/loss)
+    if character.level != initial_level and not any("Ding!" in m or "de-leveled" in m for m in messages):
         messages.append(f"Your level is now {character.level}.")
     return character, messages
 
 def get_characters_in_room(db: Session, *, room_id: uuid.UUID, exclude_character_id: Optional[uuid.UUID] = None) -> List[models.Character]:
-    """
-    Retrieves all characters currently in the specified room,
-    optionally excluding one character (e.g., the one looking).
-    """
     query = db.query(models.Character).filter(models.Character.current_room_id == room_id)
     if exclude_character_id:
         query = query.filter(models.Character.id != exclude_character_id)

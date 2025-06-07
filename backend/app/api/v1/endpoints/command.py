@@ -17,6 +17,9 @@ from app.commands import meta_parser
 # from app.commands import combat_parser 
 from app.commands import interaction_parser
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 router = APIRouter()
 
@@ -34,7 +37,7 @@ COMMAND_REGISTRY: Dict[str, CommandHandler] = {
     "south": movement_parser.handle_move,
     "s": movement_parser.handle_move,
     "east": movement_parser.handle_move,
-    "e": movement_parser.handle_move,
+    "e": movement_parser.handle_move,   
     "west": movement_parser.handle_move,
     "w": movement_parser.handle_move,
     "up": movement_parser.handle_move,
@@ -119,6 +122,7 @@ async def process_command_for_character(
         return schemas.CommandResponse(message_to_player="CRITICAL ERROR: Character in void.")
     current_room_schema = schemas.RoomInDB.from_orm(current_room_orm)
 
+    logger.info(f"[COMMAND_ENDPOINT] DB Session ID: {id(db)}")
     context = CommandContext(
         db=db, active_character=active_character, current_room_orm=current_room_orm,
         current_room_schema=current_room_schema, original_command=original_command_text,

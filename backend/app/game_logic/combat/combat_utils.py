@@ -24,6 +24,144 @@ OPPOSITE_DIRECTIONS_MAP = {
     # "north": {"name": "south", "description": "the chilly south"} 
 }
 
+PLACEHOLDER_LOOT_TABLES: Dict[str, List[Tuple[str, int, int, int]]] = {
+    "vermin_common": [("Rat Tail", 50, 1, 1), ("Cracked Tooth", 25, 1, 1)],
+    "small_beast_parts": [("Beast Pelt (Small)", 30, 1, 1), ("Animal Bone", 60, 1, 2)],
+    "tier1_trash": [("Old Boot", 10, 1, 1), ("Rusty Tin Can", 15, 1, 1)],
+    "goblin_common": [("Goblin Ear", 40, 1, 2), ("Crude Dagger Scrap", 20, 1, 1), ("Torn Pouch", 30, 1, 1)],
+    "crude_gear": [("Rusty Sword", 5, 1, 1), ("Dagger", 8, 1, 1), ("Wooden Shield", 3, 1, 1)],
+    "construct_parts_common": [("Bent Gear", 50, 1, 3), ("Frayed Wire", 40, 1, 2), ("Small Lens", 15, 1, 1)],
+    "tech_scrap": [("Scrap Metal", 60, 1, 5)],
+    "spider_parts": [("Spider Silk Gland", 35, 1, 1), ("Spider Fang", 25, 1, 2)],
+    "tier1_beast_loot": [("Beast Meat", 40, 1, 1)],
+    "ectoplasm": [("Ectoplasmic Residue", 70, 1, 3)],
+    "spirit_essence": [("Faint Spirit Essence", 25, 1, 1)],
+    "tier2_ethereal": [("Ghostly Shroud Scrap", 10, 1, 1)],
+    "elemental_mote_air": [("Whirling Dust Mote", 60, 1, 2)],
+    "tier1_elemental": [("Charged Sand", 20, 1, 1)],
+    "bandit_gear": [("Tarnished Ring", 5, 1, 1), ("Patched Leather Jerkin", 10, 1, 1)], # Item names
+    "stolen_goods_common": [("Cheap Locket", 15, 1, 1), ("Bent Silver Spoon", 20, 1, 1)],
+    "tier2_humanoid": [("Sharpened Bone", 30, 1, 1)],
+    "bat_parts": [("Bat Wing", 70, 1, 2)],
+    "tier1_swarm_remains": [("Guano", 20, 1, 3)], # Charming
+    "construct_parts_rare": [("Intact Servomotor", 10, 1, 1)],
+    "enchanted_metal_shards": [("Faintly Glowing Shard", 20, 1, 2)],
+    "tier2_construct": [("Polished Steel Plate", 5, 1, 1)],
+    "dire_wolf_pelt": [("Dire Wolf Pelt", 60, 1, 1)],
+    "large_beast_trophy": [("Large Wolf Fang", 30, 1, 1)],
+    "tier3_beast_loot": [("Prime Beast Meat", 15, 1, 1)]
+}
+
+async def handle_mob_death_loot_and_cleanup(
+    db: Session,
+    character: models.Character, 
+    killed_mob_instance: models.RoomMobInstance,
+    log_messages_list: List[str], 
+    player_id: uuid.UUID, 
+    current_room_id_for_broadcast: uuid.UUID
+) -> models.Character:
+    mob_template = killed_mob_instance.mob_template 
+    character_after_loot = character # Start with the character passed in
+
+    logger.debug(f"LOOT: Handling death of {mob_template.name if mob_template else 'Unknown Mob'} in room {current_room_id_for_broadcast}")
+
+    if not mob_template:
+        logger.warning(f"LOOT: No mob_template for killed_mob_instance {killed_mob_instance.id}")
+        crud.crud_mob.despawn_mob_from_room(db, killed_mob_instance.id) # Despawn and commit handled by despawn_mob_from_room
+        return character_after_loot
+
+    # --- XP Award ---
+    if mob_template.xp_value > 0:
+        logger.debug(f"LOOT: Awarding {mob_template.xp_value} XP to {character.name}.")
+        # add_experience commits internally
+        updated_char_for_xp, xp_messages = crud.crud_character.add_experience(
+            db, character_after_loot.id, mob_template.xp_value
+        )
+        if updated_char_for_xp:
+            character_after_loot = updated_char_for_xp # Use the character returned by add_experience
+        log_messages_list.extend(xp_messages)
+
+    # --- Currency Drop ---
+    platinum_dropped, gold_dropped, silver_dropped, copper_dropped = 0, 0, 0, 0
+    if mob_template.currency_drop:
+        cd = mob_template.currency_drop
+        copper_dropped = random.randint(cd.get("c_min", 0), cd.get("c_max", 0))
+        if random.randint(1, 100) <= cd.get("s_chance", 0):
+            silver_dropped = random.randint(cd.get("s_min", 0), cd.get("s_max", 0))
+        if random.randint(1, 100) <= cd.get("g_chance", 0):
+            gold_dropped = random.randint(cd.get("g_min", 0), cd.get("g_max", 0))
+        if random.randint(1, 100) <= cd.get("p_chance", 0):
+            platinum_dropped = random.randint(cd.get("p_min", 0), cd.get("p_max", 0))
+    
+    if platinum_dropped > 0 or gold_dropped > 0 or silver_dropped > 0 or copper_dropped > 0:
+        # update_character_currency commits internally
+        updated_char_for_currency, currency_message = crud.crud_character.update_character_currency(
+            db, character_after_loot.id, platinum_dropped, gold_dropped, silver_dropped, copper_dropped
+        )
+        if updated_char_for_currency:
+             character_after_loot = updated_char_for_currency # Use the character returned by update_character_currency
+        
+        drop_messages_parts = []
+        if platinum_dropped > 0: drop_messages_parts.append(f"{platinum_dropped}p")
+        if gold_dropped > 0: drop_messages_parts.append(f"{gold_dropped}g")
+        if silver_dropped > 0: drop_messages_parts.append(f"{silver_dropped}s")
+        if copper_dropped > 0: drop_messages_parts.append(f"{copper_dropped}c")
+        
+        if drop_messages_parts:
+             log_messages_list.append(f"The {mob_template.name} drops: {', '.join(drop_messages_parts)}.")
+             log_messages_list.append(currency_message) 
+
+    # --- Item Loot Drop ---
+    items_dropped_this_kill_details: List[str] = [] # For logging
+    if mob_template.loot_table_tags:
+        logger.debug(f"LOOT: Processing loot_table_tags: {mob_template.loot_table_tags} for {mob_template.name}")
+        for loot_tag in mob_template.loot_table_tags:
+            if loot_tag in PLACEHOLDER_LOOT_TABLES:
+                potential_drops = PLACEHOLDER_LOOT_TABLES[loot_tag]
+                for item_name_or_tag_from_loot_def, chance, min_qty, max_qty in potential_drops:
+                    if random.randint(1, 100) <= chance:
+                        item_template_to_drop = crud.crud_item.get_item_by_name(db, name=item_name_or_tag_from_loot_def)
+                        if not item_template_to_drop: # Fallback to item_tag if name lookup fails
+                             item_template_to_drop = crud.crud_item.get_item_by_item_tag(db, item_tag=item_name_or_tag_from_loot_def)
+
+                        if item_template_to_drop:
+                            quantity_to_drop = random.randint(min_qty, max_qty)
+                            logger.debug(f"LOOT: Attempting to drop {quantity_to_drop}x {item_template_to_drop.name} in room {current_room_id_for_broadcast}")
+                            
+                            # crud.crud_room_item.add_item_to_room commits internally.
+                            # This is not ideal for batching operations within a single combat round.
+                            # For now, we proceed, accepting multiple small commits if many items drop.
+                            added_room_item, add_msg = crud.crud_room_item.add_item_to_room(
+                                db=db, room_id=current_room_id_for_broadcast, 
+                                item_id=item_template_to_drop.id, quantity=quantity_to_drop
+                            )
+                            if added_room_item:
+                                items_dropped_this_kill_details.append(f"{quantity_to_drop}x {item_template_to_drop.name}")
+                            else:
+                                logger.error(f"LOOT: crud.crud_room_item.add_item_to_room failed for {item_template_to_drop.name}: {add_msg}")
+                        else:
+                            logger.warning(f"LOOT: Item template '{item_name_or_tag_from_loot_def}' (from loot_tag '{loot_tag}') not found in DB.")
+            else:
+                logger.warning(f"LOOT: Loot table tag '{loot_tag}' for mob '{mob_template.name}' not defined in PLACEHOLDER_LOOT_TABLES.")
+        
+        if items_dropped_this_kill_details:
+            log_messages_list.append(f"The {mob_template.name} also drops: {', '.join(items_dropped_this_kill_details)} on the ground.")
+            await broadcast_to_room_participants(
+                db, current_room_id_for_broadcast,
+                f"The {mob_template.name} drops {', '.join(items_dropped_this_kill_details)}!",
+                exclude_player_id=player_id
+            )
+
+    # --- Despawn Mob ---
+    logger.debug(f"LOOT: Despawning mob instance {killed_mob_instance.id} for {mob_template.name}.")
+    # despawn_mob_from_room handles its own commit if it updates a spawn definition.
+    crud.crud_mob.despawn_mob_from_room(db, killed_mob_instance.id) 
+    
+    # The overall commit for the combat round (including character mana/health changes from the skill itself)
+    # will be handled by the calling function (process_combat_round).
+    # We return character_after_loot which has been updated by XP and currency.
+    return character_after_loot
+
 def get_opposite_direction(direction: str) -> str:
     """
     Returns the opposite cardinal or intercardinal direction name as a string.

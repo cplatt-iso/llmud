@@ -59,7 +59,7 @@ def equip_inventory_item_api(
     
     updated_inv_item, message = crud.crud_character_inventory.equip_item_from_inventory(
         db=db,
-        character_id=current_character.id,
+        character_obj=current_character, 
         inventory_item_id=inventory_item_id,
         target_slot=target_slot_from_payload
     )
@@ -99,7 +99,7 @@ def unequip_inventory_item_api(
     """
     updated_inv_item, message = crud.crud_character_inventory.unequip_item_to_inventory(
         db=db,
-        character_id=current_character.id,
+        character_obj=current_character,
         inventory_item_id=inventory_item_id
     )
 

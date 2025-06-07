@@ -1,107 +1,117 @@
+
 [
   {
     "name": "Rusty Sword",
     "description": "A short sword, pitted with rust. Better than nothing.",
     "item_type": "weapon",
     "slot": "main_hand",
-    "properties": {
-      "damage": "1d6",
-      "damage_type": "slashing",
-      "weapon_type": "sword"
-    },
-    "weight": 3.0,
-    "value": 5,
-    "stackable": false,
-    "max_stack_size": 1
+    "properties": { "damage": "1d6", "damage_type": "slashing", "weapon_type": "sword" },
+    "weight": 3.0, "value": 5, "stackable": false, "max_stack_size": 1
   },
   {
     "name": "Cloth Tunic",
     "description": "Simple, patched-up clothing.",
-    "item_type": "armor",
-    "slot": "torso",
-    "properties": {
-      "armor_class_bonus": 1
-    },
-    "weight": 1.0,
-    "value": 2,
-    "stackable": false,
-    "max_stack_size": 1
+    "item_type": "armor", "slot": "torso",
+    "properties": { "armor_class_bonus": 1 },
+    "weight": 1.0, "value": 2, "stackable": false, "max_stack_size": 1
   },
   {
     "name": "Wooden Shield",
     "description": "A basic round wooden shield.",
-    "item_type": "armor",
-    "slot": "off_hand",
-    "properties": {
-      "armor_class_bonus": 2,
-      "item_subtype": "shield"
-    },
-    "weight": 5.0,
-    "value": 8,
-    "stackable": false,
-    "max_stack_size": 1
+    "item_type": "armor", "slot": "off_hand",
+    "properties": { "armor_class_bonus": 2, "item_subtype": "shield" },
+    "weight": 5.0, "value": 8, "stackable": false, "max_stack_size": 1
   },
   {
     "name": "Dagger",
     "description": "A small, easily concealable dagger.",
-    "item_type": "weapon",
-    "slot": "main_hand",
-    "properties": {
-      "damage": "1d4",
-      "damage_type": "piercing",
-      "weapon_type": "dagger",
-      "finesse": true
-    },
-    "weight": 1.0,
-    "value": 2,
-    "stackable": false,
-    "max_stack_size": 1
+    "item_type": "weapon", "slot": "main_hand",
+    "properties": { "damage": "1d4", "damage_type": "piercing", "weapon_type": "dagger", "finesse": true },
+    "weight": 1.0, "value": 2, "stackable": false, "max_stack_size": 1
   },
   {
     "name": "Archive Key Alpha",
     "description": "A small, intricately carved metal key. Sector 42.",
-    "item_type": "key",
-    "slot": null,
-    "properties": {
-      "item_tag": "archive_key_alpha"
-    },
-    "weight": 0.1,
-    "value": 0,
-    "stackable": false,
-    "max_stack_size": 1
+    "item_type": "key", "slot": null,
+    "properties": { "item_tag": "archive_key_alpha" },
+    "weight": 0.1, "value": 0, "stackable": false, "max_stack_size": 1
   },
   {
     "name": "Basic Healing Draught",
     "description": "A common herbal brew that knits minor wounds.",
-    "item_type": "potion",
-    "slot": "consumable",
-    "properties": {
-        "effect_type": "heal_direct",
-        "heal_amount_dice": "2d4",
-        "heal_amount_bonus": 2,
-        "cooldown_group": "potion",
-        "cooldown_seconds": 30
-    },
-    "weight": 0.5,
-    "value": 25,
-    "stackable": true,
-    "max_stack_size": 5
+    "item_type": "potion", "slot": "consumable",
+    "properties": { "effect_type": "heal_direct", "heal_amount_dice": "2d4", "heal_amount_bonus": 2, "cooldown_group": "potion", "cooldown_seconds": 30 },
+    "weight": 0.5, "value": 25, "stackable": true, "max_stack_size": 5
   },
   {
     "name": "Lockpicks",
     "description": "A set of fine tools for bypassing simple locks.",
-    "item_type": "tool",
-    "slot": null,
-    "properties": {
-        "item_tag": "basic_lockpicks",
-        "provides_skill_bonus": {
-            "skill_id_tag": "pick_lock_basic",
-            "bonus_amount": 2 
-        }
-    },
-    "weight": 0.2,
-    "value": 50,
-    "stackable": false,
-    "max_stack_size": 1
+    "item_type": "tool", "slot": null,
+    "properties": { "item_tag": "basic_lockpicks", "provides_skill_bonus": { "skill_id_tag": "pick_lock_basic", "bonus_amount": 2 } },
+    "weight": 0.2, "value": 50, "stackable": false, "max_stack_size": 1
+  },
+  {
+    "name": "Rat Tail",
+    "description": "A long, scaly rat tail. Gross.",
+    "item_type": "junk", "slot": null,
+    "properties": { "item_tag": "rat_tail_junk" },
+    "weight": 0.1, "value": 1, "stackable": true, "max_stack_size": 20
+  },
+  {
+    "name": "Cracked Tooth",
+    "description": "A small, cracked animal tooth.",
+    "item_type": "junk", "slot": null,
+    "properties": { "item_tag": "cracked_tooth_junk" },
+    "weight": 0.05, "value": 0, "stackable": true, "max_stack_size": 50
+  },
+  {
+    "name": "Beast Pelt (Small)",
+    "description": "The pelt of a small, furry creature. Could be useful.",
+    "item_type": "crafting_material", "slot": null,
+    "properties": { "item_tag": "pelt_small_beast" },
+    "weight": 0.5, "value": 3, "stackable": true, "max_stack_size": 10
+  },
+  {
+    "name": "Animal Bone",
+    "description": "A sturdy animal bone, perhaps from a leg or rib.",
+    "item_type": "junk", "slot": null,
+    "properties": { "item_tag": "animal_bone_generic" },
+    "weight": 0.3, "value": 0, "stackable": true, "max_stack_size": 10
+  },
+  {
+    "name": "Old Boot",
+    "description": "A single, waterlogged leather boot. Seen better days.",
+    "item_type": "junk", "slot": null,
+    "properties": { "item_tag": "old_boot_junk" },
+    "weight": 1.0, "value": 0, "stackable": false, "max_stack_size": 1
+  },
+  {
+    "name": "Rusty Tin Can",
+    "description": "An old, rusty tin can. Empty, of course.",
+    "item_type": "junk", "slot": null,
+    "properties": { "item_tag": "rusty_can_junk" },
+    "weight": 0.2, "value": 0, "stackable": false, "max_stack_size": 1
+  },
+  {
+    "name": "Goblin Ear",
+    "description": "A severed goblin ear. A common, if gruesome, trophy.",
+    "item_type": "junk", "slot": null,
+    "properties": { "item_tag": "goblin_ear_trophy" },
+    "weight": 0.1, "value": 2, "stackable": true, "max_stack_size": 10
+  },
+  {
+    "name": "Crude Dagger Scrap",
+    "description": "A piece of a crudely made goblin dagger, broken and useless.",
+    "item_type": "junk", "slot": null,
+    "properties": { "item_tag": "crude_dagger_scrap" },
+    "weight": 0.3, "value": 1, "stackable": true, "max_stack_size": 5
+  },
+  {
+    "name": "Torn Pouch",
+    "description": "A small leather pouch, torn and empty.",
+    "item_type": "junk", "slot": null,
+    "properties": { "item_tag": "torn_pouch_junk" },
+    "weight": 0.1, "value": 0, "stackable": false, "max_stack_size": 1
   }
+
 ]

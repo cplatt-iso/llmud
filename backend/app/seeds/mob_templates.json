@@ -3,46 +3,40 @@
     "name": "Giant Rat",
     "description": "A rodent of unusual size, its fur matted and its eyes glinting with a feral hunger.",
     "level": 1,
-    "base_health": 10,
+    "base_health": 12,
     "base_mana": 0,
     "base_attack": "1d4",
     "base_defense": 11,
     "xp_value": 5,
     "attack_speed_secs": 2.5,
-    "aggro_radius": 5,
+    "aggro_radius": 4,
     "roam_radius": 3,
     "dialogue_lines": ["*Squeak!*", "Hisss...", "*Chitters angrily*"],
-    "faction_tags": ["vermin", "beast"],
-    "loot_table_tags": ["vermin_common", "small_beast_parts"],
+    "faction_tags": ["vermin", "beast", "neutral_critter"],
+    "loot_table_tags": ["vermin_common", "small_beast_parts", "tier1_trash"],
     "special_abilities": [],
     "currency_drop": {
-        "c_min": 1, "c_max": 5, 
-        "s_chance": 0, "s_min": 0, "s_max": 0,
-        "g_chance": 0, "g_min": 0, "g_max": 0,
-        "p_chance": 0, "p_min": 0, "p_max": 0
+        "c_min": 1, "c_max": 5, "s_chance": 0, "s_min": 0, "s_max": 0, "g_chance": 0, "g_min": 0, "g_max": 0, "p_chance": 0, "p_min": 0, "p_max": 0
     }
   },
   {
     "name": "Goblin Scout",
     "description": "A small, wiry goblin with shifty eyes and a crude spear. Looks like it would rather be anywhere else.",
     "level": 2,
-    "base_health": 15,
+    "base_health": 18,
     "base_mana": 5,
     "base_attack": "1d6",
     "base_defense": 13,
     "xp_value": 15,
     "attack_speed_secs": 3.0,
-    "aggro_radius": 8,
+    "aggro_radius": 7,
     "roam_radius": 5,
-    "dialogue_lines": ["Sneaky sneaky!", "You see shiny?", "Me take that!"],
-    "faction_tags": ["goblinoid", "scout"],
-    "loot_table_tags": ["goblin_common", "crude_gear"],
+    "dialogue_lines": ["Sneaky sneaky!", "You see shiny?", "Me take that!", "Yark! Intruder!"],
+    "faction_tags": ["goblinoid", "scout", "hostile_humanoid"],
+    "loot_table_tags": ["goblin_common", "crude_gear", "tier1_basic"],
     "special_abilities": ["evasive_maneuver_passive"],
     "currency_drop": {
-        "c_min": 5, "c_max": 15, 
-        "s_chance": 10, "s_min": 1, "s_max": 2,
-        "g_chance": 0, "g_min": 0, "g_max": 0,
-        "p_chance": 0, "p_min": 0, "p_max": 0
+        "c_min": 5, "c_max": 15, "s_chance": 10, "s_min": 1, "s_max": 2, "g_chance": 0, "g_min": 0, "g_max": 0, "p_chance": 0, "p_min": 0, "p_max": 0
     }
   },
   {
@@ -57,14 +51,153 @@
     "attack_speed_secs": 2.0,
     "aggro_radius": 10,
     "roam_radius": 0, 
-    "faction_tags": ["construct", "security"],
-    "loot_table_tags": ["construct_parts_common", "tech_scrap"],
-    "special_abilities": ["self_repair_protocol_passive"],
+    "faction_tags": ["construct", "security", "neutral_guard"],
+    "loot_table_tags": ["construct_parts_common", "tech_scrap", "tier1_tech"],
+    "special_abilities": ["self_repair_protocol_passive", "arc_discharge_active"],
     "currency_drop": {
-        "c_min": 0, "c_max": 0, 
-        "s_chance": 20, "s_min": 1, "s_max": 5,
-        "g_chance": 5, "g_min": 1, "g_max": 1,
-        "p_chance": 0, "p_min": 0, "p_max": 0
+        "c_min": 0, "c_max": 0, "s_chance": 20, "s_min": 1, "s_max": 5, "g_chance": 5, "g_min": 1, "g_max": 1, "p_chance": 0, "p_min": 0, "p_max": 0
+    }
+  },
+  {
+    "name": "Forest Spider",
+    "description": "A large, hairy spider with too many eyes. It scuttles menacingly.",
+    "level": 2,
+    "base_health": 15,
+    "base_mana": 10,
+    "base_attack": "1d6",
+    "base_defense": 12,
+    "xp_value": 12,
+    "attack_speed_secs": 2.8,
+    "aggro_radius": 6,
+    "roam_radius": 4,
+    "dialogue_lines": ["*Hiss*", "*Clicking mandibles*"],
+    "faction_tags": ["arachnid", "beast", "hostile_critter"],
+    "loot_table_tags": ["spider_parts", "tier1_beast_loot"],
+    "special_abilities": ["poison_bite_active", "web_shot_utility"],
+    "currency_drop": {
+        "c_min": 2, "c_max": 8, "s_chance": 5, "s_min": 1, "s_max": 1, "g_chance": 0, "g_min": 0, "g_max": 0, "p_chance": 0, "p_min": 0, "p_max": 0
+    }
+  },
+  {
+    "name": "Lost Soul",
+    "description": "A shimmering, translucent figure that wails mournfully. It seems trapped between worlds.",
+    "level": 4,
+    "base_health": 30,
+    "base_mana": 20,
+    "base_attack": "1d8", 
+    "base_defense": 10, 
+    "xp_value": 35,
+    "attack_speed_secs": 3.5,
+    "aggro_radius": 5,
+    "roam_radius": 2,
+    "dialogue_lines": ["Why...?", "So cold...", "Lost... forever..."],
+    "faction_tags": ["undead", "spirit", "neutral_ethereal"],
+    "loot_table_tags": ["ectoplasm", "spirit_essence", "tier2_ethereal"],
+    "special_abilities": ["ethereal_form_passive", "chilling_touch_active"],
+    "properties": {"damage_type_override": "cold"},
+    "currency_drop": {
+        "c_min": 0, "c_max": 0, "s_chance": 15, "s_min": 3, "s_max": 7, "g_chance": 2, "g_min": 1, "g_max": 1, "p_chance": 0, "p_min": 0, "p_max": 0
+    }
+  },
+  {
+    "name": "Dust Devil",
+    "description": "A small whirlwind of sand and grit, animated by some unknown force.",
+    "level": 3,
+    "base_health": 22,
+    "base_mana": 0,
+    "base_attack": "1d6",
+    "base_defense": 15,
+    "xp_value": 20,
+    "attack_speed_secs": 2.2,
+    "aggro_radius": 6,
+    "roam_radius": 6,
+    "dialogue_lines": ["*Whirls angrily*", "*Grinding noises*"],
+    "faction_tags": ["elemental", "air_elemental", "neutral_elemental"],
+    "loot_table_tags": ["elemental_mote_air", "tier1_elemental"],
+    "special_abilities": ["sand_blast_active", "evasion_aura_passive"],
+    "currency_drop": {
+        "c_min": 10, "c_max": 25, "s_chance": 0, "s_min": 0, "s_max": 0, "g_chance": 0, "g_min": 0, "g_max": 0, "p_chance": 0, "p_min": 0, "p_max": 0
+    }
+  },
+  {
+    "name": "Bandit Thug",
+    "description": "A burly human with a scarred face and a mean-looking club. Smells of stale ale and desperation.",
+    "level": 4,
+    "base_health": 35,
+    "base_mana": 0,
+    "base_attack": "1d8",
+    "base_defense": 12,
+    "xp_value": 30,
+    "attack_speed_secs": 3.2,
+    "aggro_radius": 8,
+    "roam_radius": 3,
+    "dialogue_lines": ["Your money or your life!", "Stand and deliver!", "Shouldn't have come here!"],
+    "faction_tags": ["humanoid", "bandit", "hostile_humanoid"],
+    "loot_table_tags": ["bandit_gear", "stolen_goods_common", "tier2_humanoid"],
+    "special_abilities": ["intimidating_shout_active"],
+    "currency_drop": {
+        "c_min": 15, "c_max": 40, "s_chance": 25, "s_min": 2, "s_max": 5, "g_chance": 5, "g_min": 1, "g_max": 2, "p_chance": 0, "p_min": 0, "p_max": 0
+    }
+  },
+  {
+    "name": "Cave Bat Swarm",
+    "description": "A disorienting cloud of screeching bats, their tiny teeth glinting.",
+    "level": 3,
+    "base_health": 20, 
+    "base_mana": 0,
+    "base_attack": "1d3", 
+    "base_defense": 14,
+    "xp_value": 18,
+    "attack_speed_secs": 1.5, 
+    "aggro_radius": 5,
+    "roam_radius": 2,
+    "dialogue_lines": ["*High-pitched screeches*"],
+    "faction_tags": ["beast", "swarm", "hostile_critter"],
+    "loot_table_tags": ["bat_parts", "tier1_swarm_remains"],
+    "special_abilities": ["disorienting_flutter_passive", "multi_attack_swarm_passive"],
+    "properties": {"is_swarm": true, "swarm_attacks_count": 3},
+    "currency_drop": {
+        "c_min": 3, "c_max": 10, "s_chance": 0, "s_min": 0, "s_max": 0, "g_chance": 0, "g_min": 0, "g_max": 0, "p_chance": 0, "p_min": 0, "p_max": 0
+    }
+  },
+  {
+    "name": "Animated Armor",
+    "description": "An empty suit of plate armor that moves with an eerie, clanking grace. No one appears to be inside.",
+    "level": 5,
+    "base_health": 45,
+    "base_mana": 0,
+    "base_attack": "1d10",
+    "base_defense": 18,
+    "xp_value": 50,
+    "attack_speed_secs": 3.8,
+    "aggro_radius": 6,
+    "roam_radius": 0,
+    "dialogue_lines": ["*Clank*", "*Scrape*", "*Whirr*"],
+    "faction_tags": ["construct", "guardian", "neutral_guard"],
+    "loot_table_tags": ["construct_parts_rare", "enchanted_metal_shards", "tier2_construct"],
+    "special_abilities": ["damage_resistance_physical_passive", "magic_immunity_partial_passive"],
+    "currency_drop": {
+        "c_min": 0, "c_max": 0, "s_chance": 30, "s_min": 5, "s_max": 10, "g_chance": 10, "g_min": 1, "g_max": 3, "p_chance": 0, "p_min": 0, "p_max": 0
+    }
+  },
+  {
+    "name": "Dire Wolf",
+    "description": "A massive wolf with fur as dark as night and eyes that burn with a primal fury. Its growl is a promise of pain.",
+    "level": 6,
+    "base_health": 60,
+    "base_mana": 10,
+    "base_attack": "2d6",
+    "base_defense": 15,
+    "xp_value": 75,
+    "attack_speed_secs": 3.0,
+    "aggro_radius": 9,
+    "roam_radius": 7,
+    "dialogue_lines": ["*Snarl*", "*Deep Growl*", "*Howl*"],
+    "faction_tags": ["beast", "canine", "predator", "hostile_alpha"],
+    "loot_table_tags": ["dire_wolf_pelt", "large_beast_trophy", "tier3_beast_loot"],
+    "special_abilities": ["pack_tactics_passive", "powerful_bite_active", "howl_buff_aura_active"],
+    "currency_drop": {
+        "c_min": 0, "c_max": 0, "s_chance": 5, "s_min": 10, "s_max": 20, "g_chance": 1, "g_min": 1, "g_max": 2, "p_chance": 0, "p_min": 0, "p_max": 0
     }
   }
 ]

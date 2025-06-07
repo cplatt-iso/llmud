@@ -137,7 +137,7 @@ async def websocket_game_endpoint(
 
             # It's crucial to get fresh state at the beginning of each command processing loop
             with get_db_sync() as db_loop: 
-                current_char_state = crud.crud_character.get_character(db_loop, character_id=character_orm.id) # Use original character_orm.id
+                current_char_state = crud.crud_character.get_character(db_loop, character_id=character_orm.id)
                 if not current_char_state: 
                     logger.error(f"WS Loop: Character state lost for char_id: {character_orm.id}.")
                     await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="Character state lost in loop")
@@ -265,6 +265,14 @@ async def websocket_game_endpoint(
                         if not is_interactable_action_handled:
                             # If not any of the above, it's an unknown command for WebSocket
                             await combat.send_combat_log(player.id, [f"Unrecognized command via WebSocket: '{command_text}'. Try 'help' (HTTP)."], room_data=current_room_schema_for_command)
+                
+                    try:
+                        db_loop.commit() # Commit changes made by the handler
+                        logger.debug(f"WS Router: DB commit successful for command '{command_text}' by {current_char_state.name}")
+                    except Exception as e_commit:
+                        db_loop.rollback()
+                        logger.error(f"WS Router: DB commit failed for command '{command_text}' by {current_char_state.name}: {e_commit}", exc_info=True)
+                        await combat.send_combat_log(player.id, ["A glitch in the matrix occurred. Your last action may not have saved."], room_data=current_room_schema_for_command) # Send error to player
                 
                 elif message_type != "command": 
                     await combat.send_combat_log(player.id, [f"Unrecognized message type: {message_type}."], room_data=current_room_schema_for_command)
