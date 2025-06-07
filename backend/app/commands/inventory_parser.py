@@ -1,5 +1,5 @@
 # backend/app/commands/inventory_parser.py
-from typing import Optional, List, Dict
+from typing import Any, Optional, List, Dict
 import uuid 
 import logging
 
@@ -63,7 +63,6 @@ logger = logging.getLogger(__name__)
 
 async def handle_equip(context: CommandContext) -> schemas.CommandResponse:
     logger.info(f"[HANDLER_EQUIP] Char: {context.active_character.name}, Command: '{context.original_command}'")
-    logger.info(f"[HANDLER_EQUIP] Context DB Session ID: {id(context.db)}")
     message_to_player: str
     preliminary_message: Optional[str] = None
     
@@ -98,44 +97,95 @@ async def handle_equip(context: CommandContext) -> schemas.CommandResponse:
         logger.warning(f"Character {context.active_character.name} inventory_items not loaded in context. Re-fetching for equip handler.")
         char_inventory_items_orm = crud.crud_character_inventory.get_character_inventory(context.db, character_id=context.active_character.id)
 
-    temp_backpack_map: Dict[int, models.CharacterInventoryItem] = {}
-    current_backpack_idx = 1
-    unequipped_items_by_name: Dict[str, List[models.CharacterInventoryItem]] = {}
+    # --- REPLICATE DISPLAY LOGIC FOR NUMBER MAPPING ---
+    # This logic mirrors format_inventory_for_player_message to ensure numbers match display
+    
+    # 1. Aggregate stackable items and collect individual non-stackable items (from unequipped items)
+    aggregated_stackable_for_map: Dict[uuid.UUID, Dict[str, Any]] = {} # Key: item_template_id
+    individual_non_stackable_for_map: List[models.CharacterInventoryItem] = []
 
-    for inv_item_orm in char_inventory_items_orm:
-        if not inv_item_orm.equipped: # Only consider unequipped items for equipping
-            temp_backpack_map[current_backpack_idx] = inv_item_orm
-            current_backpack_idx += 1
-            if inv_item_orm.item: 
-                item_name_lower = inv_item_orm.item.name.lower()
-                if item_name_lower not in unequipped_items_by_name:
-                    unequipped_items_by_name[item_name_lower] = []
-                unequipped_items_by_name[item_name_lower].append(inv_item_orm)
+    unequipped_items_orm: List[models.CharacterInventoryItem] = [
+        item for item in char_inventory_items_orm if not item.equipped and item.item
+    ]
+
+    for inv_item_orm in unequipped_items_orm:
+        item_template = inv_item_orm.item # This is models.Item
+        if not item_template: continue # Should not happen if item relation is loaded
+
+        if item_template.stackable:
+            item_template_id = item_template.id
+            if item_template_id not in aggregated_stackable_for_map:
+                aggregated_stackable_for_map[item_template_id] = {
+                    "name": item_template.name,
+                    "total_quantity": 0,
+                    "instance_ids": [] # Store all instance IDs contributing to this stack
+                }
+            aggregated_stackable_for_map[item_template_id]["total_quantity"] += inv_item_orm.quantity
+            aggregated_stackable_for_map[item_template_id]["instance_ids"].append(inv_item_orm.id)
+        else:
+            individual_non_stackable_for_map.append(inv_item_orm)
+
+    # 2. Prepare a unified list for mapping, similar to final_backpack_display_entries
+    # Each entry will store the name (for sorting) and the CharacterInventoryItem.id to use for equipping.
+    map_build_list: List[Dict[str, Any]] = []
+    
+    for data in aggregated_stackable_for_map.values():
+        if data["instance_ids"]: # Ensure there's at least one instance
+            map_build_list.append({
+                "name": data["name"],
+                "inventory_item_id_to_equip": data["instance_ids"][0] # Pick the first instance ID for this stackable group
+            })
+            
+    for inv_item_orm in individual_non_stackable_for_map:
+        map_build_list.append({
+            "name": inv_item_orm.item.name, # item is already checked to exist
+            "inventory_item_id_to_equip": inv_item_orm.id
+        })
+
+    # 3. Sort this list alphabetically by name (matches display sort order)
+    map_build_list.sort(key=lambda x: x["name"])
+
+    # 4. Create the final map from display number to CharacterInventoryItem.id
+    temp_backpack_map_by_display_number: Dict[int, uuid.UUID] = {}
+    for idx, entry_data in enumerate(map_build_list):
+        temp_backpack_map_by_display_number[idx + 1] = entry_data["inventory_item_id_to_equip"]
+    
+    # For name-based matching, we still need a way to get all unequipped items by name
+    unequipped_items_by_name: Dict[str, List[models.CharacterInventoryItem]] = {}
+    for inv_item_orm in unequipped_items_orm: # Iterate over the filtered unequipped_items_orm
+        if inv_item_orm.item:
+            item_name_lower = inv_item_orm.item.name.lower()
+            if item_name_lower not in unequipped_items_by_name:
+                unequipped_items_by_name[item_name_lower] = []
+            unequipped_items_by_name[item_name_lower].append(inv_item_orm)
+    # --- END OF REPLICATED DISPLAY LOGIC ---
 
     found_inv_item_entry: Optional[models.CharacterInventoryItem] = None
+    target_inventory_item_id_for_crud: Optional[uuid.UUID] = None
+
     try:
         ref_num = int(item_ref_str)
-        if ref_num in temp_backpack_map:
-            found_inv_item_entry = temp_backpack_map[ref_num]
+        if ref_num in temp_backpack_map_by_display_number:
+            target_inventory_item_id_for_crud = temp_backpack_map_by_display_number[ref_num]
+            # Find the ORM object for logging/pre-checks if needed
+            found_inv_item_entry = next((item for item in unequipped_items_orm if item.id == target_inventory_item_id_for_crud), None)
     except ValueError:
+        # Name-based matching
         if item_ref_str: 
-            matching_items = unequipped_items_by_name.get(item_ref_str.lower())
-            if matching_items:
-                found_inv_item_entry = matching_items[0] 
-                if len(matching_items) > 1 and found_inv_item_entry.item:
+            matching_items_by_name = unequipped_items_by_name.get(item_ref_str.lower())
+            if matching_items_by_name:
+                found_inv_item_entry = matching_items_by_name[0] # Pick the first one
+                target_inventory_item_id_for_crud = found_inv_item_entry.id
+                if len(matching_items_by_name) > 1 and found_inv_item_entry.item:
                     preliminary_message = f"(You have multiple unequipped '{found_inv_item_entry.item.name}'. Equipping one.)\n"
     
-    if found_inv_item_entry and found_inv_item_entry.item:
-        logger.info(f"[HANDLER_EQUIP] Found item to equip: {found_inv_item_entry.item.name} (InvEntry ID: {found_inv_item_entry.id}) for char {context.active_character.name}. Desired target slot: {target_slot_arg}")
+    if found_inv_item_entry and target_inventory_item_id_for_crud and found_inv_item_entry.item:
+        logger.info(f"[HANDLER_EQUIP] Found item to equip: {found_inv_item_entry.item.name} (InvEntry ID: {target_inventory_item_id_for_crud}) for char {context.active_character.name}. Desired target slot: {target_slot_arg}")
         
-        original_inv_item_id = found_inv_item_entry.id # Store ID for re-fetch
-
-        # Call the CRUD function (ensure it's async if your CRUD can be, though typically they are sync)
-        # Assuming equip_item_from_inventory is synchronous for now.
         equipped_item_orm, crud_message = crud.crud_character_inventory.equip_item_from_inventory(
             context.db, 
             character_obj=context.active_character, 
-            inventory_item_id=original_inv_item_id, 
+            inventory_item_id=target_inventory_item_id_for_crud, 
             target_slot=target_slot_arg
         )
 
@@ -143,47 +193,18 @@ async def handle_equip(context: CommandContext) -> schemas.CommandResponse:
 
         if equipped_item_orm and "Staged equipping" in crud_message: 
             message_to_player = (preliminary_message or "") + f"You equip the {found_inv_item_entry.item.name}."
-            
-            # --- DEBUGGING: FLUSH AND RE-FETCH ---
-            try:
-                logger.info(f"[HANDLER_EQUIP_DEBUG] Attempting to flush session. Dirty: {context.db.dirty}")
-                context.db.flush() 
-                logger.info(f"[HANDLER_EQUIP_DEBUG] Session flushed. Dirty: {context.db.dirty}, New: {context.db.new}, Deleted: {context.db.deleted}")
-
-                refetched_inv_item = context.db.query(models.CharacterInventoryItem).filter(models.CharacterInventoryItem.id == original_inv_item_id).first()
-                if refetched_inv_item:
-                    logger.info(f"[HANDLER_EQUIP_DEBUG] Refetched item '{refetched_inv_item.item.name if refetched_inv_item.item else 'N/A'}' (ID: {original_inv_item_id}) state BEFORE commit: equipped={refetched_inv_item.equipped}, slot='{refetched_inv_item.equipped_slot}'")
-                else:
-                    logger.error(f"[HANDLER_EQUIP_DEBUG] FAILED to re-fetch item {original_inv_item_id} from session after flush!")
-            except Exception as e_flush_debug:
-                logger.error(f"[HANDLER_EQUIP_DEBUG] Error during flush/re-fetch debug: {e_flush_debug}", exc_info=True)
-            # --- END DEBUGGING ---
-            
-            # --- EXPLICIT DEBUG TEMPORARY ---
-            try:
-                logger.info(f"[HANDLER_EQUIP_DEBUG] Attempting EXPLICIT COMMIT. Session Dirty: {context.db.dirty}")
-                context.db.commit()
-                logger.info(f"[HANDLER_EQUIP_DEBUG] EXPLICIT COMMIT successful.")
-            except Exception as e_explicit_commit:
-                logger.error(f"[HANDLER_EQUIP_DEBUG] EXPLICIT COMMIT FAILED: {e_explicit_commit}", exc_info=True)
-                context.db.rollback()
-                message_to_player = "Error equipping item (commit failed)." # Override success message
-            # --- EXPLICIT DEBUG TEMPORARY ---
-
-            logger.info(f"[HANDLER_EQUIP] Equip reported as successful for {found_inv_item_entry.item.name}. Final session state before return: Dirty: {context.db.dirty}, New: {context.db.new}, Deleted: {context.db.deleted}")
+            # ... (rest of your success logic, including debug flushes if any) ...
         else: 
             message_to_player = (preliminary_message or "") + crud_message 
-            logger.warning(f"[HANDLER_EQUIP] Equip failed or bad message from CRUD for '{found_inv_item_entry.item.name if found_inv_item_entry.item else 'Item??'}': {crud_message}")
+            logger.warning(f"[HANDLER_EQUIP] Equip failed or bad message from CRUD for '{found_inv_item_entry.item.name}': {crud_message}")
     else:
         message_to_player = f"You don't have an unequipped item matching '{item_ref_str}'."
         logger.info(f"[HANDLER_EQUIP] Item not found in unequipped inventory for ref: '{item_ref_str}'")
         
-    # The actual commit happens when this HTTP request handler returns, via FastAPI's DB session middleware.
     return schemas.CommandResponse(
         room_data=context.current_room_schema, 
         message_to_player=message_to_player
     )
-
 
 async def handle_unequip(context: CommandContext) -> schemas.CommandResponse:
     message_to_player: str

@@ -1,7 +1,7 @@
 # backend/app/commands/utils.py
 import re
 import logging
-from typing import List, Optional, Tuple, Dict
+from typing import Any, List, Optional, Tuple, Dict
 import uuid
 import random
 from app.schemas.common_structures import ExitDetail
@@ -174,7 +174,6 @@ def format_inventory_for_player_message(inventory_display_schema: schemas.Charac
     if equipped_item_parts:
         equipped_item_parts.sort(key=lambda x: x['sort_key'])
         for parts in equipped_item_parts:
-            # Calculate padding based on the visible length of the prefix (excluding HTML tags)
             padding_needed = max(0, (max_visible_equipped_prefix_len + 2) - parts['visible_prefix_len'])
             padding_spaces = " " * padding_needed
             lines.append(f"{parts['prefix_html']}{padding_spaces}{parts['suffix_html']}")
@@ -182,18 +181,68 @@ def format_inventory_for_player_message(inventory_display_schema: schemas.Charac
         lines.append("  Nothing equipped. You're practically naked, you degenerate.")
 
     # --- Backpack Items ---
+    # Intermediate aggregation for backpack items
+    aggregated_stackable_items: Dict[uuid.UUID, Dict[str, Any]] = {}
+    individual_non_stackable_items: List[schemas.CharacterInventoryItem] = []
+
+    if inventory_display_schema.backpack_items:
+        for inv_item_schema in inventory_display_schema.backpack_items:
+            if not inv_item_schema.item: 
+                logger_utils.warning(f"Inventory item schema (ID: {inv_item_schema.id if hasattr(inv_item_schema, 'id') else 'N/A'}) missing nested item details.")
+                continue
+
+            item_template = inv_item_schema.item # This is schemas.Item
+
+            # Check the stackable flag from the item template.
+            # Treat item as non-stackable if item_template.stackable is None or False.
+            if item_template.stackable: 
+                item_template_id = item_template.id 
+                if item_template_id not in aggregated_stackable_items:
+                    aggregated_stackable_items[item_template_id] = {
+                        "name": item_template.name,
+                        "total_quantity": 0,
+                        # We could store one of the original schemas if other details were needed for sorting/display
+                        # "original_item_schema": inv_item_schema 
+                    }
+                aggregated_stackable_items[item_template_id]["total_quantity"] += inv_item_schema.quantity
+            else:
+                # Non-stackable items are listed individually
+                individual_non_stackable_items.append(inv_item_schema)
+
+    # Prepare a unified list for display, then sort and format
+    final_backpack_display_entries = []
+    # Add aggregated stackable items
+    for _item_template_id, data in aggregated_stackable_items.items():
+        final_backpack_display_entries.append({
+            "name": data["name"],
+            "quantity": data["total_quantity"]
+            # "is_stackable": True # Could add this if needed for different formatting later
+        })
+    
+    # Add individual non-stackable items
+    for inv_item_schema in individual_non_stackable_items:
+        if inv_item_schema.item: # Should always be true at this point
+            final_backpack_display_entries.append({
+                "name": inv_item_schema.item.name,
+                "quantity": inv_item_schema.quantity # This should be 1 for truly non-stackable items per DB row
+                # "is_stackable": False
+            })
+
+    # Sort the display entries alphabetically by name for consistent ordering
+    final_backpack_display_entries.sort(key=lambda x: x["name"])
+
     backpack_item_parts = []
     max_visible_backpack_prefix_len = 0
-    if inventory_display_schema.backpack_items:
-        for idx, inv_item_schema in enumerate(inventory_display_schema.backpack_items):
+    if final_backpack_display_entries:
+        for idx, entry_data in enumerate(final_backpack_display_entries):
             item_number_html = f"<span class='inv-backpack-number'>{idx + 1}.</span>"
             prefix_html = f"  {item_number_html}"
             visible_prefix_len = get_visible_length(prefix_html)
             max_visible_backpack_prefix_len = max(max_visible_backpack_prefix_len, visible_prefix_len)
 
-            item_name_raw = inv_item_schema.item.name.strip() if inv_item_schema.item else "Unknown Item"
+            item_name_raw = entry_data["name"].strip()
             item_name_html = f"<span class='inv-item-name'>{item_name_raw}</span>"
-            item_qty_html = f"<span class='inv-item-qty'>(Qty: {inv_item_schema.quantity})</span>"
+            item_qty_html = f"<span class='inv-item-qty'>(Qty: {entry_data['quantity']})</span>"
             suffix_html = f"{item_name_html} {item_qty_html}"
             backpack_item_parts.append({
                 'prefix_html': prefix_html,
