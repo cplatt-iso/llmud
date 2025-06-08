@@ -55,7 +55,10 @@ from app.game_logic.world_ticker import start_world_ticker_task, stop_world_tick
 logger.debug("--- main.py - Imported world_ticker tasks ---")
 from app.crud.crud_mob_spawn_definition import seed_initial_mob_spawn_definitions 
 logger.debug("--- main.py - Imported seed_initial_mob_spawn_definitions ---")
-
+from app.crud.crud_npc import seed_initial_npc_templates
+logger.debug("--- main.py - Imported seed_initial_npc_templates ---")
+from app.game_logic.npc_dialogue_ticker import start_dialogue_ticker_task, stop_dialogue_ticker_task
+logger.debug("--- main.py - Imported npc_dialogue_ticker shit ---")
 logger.debug("--- main.py - About to call Base.metadata.create_all(bind=engine) ---")
 try:
     base_class.Base.metadata.create_all(bind=engine)
@@ -88,6 +91,9 @@ def on_startup_sync():
         # 3. THEN other things
         seed_initial_mob_templates(db)        
         logger.debug("--- main.py - on_startup_sync: seed_initial_mob_templates COMPLETED ---")
+
+        seed_initial_npc_templates(db) # <<< ADD THIS LINE
+        logger.debug("--- main.py - on_startup_sync: seed_initial_npc_templates COMPLETED ---")
         
         seed_initial_character_class_templates(db)
         logger.debug("--- main.py - on_startup_sync: seed_initial_character_class_templates COMPLETED ---")
@@ -104,6 +110,10 @@ def on_startup_sync():
         logger.info("--- main.py - on_startup_sync: Starting combat ticker... ---")
         start_combat_ticker_task()
         logger.debug("--- main.py - on_startup_sync: Combat ticker STARTED ---")      
+
+        logger.info("--- main.py - on_startup_sync: Starting NPC dialogue ticker... ---")
+        start_dialogue_ticker_task()        
+        logger.info("--- main.py - on_startup_sync: Startup event processing FINISHED ---")
 
         logger.info("--- main.py - on_startup_sync: Starting world ticker... ---") 
         start_world_ticker_task()    

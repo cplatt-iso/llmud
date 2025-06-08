@@ -466,5 +466,25 @@
       "x": -1, "y": 0, "z": 0,
       "room_type": "standard"
     }
+  },
+  {
+    "unique_tag": "weapon_shop_m2_0_0",
+    "data": {
+      "name": "Bjorne's Brutal Blades",
+      "description": "The air in this chamber is thick with the smell of coal smoke and hot metal. Racks of swords, axes, and maces line the walls, each one gleaming with a dangerous edge. A massive anvil and a smoldering forge dominate the center of the room.",
+      "x": -2, "y": 0, "z": 0,
+      "room_type": "shop",
+      "npc_placements": ["weapon_smith_bjorne"]
+    }
+  },
+  {
+    "unique_tag": "armor_shop_m2_m1_0",
+    "data": {
+      "name": "The Silent Stitch",
+      "description": "Unlike the noisy forge next door, this room is quiet and orderly. Mannequins wearing various pieces of leather and studded armor stand in silent judgment. Rolls of tanned hide and spools of thick waxed thread are neatly arranged on a large workbench.",
+      "x": -2, "y": -1, "z": 0,
+      "room_type": "shop",
+      "npc_placements": ["armor_smith_elara"]
+    }
   }
 ]

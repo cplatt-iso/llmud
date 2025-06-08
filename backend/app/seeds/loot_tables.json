@@ -1,0 +1,90 @@
+{
+  "vermin_common": [
+    { "item_ref": "Rat Tail", "chance": 50, "min_qty": 1, "max_qty": 1 },
+    { "item_ref": "Cracked Tooth", "chance": 25, "min_qty": 1, "max_qty": 1 }
+  ],
+  "small_beast_parts": [
+    { "item_ref": "Beast Pelt (Small)", "chance": 30, "min_qty": 1, "max_qty": 1 },
+    { "item_ref": "Animal Bone", "chance": 60, "min_qty": 1, "max_qty": 2 }
+  ],
+  "tier1_trash": [
+    { "item_ref": "Old Boot", "chance": 10, "min_qty": 1, "max_qty": 1 },
+    { "item_ref": "Rusty Tin Can", "chance": 15, "min_qty": 1, "max_qty": 1 }
+  ],
+  "goblin_common": [
+    { "item_ref": "Goblin Ear", "chance": 40, "min_qty": 1, "max_qty": 2 },
+    { "item_ref": "Crude Dagger Scrap", "chance": 20, "min_qty": 1, "max_qty": 1 },
+    { "item_ref": "Torn Pouch", "chance": 30, "min_qty": 1, "max_qty": 1 }
+  ],
+  "crude_gear": [
+    { "item_ref": "Rusty Sword", "chance": 5, "min_qty": 1, "max_qty": 1 },
+    { "item_ref": "Dagger", "chance": 8, "min_qty": 1, "max_qty": 1 },
+    { "item_ref": "Wooden Shield", "chance": 3, "min_qty": 1, "max_qty": 1 }
+  ],
+  "construct_parts_common": [
+    { "item_ref": "Bent Gear", "chance": 50, "min_qty": 1, "max_qty": 3 },
+    { "item_ref": "Frayed Wire", "chance": 40, "min_qty": 1, "max_qty": 2 },
+    { "item_ref": "Small Lens", "chance": 15, "min_qty": 1, "max_qty": 1 }
+  ],
+  "tech_scrap": [
+    { "item_ref": "Scrap Metal", "chance": 60, "min_qty": 1, "max_qty": 5 }
+  ],
+  "spider_parts": [
+    { "item_ref": "Spider Silk Gland", "chance": 35, "min_qty": 1, "max_qty": 1 },
+    { "item_ref": "Spider Fang", "chance": 25, "min_qty": 1, "max_qty": 2 }
+  ],
+  "tier1_beast_loot": [
+    { "item_ref": "Beast Meat", "chance": 40, "min_qty": 1, "max_qty": 1 }
+  ],
+  "ectoplasm": [
+    { "item_ref": "Ectoplasmic Residue", "chance": 70, "min_qty": 1, "max_qty": 3 }
+  ],
+  "spirit_essence": [
+    { "item_ref": "Faint Spirit Essence", "chance": 25, "min_qty": 1, "max_qty": 1 }
+  ],
+  "tier2_ethereal": [
+    { "item_ref": "Ghostly Shroud Scrap", "chance": 10, "min_qty": 1, "max_qty": 1 }
+  ],
+  "elemental_mote_air": [
+    { "item_ref": "Whirling Dust Mote", "chance": 60, "min_qty": 1, "max_qty": 2 }
+  ],
+  "tier1_elemental": [
+    { "item_ref": "Charged Sand", "chance": 20, "min_qty": 1, "max_qty": 1 }
+  ],
+  "stolen_goods_common": [
+    { "item_ref": "Cheap Locket", "chance": 15, "min_qty": 1, "max_qty": 1 },
+    { "item_ref": "Bent Silver Spoon", "chance": 20, "min_qty": 1, "max_qty": 1 }
+  ],
+  "tier2_humanoid": [
+    { "item_ref": "Sharpened Bone", "chance": 30, "min_qty": 1, "max_qty": 1 }
+  ],
+  "bat_parts": [
+    { "item_ref": "Bat Wing", "chance": 70, "min_qty": 1, "max_qty": 2 }
+  ],
+  "tier1_swarm_remains": [
+    { "item_ref": "Guano", "chance": 20, "min_qty": 1, "max_qty": 3 }
+  ],
+  "construct_parts_rare": [
+    { "item_ref": "Intact Servomotor", "chance": 10, "min_qty": 1, "max_qty": 1 }
+  ],
+  "enchanted_metal_shards": [
+    { "item_ref": "Faintly Glowing Shard", "chance": 20, "min_qty": 1, "max_qty": 2 }
+  ],
+  "tier2_construct": [
+    { "item_ref": "Polished Steel Plate", "chance": 5, "min_qty": 1, "max_qty": 1 }
+  ],
+  "dire_wolf_pelt": [
+    { "item_ref": "Dire Wolf Pelt", "chance": 60, "min_qty": 1, "max_qty": 1 }
+  ],
+  "large_beast_trophy": [
+    { "item_ref": "Large Wolf Fang", "chance": 30, "min_qty": 1, "max_qty": 1 }
+  ],
+  "tier3_beast_loot": [
+    { "item_ref": "Prime Beast Meat", "chance": 15, "min_qty": 1, "max_qty": 1 }
+  ],
+  "bandit_gear": [
+    { "item_ref": "Tarnished Ring", "chance": 5, "min_qty": 1, "max_qty": 1 },
+    { "item_ref": "Studded Leather Jerkin", "chance": 5, "min_qty": 1, "max_qty": 1 },
+    { "item_ref": "Patched Leather Jerkin", "chance": 10, "min_qty": 1, "max_qty": 1 }
+  ]
+}

@@ -34,3 +34,7 @@ from .mob_spawn_definition import (
     MobSpawnDefinitionBase, MobSpawnDefinitionCreate, MobSpawnDefinitionUpdate, MobSpawnDefinition
 )
 from .common_structures import ExitDetail, InteractableDetail, ExitSkillToPickDetail, InteractableEffectDetail 
+from .npc import (
+    NpcTemplateBase, NpcTemplateCreate, NpcTemplateUpdate, NpcTemplateInDB,
+    RoomNpcInstance
+)

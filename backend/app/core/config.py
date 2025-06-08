@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     
     DATABASE_URL: Optional[str] = "postgresql://dummy_user:dummy_password@dummy_host:5432/dummy_db" if IS_ALEMBIC_ENV_PY_CONTEXT else os.getenv("DATABASE_URL", "postgresql://user:password@db/llmud_db") # Added os.getenv for normal case
     SECRET_KEY: str = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7" # CHANGE THIS IN PRODUCTION!
+    GEMINI_API_KEY: Optional[str] = None
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7 # Token expires in 7 days
 

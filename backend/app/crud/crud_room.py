@@ -78,7 +78,7 @@ def update_room(db: Session, *, db_room: models.Room, room_in: schemas.RoomUpdat
         if current_value != value:
             setattr(db_room, field, value)
             # For JSONB fields, ensure SQLAlchemy detects changes
-            if field in ["exits", "interactables"]: 
+            if field in ["exits", "interactables", "npc_placements"]:
                 attributes.flag_modified(db_room, field)
             changed = True
             
@@ -86,6 +86,26 @@ def update_room(db: Session, *, db_room: models.Room, room_in: schemas.RoomUpdat
         db.add(db_room) 
     # No commit here, handled by caller
     return db_room
+
+def get_npcs_in_room(db: Session, room: models.Room) -> List[models.NpcTemplate]:
+    """
+    Given a room ORM object, reads its 'npc_placements' field and fetches the
+    corresponding NpcTemplate objects from the database.
+    """
+    from . import crud_npc # Local import to prevent circular dependency issues
+
+    npc_templates = []
+    if not room or not room.npc_placements:
+        return npc_templates
+
+    for npc_tag in room.npc_placements:
+        npc_template = crud_npc.get_npc_template_by_tag(db, unique_name_tag=npc_tag)
+        if npc_template:
+            npc_templates.append(npc_template)
+        else:
+            logger.warning(f"Room '{room.name}' (ID: {room.id}) has placement for non-existent NPC with tag '{npc_tag}'.")
+
+    return npc_templates
 
 def seed_initial_world(db: Session):
     logger.info("Attempting to seed initial world (rooms and exits) from JSON files...")

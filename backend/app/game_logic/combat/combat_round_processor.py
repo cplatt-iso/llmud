@@ -357,7 +357,12 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
         "silver": character.silver_coins, "copper": character.copper_coins
     }
     
+    room_data_to_send = None
+    if character.current_room_id != room_of_action_orm.id:
+         room_data_to_send = schemas.RoomInDB.from_orm(final_room_for_payload_orm) if final_room_for_payload_orm else None
+
     await send_combat_log(
         player_id, round_log, combat_resolved_this_round, 
-        final_room_schema_for_payload, character_vitals=final_vitals_payload
+        room_data_to_send, # <<< USE THE NEW, CONDITIONAL VARIABLE
+        character_vitals=final_vitals_payload
     )

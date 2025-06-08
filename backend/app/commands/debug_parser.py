@@ -4,14 +4,18 @@ from .command_args import CommandContext # app.commands.command_args
 import shlex
 
 async def handle_giveme(context: CommandContext) -> schemas.CommandResponse:
-    message_to_player = "Debug: giveme what? (e.g., 'giveme Rusty Sword')"
+    message_to_player = "Debug: giveme what? (e.g., 'giveme \"Rusty Sword\"')"
     if context.args:
+        # Join all args to handle names with spaces, no shlex needed for this simple case
         item_name_to_give = " ".join(context.args).strip()
         item_template = crud.crud_item.get_item_by_name(context.db, name=item_name_to_give)
         if item_template:
             _, add_message = crud.crud_character_inventory.add_item_to_character_inventory(
                 context.db, character_obj=context.active_character, item_id=item_template.id, quantity=1
             )
+            context.db.commit() # Commit the change
+            # VERY IMPORTANT: Re-fetch the character to update relationships like inventory
+            context.active_character = crud.crud_character.get_character(context.db, character_id=context.active_character.id)
             message_to_player = add_message
         else:
             message_to_player = f"Debug: Item template '{item_name_to_give}' not found."

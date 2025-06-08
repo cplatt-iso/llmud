@@ -16,7 +16,8 @@ from app.game_logic import combat # For access to combat.active_combats, combat.
 from app.commands.utils import ( # General utils
     format_room_items_for_player_message,
     format_room_mobs_for_player_message,
-    format_room_characters_for_player_message
+    format_room_characters_for_player_message,
+    format_room_npcs_for_player_message
     # resolve_mob_target is used within ws_combat_actions_parser
     # resolve_room_item_target is used within ws_interaction_parser
 )
@@ -111,6 +112,10 @@ async def websocket_game_endpoint(
             chars_text_initial = format_room_characters_for_player_message(other_chars_in_room)
             if chars_text_initial: initial_messages.append(chars_text_initial)
     
+            npcs_in_room_welcome = crud.crud_room.get_npcs_in_room(db_welcome, room=initial_room_orm)
+            npcs_text_welcome = format_room_npcs_for_player_message(npcs_in_room_welcome)
+            if npcs_text_welcome: initial_messages.append(npcs_text_welcome)
+
     xp_for_next_level = crud.crud_character.get_xp_for_level(character_orm.level + 1)
     welcome_payload = {
         "type": "welcome_package",

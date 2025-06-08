@@ -107,6 +107,7 @@ async def attempt_player_move(
     if moved_successfully and target_room_orm_for_move:
         logger.info(f"[MOVE_COMMIT] Updating char room from {old_room_id} to {target_room_orm_for_move.id}")
         crud.crud_character.update_character_room(db, character_id=character_state.id, new_room_id=target_room_orm_for_move.id)
+        connection_manager.update_character_location(character_state.id, target_room_orm_for_move.id)
         # The commit for this update_character_room is handled by the main websocket_router loop after all command processing.
 
         new_room_schema = schemas.RoomInDB.from_orm(target_room_orm_for_move)

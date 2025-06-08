@@ -15,6 +15,17 @@ class ItemBase(BaseModel):
     stackable: bool = False
     max_stack_size: Optional[int] = Field(1, ge=1)
 
+class RoomItemInstanceBase(BaseModel):
+    quantity: int
+    item: 'Item' # Use the existing Item schema for the template details
+
+class RoomItemInstanceInDB(RoomItemInstanceBase):
+    id: uuid.UUID
+    room_id: uuid.UUID
+    item_id: uuid.UUID
+    
+    class Config:
+        from_attributes = True
 class ItemCreate(ItemBase):
     pass
 

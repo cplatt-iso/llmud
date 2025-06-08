@@ -51,6 +51,11 @@ class Room(Base):
         nullable=True, 
         default=lambda: []
     )
+    npc_placements: Mapped[Optional[List[str]]] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="List of unique_name_tags for NPC templates to be placed in this room."
+    )
     items_on_ground: Mapped[List["RoomItemInstance"]] = relationship(
         back_populates="room",
         cascade="all, delete-orphan",

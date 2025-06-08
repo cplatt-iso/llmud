@@ -346,5 +346,21 @@
   },
   {
     "source_tag": "west_corridor_m1_0_0", "direction": "east", "target_tag": "central_hub_0_0_0", "details": {}
+  },
+  {
+    "source_tag": "west_corridor_m1_0_0", "direction": "west", "target_tag": "weapon_shop_m2_0_0",
+    "details": {}
+  },
+  {
+    "source_tag": "weapon_shop_m2_0_0", "direction": "east", "target_tag": "west_corridor_m1_0_0",
+    "details": {}
+  },
+  {
+    "source_tag": "weapon_shop_m2_0_0", "direction": "south", "target_tag": "armor_shop_m2_m1_0",
+    "details": {}
+  },
+  {
+    "source_tag": "armor_shop_m2_m1_0", "direction": "north", "target_tag": "weapon_shop_m2_0_0",
+    "details": {}
   }
 ]

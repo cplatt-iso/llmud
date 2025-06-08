@@ -12,3 +12,4 @@ from .character_class_template import CharacterClassTemplate
 from .skill_template import SkillTemplate
 from .trait_template import TraitTemplate 
 from .mob_spawn_definition import MobSpawnDefinition
+from .npc_template import NpcTemplate

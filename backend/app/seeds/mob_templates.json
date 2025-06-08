@@ -9,7 +9,7 @@
     "base_defense": 11,
     "xp_value": 5,
     "attack_speed_secs": 2.5,
-    "aggro_radius": 4,
+    "aggro_radius": 0,
     "roam_radius": 3,
     "dialogue_lines": ["*Squeak!*", "Hisss...", "*Chitters angrily*"],
     "faction_tags": ["vermin", "beast", "neutral_critter"],

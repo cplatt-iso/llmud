@@ -2,6 +2,8 @@
 import logging
 import random
 import uuid
+import json
+import os
 from typing import List, Optional, Any, Dict, Tuple
 
 from sqlalchemy.orm import Session
@@ -13,6 +15,30 @@ from app.websocket_manager import connection_manager as ws_manager
 
 logger = logging.getLogger(__name__) # Assuming logging is set up
 
+# --- Path setup and Loot Table Loading ---
+# Correctly navigate from game_logic/combat up to app/ and then to seeds/
+COMBAT_UTILS_DIR = os.path.dirname(os.path.abspath(__file__))
+SEEDS_DIR = os.path.join(COMBAT_UTILS_DIR, '..', '..', 'seeds')
+
+def _load_loot_tables_from_json() -> Dict[str, Any]:
+    """Loads loot table definitions from a JSON file."""
+    filepath = os.path.join(SEEDS_DIR, 'loot_tables.json')
+    try:
+        with open(filepath, 'r') as f:
+            logger.info(f"Successfully loaded loot tables from {filepath}")
+            return json.load(f)
+    except FileNotFoundError:
+        logger.error(f"FATAL: Loot table file not found at {filepath}. No item loot will be dropped.")
+        return {}
+    except json.JSONDecodeError as e:
+        logger.error(f"FATAL: Could not decode JSON from {filepath}: {e}. No item loot will be dropped.")
+        return {}
+
+# Load loot tables once when the module is imported.
+LOADED_LOOT_TABLES = _load_loot_tables_from_json()
+
+
+# --- Constants and Maps ---
 direction_map = {"n": "north", "s": "south", "e": "east", "w": "west", "u": "up", "d": "down"}
 
 OPPOSITE_DIRECTIONS_MAP = {
@@ -20,37 +46,8 @@ OPPOSITE_DIRECTIONS_MAP = {
     "up": "down", "down": "up",
     "northeast": "southwest", "southwest": "northeast",
     "northwest": "southeast", "southeast": "northwest"
-    # Example of a problematic entry if it were a dict:
-    # "north": {"name": "south", "description": "the chilly south"} 
 }
 
-PLACEHOLDER_LOOT_TABLES: Dict[str, List[Tuple[str, int, int, int]]] = {
-    "vermin_common": [("Rat Tail", 50, 1, 1), ("Cracked Tooth", 25, 1, 1)],
-    "small_beast_parts": [("Beast Pelt (Small)", 30, 1, 1), ("Animal Bone", 60, 1, 2)],
-    "tier1_trash": [("Old Boot", 10, 1, 1), ("Rusty Tin Can", 15, 1, 1)],
-    "goblin_common": [("Goblin Ear", 40, 1, 2), ("Crude Dagger Scrap", 20, 1, 1), ("Torn Pouch", 30, 1, 1)],
-    "crude_gear": [("Rusty Sword", 5, 1, 1), ("Dagger", 8, 1, 1), ("Wooden Shield", 3, 1, 1)],
-    "construct_parts_common": [("Bent Gear", 50, 1, 3), ("Frayed Wire", 40, 1, 2), ("Small Lens", 15, 1, 1)],
-    "tech_scrap": [("Scrap Metal", 60, 1, 5)],
-    "spider_parts": [("Spider Silk Gland", 35, 1, 1), ("Spider Fang", 25, 1, 2)],
-    "tier1_beast_loot": [("Beast Meat", 40, 1, 1)],
-    "ectoplasm": [("Ectoplasmic Residue", 70, 1, 3)],
-    "spirit_essence": [("Faint Spirit Essence", 25, 1, 1)],
-    "tier2_ethereal": [("Ghostly Shroud Scrap", 10, 1, 1)],
-    "elemental_mote_air": [("Whirling Dust Mote", 60, 1, 2)],
-    "tier1_elemental": [("Charged Sand", 20, 1, 1)],
-    "bandit_gear": [("Tarnished Ring", 5, 1, 1), ("Patched Leather Jerkin", 10, 1, 1)], # Item names
-    "stolen_goods_common": [("Cheap Locket", 15, 1, 1), ("Bent Silver Spoon", 20, 1, 1)],
-    "tier2_humanoid": [("Sharpened Bone", 30, 1, 1)],
-    "bat_parts": [("Bat Wing", 70, 1, 2)],
-    "tier1_swarm_remains": [("Guano", 20, 1, 3)], # Charming
-    "construct_parts_rare": [("Intact Servomotor", 10, 1, 1)],
-    "enchanted_metal_shards": [("Faintly Glowing Shard", 20, 1, 2)],
-    "tier2_construct": [("Polished Steel Plate", 5, 1, 1)],
-    "dire_wolf_pelt": [("Dire Wolf Pelt", 60, 1, 1)],
-    "large_beast_trophy": [("Large Wolf Fang", 30, 1, 1)],
-    "tier3_beast_loot": [("Prime Beast Meat", 15, 1, 1)]
-}
 
 async def handle_mob_death_loot_and_cleanup(
     db: Session,
@@ -116,21 +113,27 @@ async def handle_mob_death_loot_and_cleanup(
     if mob_template.loot_table_tags:
         logger.debug(f"LOOT: Processing loot_table_tags: {mob_template.loot_table_tags} for {mob_template.name}")
         for loot_tag in mob_template.loot_table_tags:
-            if loot_tag in PLACEHOLDER_LOOT_TABLES:
-                potential_drops = PLACEHOLDER_LOOT_TABLES[loot_tag]
-                for item_name_or_tag_from_loot_def, chance, min_qty, max_qty in potential_drops:
+            if loot_tag in LOADED_LOOT_TABLES:
+                potential_drops = LOADED_LOOT_TABLES[loot_tag]
+                for drop_entry in potential_drops:
+                    item_ref = drop_entry.get('item_ref')
+                    chance = drop_entry.get('chance', 0)
+                    min_qty = drop_entry.get('min_qty', 1)
+                    max_qty = drop_entry.get('max_qty', 1)
+
+                    if not item_ref:
+                        logger.warning(f"Skipping drop entry in loot_tag '{loot_tag}' due to missing 'item_ref'.")
+                        continue
+
                     if random.randint(1, 100) <= chance:
-                        item_template_to_drop = crud.crud_item.get_item_by_name(db, name=item_name_or_tag_from_loot_def)
+                        item_template_to_drop = crud.crud_item.get_item_by_name(db, name=item_ref)
                         if not item_template_to_drop: # Fallback to item_tag if name lookup fails
-                             item_template_to_drop = crud.crud_item.get_item_by_item_tag(db, item_tag=item_name_or_tag_from_loot_def)
+                             item_template_to_drop = crud.crud_item.get_item_by_item_tag(db, item_tag=item_ref)
 
                         if item_template_to_drop:
                             quantity_to_drop = random.randint(min_qty, max_qty)
                             logger.debug(f"LOOT: Attempting to drop {quantity_to_drop}x {item_template_to_drop.name} in room {current_room_id_for_broadcast}")
                             
-                            # crud.crud_room_item.add_item_to_room commits internally.
-                            # This is not ideal for batching operations within a single combat round.
-                            # For now, we proceed, accepting multiple small commits if many items drop.
                             added_room_item, add_msg = crud.crud_room_item.add_item_to_room(
                                 db=db, room_id=current_room_id_for_broadcast, 
                                 item_id=item_template_to_drop.id, quantity=quantity_to_drop
@@ -140,9 +143,9 @@ async def handle_mob_death_loot_and_cleanup(
                             else:
                                 logger.error(f"LOOT: crud.crud_room_item.add_item_to_room failed for {item_template_to_drop.name}: {add_msg}")
                         else:
-                            logger.warning(f"LOOT: Item template '{item_name_or_tag_from_loot_def}' (from loot_tag '{loot_tag}') not found in DB.")
+                            logger.warning(f"LOOT: Item template '{item_ref}' (from loot_tag '{loot_tag}') not found in DB.")
             else:
-                logger.warning(f"LOOT: Loot table tag '{loot_tag}' for mob '{mob_template.name}' not defined in PLACEHOLDER_LOOT_TABLES.")
+                logger.warning(f"LOOT: Loot table tag '{loot_tag}' for mob '{mob_template.name}' not defined in loaded loot tables.")
         
         if items_dropped_this_kill_details:
             log_messages_list.append(f"The {mob_template.name} also drops: {', '.join(items_dropped_this_kill_details)} on the ground.")

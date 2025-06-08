@@ -24,6 +24,8 @@ services:
     build: ./backend
     container_name: mud_backend_service
     restart: unless-stopped
+    env_file:
+      - .env
     # No host ports needed if NPM is handling external access via npm_web
     volumes:
       - ./backend/app:/app/app

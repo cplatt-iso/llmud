@@ -112,6 +112,69 @@
     "item_type": "junk", "slot": null,
     "properties": { "item_tag": "torn_pouch_junk" },
     "weight": 0.1, "value": 0, "stackable": false, "max_stack_size": 1
+  },
+  {
+    "name": "Studded Leather Jerkin",
+    "description": "A sturdy leather jerkin reinforced with metal studs. Offers decent protection without sacrificing too much mobility.",
+    "item_type": "armor",
+    "slot": "torso",
+    "properties": { "armor_class_bonus": 3 },
+    "weight": 8.0, "value": 45, "stackable": false, "max_stack_size": 1
+  },
+  {
+    "name": "Greataxe",
+    "description": "A massive, intimidating axe that requires two hands to wield. It sacrifices defense for pure, unadulterated chopping power.",
+    "item_type": "weapon",
+    "slot": "main_hand",
+    "properties": { "damage": "1d12", "damage_type": "slashing", "weapon_type": "axe", "two_handed": true },
+    "weight": 10.0, "value": 30, "stackable": false, "max_stack_size": 1
+  },
+  {
+    "name": "Sturdy Leather Boots",
+    "description": "Well-worn leather boots that have seen many miles. They protect your precious little feet from the harsh ground.",
+    "item_type": "armor",
+    "slot": "feet",
+    "properties": { "armor_class_bonus": 1 },
+    "weight": 2.0, "value": 10, "stackable": false, "max_stack_size": 1
+  },
+  {
+    "name": "Patched Leather Jerkin",
+    "description": "A jerkin made of mismatched leather patches. Better than nothing, barely.",
+    "item_type": "armor",
+    "slot": "torso",
+    "properties": { "armor_class_bonus": 2 },
+    "weight": 6.0, "value": 15, "stackable": false, "max_stack_size": 1
+  },
+  {
+    "name": "Cheap Locket",
+    "description": "A tarnished, brass-colored locket. It's empty inside.",
+    "item_type": "junk",
+    "slot": null,
+    "properties": { "item_tag": "cheap_locket_junk" },
+    "weight": 0.1, "value": 3, "stackable": false, "max_stack_size": 1
+  },
+  {
+    "name": "Bent Silver Spoon",
+    "description": "A spoon that might have once been silver. It's now bent entirely out of shape.",
+    "item_type": "junk",
+    "slot": null,
+    "properties": { "item_tag": "bent_spoon_junk" },
+    "weight": 0.2, "value": 5, "stackable": false, "max_stack_size": 1
+  },
+  {
+    "name": "Sharpened Bone",
+    "description": "A long, sharpened piece of bone. It could serve as a crude shiv in a pinch.",
+    "item_type": "weapon",
+    "slot": "main_hand",
+    "properties": { "damage": "1d4", "damage_type": "piercing", "weapon_type": "dagger", "finesse": true },
+    "weight": 0.5, "value": 1, "stackable": false, "max_stack_size": 1
+  },
+  {
+    "name": "The Destructor",
+    "description": "Point and Kill",
+    "item_type": "weapon",
+    "slot": "main_hand",
+    "properties": { "damage": "10d99", "damage_type": "slashing", "weapon_type": "sword" },
+    "weight": 1.0, "value": 500000, "stackable": false, "max_stack_size": 1
   }
-
 ]

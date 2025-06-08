@@ -6,11 +6,11 @@ import { MapDisplay } from './map.js';
 import { gameState, saveSession, loadSession, clearSession, updateGameState } from './state.js';
 
 export function handleWebSocketMessage(serverData) {
-    let charVitals = null; 
+    let charVitals = null;
 
     if (serverData.type === "welcome_package" && serverData.character_vitals) charVitals = serverData.character_vitals;
     else if (serverData.type === "combat_update" && serverData.character_vitals) charVitals = serverData.character_vitals;
-    else if (serverData.type === "vitals_update") charVitals = serverData; 
+    else if (serverData.type === "vitals_update") charVitals = serverData;
 
     if (charVitals) {
         UI.updatePlayerVitals(
@@ -19,7 +19,7 @@ export function handleWebSocketMessage(serverData) {
             charVitals.current_xp, charVitals.next_level_xp
         );
         UI.updateCharacterInfoBar(gameState.selectedCharacterName, gameState.selectedCharacterClass, charVitals.level);
-        if (charVitals.platinum !== undefined) { 
+        if (charVitals.platinum !== undefined) {
             UI.updateCurrencyDisplay(charVitals.platinum, charVitals.gold, charVitals.silver, charVitals.copper);
         }
     }
@@ -33,28 +33,33 @@ export function handleWebSocketMessage(serverData) {
                 UI.updateExitsDisplay(currentRoom);
                 updateGameState({ displayedRoomId: currentRoom.id });
                 // Pass currentRoom data for immediate title/highlight and to determine target Z
-                MapDisplay.fetchAndDrawMap(currentRoom); 
+                MapDisplay.fetchAndDrawMap(currentRoom);
             }
             break;
-        case "combat_update": 
+        case "combat_update":
+            // First, always process the log and combat state.
+            if (serverData.log && serverData.log.length > 0) {
+                UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
+            }
+            updateGameState({ isInCombat: !serverData.combat_over });
+
+            // THEN, ONLY if new room data is provided, update the display.
             if (serverData.room_data) {
-                const currentRoom = serverData.room_data; 
+                const currentRoom = serverData.room_data;
                 const movedRoom = gameState.displayedRoomId !== currentRoom.id;
                 const zLevelChanged = MapDisplay.currentZLevel !== currentRoom.z;
-                
-                UI.updateGameDisplay(currentRoom); 
+
+                // Note: updateGameDisplay is for the big text block, which we don't need on every combat tick.
+                // The important part is updating the exits and map.
                 UI.updateExitsDisplay(currentRoom);
                 updateGameState({ displayedRoomId: currentRoom.id });
 
                 if (movedRoom || zLevelChanged || !MapDisplay.mapDataCache[currentRoom.z]) {
-                    // console.log(`Map update triggered: moved=${movedRoom}, zChanged=${zLevelChanged}, notCached=${!MapDisplay.mapDataCache[currentRoom.z]}`);
                     MapDisplay.fetchAndDrawMap(currentRoom);
                 } else {
                     MapDisplay.redrawMapForCurrentRoom(currentRoom.id, currentRoom);
                 }
             }
-            if (serverData.log && serverData.log.length > 0) UI.appendToOutput(serverData.log.join('\n'), { styleClass: "game-message" });
-            updateGameState({ isInCombat: !serverData.combat_over });
             break;
         case "vitals_update": break;
         case "ooc_message": UI.appendToOutput(serverData.message, { styleClass: "ooc-chat-message" }); break;
@@ -70,17 +75,17 @@ export function handleWebSocketMessage(serverData) {
 // Make sure they call UI.showAppropriateView() AFTER updateGameState loginState changes.
 
 async function startLoginProcess() {
-    clearSession(); 
-    updateGameState({ loginState: 'PROMPT_USER' }); 
+    clearSession();
+    updateGameState({ loginState: 'PROMPT_USER' });
     WebSocketService.close();
-    MapDisplay.clearMap(); 
+    MapDisplay.clearMap();
     MapDisplay.currentMapDisplayData = null; // Clear current display data
     MapDisplay.currentZLevel = 0; // Reset Z
-    MapDisplay.drawMap();  
-    UI.showAppropriateView(); 
+    MapDisplay.drawMap();
+    UI.showAppropriateView();
     UI.clearOutput();
     UI.appendToOutput("Welcome to The Unholy MUD of Tron & Allen1.");
-    UI.appendToOutput("Version: Refactored & Ready to Rumble!"); 
+    UI.appendToOutput("Version: Refactored & Ready to Rumble!");
     UI.appendToOutput("-------------------------------------------------");
     UI.appendToOutput("Username (or type 'new' to register): ", { isPrompt: true });
     UI.setInputCommandPlaceholder("Enter username or 'new'");
@@ -90,7 +95,7 @@ async function startLoginProcess() {
 
 async function promptForPassword() {
     updateGameState({ loginState: 'PROMPT_PASSWORD' });
-    UI.showAppropriateView(); 
+    UI.showAppropriateView();
     UI.appendToOutput("Password: ", { isPrompt: true, noNewLineBefore: true });
     UI.setInputCommandPlaceholder("Enter password");
     UI.setInputCommandType('password');
@@ -99,7 +104,7 @@ async function promptForPassword() {
 
 async function promptForRegistrationUsername() {
     updateGameState({ loginState: 'REGISTER_PROMPT_USER' });
-    UI.showAppropriateView(); 
+    UI.showAppropriateView();
     UI.appendToOutput("Registering new user.");
     UI.appendToOutput("Desired username: ", { isPrompt: true });
     UI.setInputCommandPlaceholder("Enter desired username");
@@ -109,7 +114,7 @@ async function promptForRegistrationUsername() {
 
 async function promptForRegistrationPassword() {
     updateGameState({ loginState: 'REGISTER_PROMPT_PASSWORD' });
-    UI.showAppropriateView(); 
+    UI.showAppropriateView();
     UI.appendToOutput("Desired password (min 8 chars): ", { isPrompt: true, noNewLineBefore: true });
     UI.setInputCommandPlaceholder("Enter desired password");
     UI.setInputCommandType('password');
@@ -118,7 +123,7 @@ async function promptForRegistrationPassword() {
 
 async function displayCharacterSelection() {
     updateGameState({ loginState: 'CHAR_SELECT_PROMPT' });
-    UI.showAppropriateView(); 
+    UI.showAppropriateView();
     if (!gameState.currentAuthToken) {
         UI.appendToOutput("! Authentication token missing. Please log in.", { styleClass: 'error-message-inline' });
         handleLogout(); return;
@@ -138,14 +143,14 @@ async function displayCharacterSelection() {
     } catch (error) {
         UI.appendToOutput(`! Error fetching characters: ${error.message}`, { styleClass: 'error-message-inline' });
         if (error.response && error.response.status === 401) handleLogout();
-        else startLoginProcess(); 
+        else startLoginProcess();
     }
     UI.focusCommandInput();
 }
 
 async function promptForNewCharacterName() {
     updateGameState({ loginState: 'CHAR_CREATE_PROMPT_NAME', tempCharName: '' });
-    UI.showAppropriateView(); 
+    UI.showAppropriateView();
     UI.appendToOutput("\n--- New Character Creation ---");
     UI.appendToOutput("Enter character name: ", { isPrompt: true });
     UI.setInputCommandPlaceholder("Character Name (3-50 chars)");
@@ -155,7 +160,7 @@ async function promptForNewCharacterName() {
 
 async function displayClassSelection() {
     updateGameState({ loginState: 'CHAR_CREATE_PROMPT_CLASS' });
-    UI.showAppropriateView(); 
+    UI.showAppropriateView();
     UI.appendToOutput(`\nFetching available classes for ${gameState.tempCharName}...`);
     try {
         const classes = await API.fetchAvailableClasses();
@@ -184,10 +189,10 @@ async function createCharacterWithSelectedClass() {
     try {
         await API.createCharacter(charName, charClassName);
         UI.appendToOutput("Character created successfully!");
-        await displayCharacterSelection(); 
+        await displayCharacterSelection();
     } catch (error) {
         UI.appendToOutput(`! Error creating character: ${error.data?.detail || error.message}`, { styleClass: 'error-message-inline' });
-        await displayCharacterSelection(); 
+        await displayCharacterSelection();
     }
 }
 
@@ -208,12 +213,12 @@ async function enterGameModeWithCharacter(character, initialRoomDataFromHttpSele
         selectedCharacterId: character.id,
         selectedCharacterName: character.name,
         selectedCharacterClass: character.class_name || 'Adventurer',
-        loginState: 'IN_GAME' 
+        loginState: 'IN_GAME'
     });
-    UI.showAppropriateView(); 
-    
-    UI.updateCharacterInfoBar(character.name, character.class_name, character.level); 
-    UI.updateCurrencyDisplay(character.platinum_coins || 0, character.gold_coins || 0, character.silver_coins || 0, character.copper_coins || 0); 
+    UI.showAppropriateView();
+
+    UI.updateCharacterInfoBar(character.name, character.class_name, character.level);
+    UI.updateCurrencyDisplay(character.platinum_coins || 0, character.gold_coins || 0, character.silver_coins || 0, character.copper_coins || 0);
 
     UI.clearOutput();
     UI.appendToOutput(`Playing as: <span class="char-name">${character.name}</span>, the <span class="char-class">${character.class_name || 'Adventurer'}</span> (Lvl ${character.level || 1})`);
@@ -221,9 +226,9 @@ async function enterGameModeWithCharacter(character, initialRoomDataFromHttpSele
     UI.setInputCommandType('text');
 
     // Pass initialRoomData to fetchAndDrawMap. It will use its Z to fetch if not cached.
-    MapDisplay.fetchAndDrawMap(initialRoomDataFromHttpSelect); 
-    
-    WebSocketService.connect(); 
+    MapDisplay.fetchAndDrawMap(initialRoomDataFromHttpSelect);
+
+    WebSocketService.connect();
     UI.focusCommandInput();
 }
 
@@ -232,25 +237,25 @@ function handleLogout() {
     MapDisplay.clearMap();
     MapDisplay.currentMapDisplayData = null; // Also clear this on logout
     MapDisplay.currentZLevel = 0;
-    clearSession(); 
-    startLoginProcess(); 
+    clearSession();
+    startLoginProcess();
 }
 
 async function handleHttpCommandResponse(responseData, originalCommand) {
     if (responseData.message_to_player) UI.appendToOutput(responseData.message_to_player, { styleClass: 'game-message' });
     if (responseData.room_data) {
-        const currentRoom = responseData.room_data; 
+        const currentRoom = responseData.room_data;
         const cmdClean = originalCommand.toLowerCase().trim();
-        const isLook = cmdClean.startsWith("look") || cmdClean === "l"; 
+        const isLook = cmdClean.startsWith("look") || cmdClean === "l";
         const movedRoom = gameState.displayedRoomId !== currentRoom.id;
         const zLevelChanged = MapDisplay.currentZLevel !== currentRoom.z;
 
         if (isLook || movedRoom) UI.updateGameDisplay(currentRoom);
         UI.updateExitsDisplay(currentRoom);
         updateGameState({ displayedRoomId: currentRoom.id });
-        
+
         if (movedRoom || zLevelChanged || !MapDisplay.mapDataCache[currentRoom.z]) {
-            MapDisplay.fetchAndDrawMap(currentRoom); 
+            MapDisplay.fetchAndDrawMap(currentRoom);
         } else {
             MapDisplay.redrawMapForCurrentRoom(currentRoom.id, currentRoom);
         }
@@ -269,8 +274,8 @@ async function handleInputSubmission() {
         echoOptions.noNewLineBefore = true;
     } else if (gameState.loginState === 'IN_GAME' && inputText) {
         echoText = `> ${inputText}`;
-    } else if (inputText) { 
-        echoOptions.noNewLineBefore = true; 
+    } else if (inputText) {
+        echoOptions.noNewLineBefore = true;
     }
 
     if (inputText || gameState.loginState === 'PROMPT_PASSWORD' || gameState.loginState === 'REGISTER_PROMPT_PASSWORD') {
@@ -283,12 +288,12 @@ async function handleInputSubmission() {
             case 'PROMPT_USER':
                 if (inputText.toLowerCase() === 'new') await promptForRegistrationUsername();
                 else if (inputText) { updateGameState({ tempUsername: inputText }); await promptForPassword(); }
-                else { UI.appendToOutput("Username (or 'new'): ", { isPrompt: true, noNewLineBefore: true }); UI.focusCommandInput(); } 
+                else { UI.appendToOutput("Username (or 'new'): ", { isPrompt: true, noNewLineBefore: true }); UI.focusCommandInput(); }
                 break;
             case 'PROMPT_PASSWORD':
                 UI.appendToOutput("\nAttempting login...");
                 const loginData = await API.loginUser(gameState.tempUsername, inputText);
-                saveSession(loginData.access_token, null, null, null); 
+                saveSession(loginData.access_token, null, null, null);
                 UI.appendToOutput("Login successful!");
                 UI.setInputCommandType('text');
                 await displayCharacterSelection();
@@ -303,12 +308,12 @@ async function handleInputSubmission() {
                 await API.registerUser(gameState.tempUsername, gameState.tempPassword);
                 UI.appendToOutput("Registration successful!");
                 UI.appendToOutput(`Now, please log in as '${gameState.tempUsername}'.`);
-                updateGameState({ loginState: 'PROMPT_PASSWORD' }); 
-                UI.showAppropriateView(); 
+                updateGameState({ loginState: 'PROMPT_PASSWORD' });
+                UI.showAppropriateView();
                 UI.appendToOutput("Password: ", { isPrompt: true, noNewLineBefore: true });
                 UI.setInputCommandPlaceholder("Enter password");
                 UI.setInputCommandType('password');
-                UI.focusCommandInput(); 
+                UI.focusCommandInput();
                 break;
             case 'CHAR_SELECT_PROMPT':
                 if (inputText.toLowerCase() === 'new') await promptForNewCharacterName();
@@ -344,17 +349,17 @@ async function handleInputSubmission() {
                 }
                 break;
             case 'IN_GAME':
-                if (!inputText) { UI.focusCommandInput(); break; } 
+                if (!inputText) { UI.focusCommandInput(); break; }
                 const lowerInputText = inputText.toLowerCase();
                 const commandVerb = lowerInputText.split(" ")[0];
 
                 if (commandVerb === "logout") { handleLogout(); break; }
 
-                const webSocketHandledVerbs = ["attack","atk","kill","k","flee","look","l","rest","use","skill","cast","get","take","unlock","search","examine","pull","push","turn","pry","activate","n","s","e","w","north","south","east","west","up","down","u","d","go"];
+                const webSocketHandledVerbs = ["attack", "atk", "kill", "k", "flee", "look", "l", "rest", "use", "skill", "cast", "get", "take", "unlock", "search", "examine", "pull", "push", "turn", "pry", "activate", "n", "s", "e", "w", "north", "south", "east", "west", "up", "down", "u", "d", "go"];
                 if (webSocketHandledVerbs.includes(commandVerb)) {
                     WebSocketService.sendMessage({ type: "command", command_text: inputText });
                 } else {
-                    const httpOkayVerbs = ["spawnmob","mod_xp","set_hp","help","ooc","say","score","inventory","i","skills","traits","status","st","sc","sk","tr","?","equip","unequip","wear","remove","eq"];
+                    const httpOkayVerbs = ["spawnmob", "mod_xp", "set_hp", "giveme", "help", "ooc", "say", "score", "inventory", "i", "skills", "traits", "status", "st", "sc", "sk", "tr", "?", "equip", "unequip", "wear", "remove", "eq"];
                     if (httpOkayVerbs.includes(commandVerb)) {
                         const httpResponse = await API.sendHttpCommand(inputText);
                         handleHttpCommandResponse(httpResponse, inputText);
@@ -378,7 +383,7 @@ async function handleInputSubmission() {
 
 async function attemptSessionResume() {
     if (loadSession() && gameState.currentAuthToken && gameState.selectedCharacterId) {
-        UI.clearOutput(); 
+        UI.clearOutput();
         UI.appendToOutput("Attempting to resume session...");
         try {
             // For resume, we don't call selectCharacterOnBackend as the session token implies selection.
@@ -386,25 +391,25 @@ async function attemptSessionResume() {
             // enterGameModeWithCharacter will then call MapDisplay.fetchAndDrawMap(null)
             // and the WebSocket welcome_package will provide the definitive current room.
             UI.appendToOutput(`Resumed session as ${gameState.selectedCharacterName}.`);
-            const resumedCharacter = { 
+            const resumedCharacter = {
                 id: gameState.selectedCharacterId,
                 name: gameState.selectedCharacterName,
                 class_name: gameState.selectedCharacterClass,
-                level: 1, 
-                platinum_coins: 0, gold_coins: 0, silver_coins: 0, copper_coins: 0 
+                level: 1,
+                platinum_coins: 0, gold_coins: 0, silver_coins: 0, copper_coins: 0
             };
             await enterGameModeWithCharacter(resumedCharacter, null); // Pass null for initialRoomData
             return true;
         } catch (error) { // This catch might not be hit if error is in async enterGameMode calls
             UI.appendToOutput(`! Session resume failed: ${error.data?.detail || error.message}. Please log in.`, { styleClass: 'error-message-inline' });
-            clearSession(); 
+            clearSession();
         }
     }
     return false;
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    if (!UI.initializeElements()) return; 
+    if (!UI.initializeElements()) return;
     MapDisplay.initialize();
 
     const commandInputEl = UI.getCommandInput();
