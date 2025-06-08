@@ -48,57 +48,47 @@ echo "" >> "$OUTPUT_FILE"
 # Define a smaller set of core files to include in the bundle.
 # Adjust this list as needed to provide essential starting context.
 CORE_FILES_TO_BUNDLE=(
-    "bundle_context.sh" # Always good to know how the sausage is made
-    "README.md"         # Current state of this beautiful disaster
+    "bundle_context.sh"
+    "README.md"
 
-    # --- Backend - Core application & Logging (Still relevant for seeing if things break) ---
+    # --- Backend - Core application & Logging ---
     "$BACKEND_APP_DIR/main.py"
     "$BACKEND_APP_DIR/core/config.py"
-    "$BACKEND_APP_DIR/core/logging_config.py" # Since we just fucked with this
-    "$BACKEND_APP_DIR/websocket_router.py"    # Good for overall WS flow context
+    "$BACKEND_APP_DIR/websocket_router.py"    # For routing new commands
 
-    # --- Backend - PRIMARY FOCUS FOR NEXT STEPS (Loot, Spawning, Confirmation) ---
-    "$BACKEND_APP_DIR/game_logic/combat/combat_round_processor.py" # CRITICAL for confirming auto-attack loot fix
-    "$BACKEND_APP_DIR/game_logic/combat/combat_utils.py"       # CRITICAL for handle_mob_death_loot_and_cleanup (where loot tables are processed)
-    "$BACKEND_APP_DIR/crud/crud_character_inventory.py"         # CRITICAL for confirming inventory stacking fix
-    "$BACKEND_APP_DIR/commands/utils.py"                      # CRITICAL for inventory display format (needs to be perfect)
-    "$BACKEND_APP_DIR/commands/inventory_parser.py"           # CRITICAL for testing inventory commands work with new display
-    "$BACKEND_APP_DIR/crud/crud_mob_spawn_definition.py"      # CRITICAL for externalizing and using mob_spawn_definitions.json
-    "$BACKEND_APP_DIR/crud/crud_item.py"                      # For seeding new equipment from items.json
-    "$BACKEND_APP_DIR/crud/crud_mob.py"                       # For mob_templates.json (loot_table_tags)
-    # "$BACKEND_APP_DIR/game_logic/combat/skill_resolver.py"   # Less critical now if loot logic is unified in combat_utils.py, but good for reference if skill kills break.
+    # --- Backend - PRIMARY FOCUS FOR NEXT STEPS (Shops, NPCs, and Commerce) ---
+    # "$BACKEND_APP_DIR/commands/shop_parser.py"       # CRITICAL: We will create this file for list/buy commands.
+    "$BACKEND_APP_DIR/crud/crud_character.py"         # CRITICAL: For update_character_currency
+    "$BACKEND_APP_DIR/crud/crud_character_inventory.py" # CRITICAL: For add_item_to_character_inventory
+    "$BACKEND_APP_DIR/crud/crud_npc.py"               # CRITICAL: For getting NPC data
+    "$BACKEND_APP_DIR/crud/crud_item.py"              # CRITICAL: For getting item price/value
+    "$BACKEND_APP_DIR/commands/utils.py"              # IMPORTANT: For formatting shop lists
+    "$BACKEND_APP_DIR/game_logic/npc_dialogue_ticker.py" # IMPORTANT: The AI part we just built
+    "$BACKEND_APP_DIR/services/world_service.py"        # IMPORTANT: Where our broadcast logic lives
 
-    # --- Backend - Essential Models for Loot & Spawning ---
-    "$BACKEND_APP_DIR/models/item.py"               # Defines items, stackability, properties
-    "$BACKEND_APP_DIR/models/mob_template.py"       # Defines loot_table_tags
-    "$BACKEND_APP_DIR/models/character_inventory_item.py" # The actual inventory rows
-    "$BACKEND_APP_DIR/models/character.py"          # For context on player inventory relationship
-    "$BACKEND_APP_DIR/models/room_item_instance.py" # For items placed on ground / dropped
-    "$BACKEND_APP_DIR/models/room.py"               # Context for placing items
-    "$BACKEND_APP_DIR/models/mob_spawn_definition.py" # The model for mob spawning rules
+    # --- Backend - Essential Models for Shop Logic ---
+    "$BACKEND_APP_DIR/models/item.py"               # Defines item value
+    "$BACKEND_APP_DIR/models/character.py"          # Defines player currency
+    "$BACKEND_APP_DIR/models/character_inventory_item.py" # The destination for purchased items
+    "$BACKEND_APP_DIR/models/npc_template.py"       # Defines the NPC and their shop_inventory
+    "$BACKEND_APP_DIR/models/room.py"               # Defines npc_placements
 
-    # --- Backend - Essential Schemas for Loot & Spawning ---
+    # --- Backend - Essential Schemas for Shop Logic ---
     "$BACKEND_APP_DIR/schemas/item.py"
-    "$BACKEND_APP_DIR/schemas/mob.py"
-    "$BACKEND_APP_DIR/schemas/mob_spawn_definition.py" # If you add a schema for the JSON file
-    "$BACKEND_APP_DIR/schemas/character.py"          # For inventory display schema context
-    # "$BACKEND_APP_DIR/schemas/room.py"             # Less critical unless placing many items in rooms
-
-    # --- Backend - Supporting CRUD for Seeding (as needed) ---
-    # "$BACKEND_APP_DIR/crud/crud_room.py" # For placing items if you do that
+    "$BACKEND_APP_DIR/schemas/character.py"
+    "$BACKEND_APP_DIR/schemas/npc.py"
+    "$BACKEND_APP_DIR/schemas/room.py"
 
     # --- Seed Data (ABSOLUTELY CRITICAL) ---
-    "$BACKEND_APP_DIR/seeds/items.json"                 # MAJOR FOCUS: Will be expanded
-    "$BACKEND_APP_DIR/seeds/mob_templates.json"         # MAJOR FOCUS: For loot_table_tags
-    # Consider adding:
-    # "$BACKEND_APP_DIR/seeds/loot_tables.json"          # If you externalize loot tables
-    # "$BACKEND_APP_DIR/seeds/mob_spawn_definitions.json" # If you externalize spawn defs
-    "$BACKEND_APP_DIR/seeds/character_classes.json"     # For starting equipment context if modified
+    "$BACKEND_APP_DIR/seeds/npcs.json"                  # MAJOR FOCUS: Defines what merchants sell
+    "$BACKEND_APP_DIR/seeds/items.json"                 # MAJOR FOCUS: Defines item properties and prices
+    "$BACKEND_APP_DIR/seeds/rooms_z0.json"              # For placing the shops
+    "$BACKEND_APP_DIR/seeds/loot_tables.json"           # For context on the game economy
+    "$BACKEND_APP_DIR/seeds/mob_spawn_definitions.json" # For world context
 
-    # --- Frontend (Minimal, just enough to test if display breaks) ---
-    "$FRONTEND_SRC_DIR/main.js"      # To see if WS message handling or command submission breaks
-    "$FRONTEND_SRC_DIR/ui.js"        # If inventory display formatting needs frontend CSS tweaks (unlikely for this phase)
-    # "$FRONTEND_SRC_DIR/map.js"     # Probably not needed for loot/spawning tasks
+    # --- Frontend (Relevant for displaying shop info) ---
+    "$FRONTEND_SRC_DIR/main.js"      # To see if command submission or response handling breaks
+    "$FRONTEND_SRC_DIR/ui.js"        # If shop list formatting needs CSS tweaks
 )
 
 echo "--- START OF CORE BUNDLED FILES ---" >> "$OUTPUT_FILE"

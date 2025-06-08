@@ -34,7 +34,7 @@
     "description": "A small, intricately carved metal key. Sector 42.",
     "item_type": "key", "slot": null,
     "properties": { "item_tag": "archive_key_alpha" },
-    "weight": 0.1, "value": 0, "stackable": false, "max_stack_size": 1
+    "weight": 0.1, "value": 1, "stackable": false, "max_stack_size": 1
   },
   {
     "name": "Basic Healing Draught",
@@ -62,7 +62,7 @@
     "description": "A small, cracked animal tooth.",
     "item_type": "junk", "slot": null,
     "properties": { "item_tag": "cracked_tooth_junk" },
-    "weight": 0.05, "value": 0, "stackable": true, "max_stack_size": 50
+    "weight": 0.05, "value": 1, "stackable": true, "max_stack_size": 50
   },
   {
     "name": "Beast Pelt (Small)",
@@ -76,21 +76,21 @@
     "description": "A sturdy animal bone, perhaps from a leg or rib.",
     "item_type": "junk", "slot": null,
     "properties": { "item_tag": "animal_bone_generic" },
-    "weight": 0.3, "value": 0, "stackable": true, "max_stack_size": 10
+    "weight": 0.3, "value": 1, "stackable": true, "max_stack_size": 10
   },
   {
     "name": "Old Boot",
     "description": "A single, waterlogged leather boot. Seen better days.",
     "item_type": "junk", "slot": null,
     "properties": { "item_tag": "old_boot_junk" },
-    "weight": 1.0, "value": 0, "stackable": false, "max_stack_size": 1
+    "weight": 1.0, "value": 1, "stackable": false, "max_stack_size": 1
   },
   {
     "name": "Rusty Tin Can",
     "description": "An old, rusty tin can. Empty, of course.",
     "item_type": "junk", "slot": null,
     "properties": { "item_tag": "rusty_can_junk" },
-    "weight": 0.2, "value": 0, "stackable": false, "max_stack_size": 1
+    "weight": 0.2, "value": 1, "stackable": false, "max_stack_size": 1
   },
   {
     "name": "Goblin Ear",
@@ -111,7 +111,7 @@
     "description": "A small leather pouch, torn and empty.",
     "item_type": "junk", "slot": null,
     "properties": { "item_tag": "torn_pouch_junk" },
-    "weight": 0.1, "value": 0, "stackable": false, "max_stack_size": 1
+    "weight": 0.1, "value": 1, "stackable": false, "max_stack_size": 1
   },
   {
     "name": "Studded Leather Jerkin",

@@ -30,7 +30,8 @@ from app.ws_command_parsers import (
     handle_ws_attack, handle_ws_use_combat_skill,
     handle_ws_get_take, handle_ws_unlock, handle_ws_search_examine,
     handle_ws_contextual_interactable, handle_ws_use_ooc_skill,
-    handle_ws_look, handle_ws_rest
+    handle_ws_look, handle_ws_rest,
+    handle_ws_list, handle_ws_buy, handle_ws_sell, handle_ws_sell_all_junk
 )
 
 logger = logging.getLogger(__name__)
@@ -161,7 +162,8 @@ async def websocket_game_endpoint(
                 non_breaking_verbs = [ # Commands that don't break resting
                     "rest", "look", "l", "score", "sc", "status", "st", 
                     "help", "?", "skills", "sk", "traits", "tr", 
-                    "inventory", "i", "ooc", "say", "'", "emote", ":" 
+                    "inventory", "i", "ooc", "say", "'", "emote", ":",
+                    "list", "buy", "sell"
                 ]
                 
                 if verb_for_rest_check and verb_for_rest_check not in non_breaking_verbs and is_character_resting(current_char_state.id):
@@ -237,6 +239,18 @@ async def websocket_game_endpoint(
                         await handle_ws_search_examine(db_loop, player, current_char_state, current_room_orm, args_list)
                     elif verb == "look" or verb == "l":
                         await handle_ws_look(db_loop, player, current_char_state, current_room_orm, args_str)
+                    
+                    # --- SHOP COMMANDS ---
+                    elif verb == "list":
+                        await handle_ws_list(db_loop, player, current_char_state, current_room_orm)
+                    elif verb == "buy":
+                        await handle_ws_buy(db_loop, player, current_char_state, current_room_orm, args_str)
+                    elif verb == "sell":
+                        if args_str.lower() in ["all junk", "all trash"]:
+                            await handle_ws_sell_all_junk(db_loop, player, current_char_state, current_room_orm)
+                        else:
+                            await handle_ws_sell(db_loop, player, current_char_state, current_room_orm, args_str)
+
                     else: # Fallback: Try contextual interactable actions
                         is_interactable_action_handled = False
                         if current_room_orm.interactables: # Check if list is not None and not empty

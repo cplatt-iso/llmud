@@ -355,7 +355,7 @@ async function handleInputSubmission() {
 
                 if (commandVerb === "logout") { handleLogout(); break; }
 
-                const webSocketHandledVerbs = ["attack", "atk", "kill", "k", "flee", "look", "l", "rest", "use", "skill", "cast", "get", "take", "unlock", "search", "examine", "pull", "push", "turn", "pry", "activate", "n", "s", "e", "w", "north", "south", "east", "west", "up", "down", "u", "d", "go"];
+                const webSocketHandledVerbs = ["attack", "atk", "kill", "k", "flee", "look", "l", "rest", "use", "skill", "cast", "get", "take", "unlock", "search", "examine", "pull", "push", "turn", "pry", "activate", "n", "s", "e", "w", "north", "south", "east", "west", "up", "down", "u", "d", "go", "list", "buy", "sell"];
                 if (webSocketHandledVerbs.includes(commandVerb)) {
                     WebSocketService.sendMessage({ type: "command", command_text: inputText });
                 } else {
