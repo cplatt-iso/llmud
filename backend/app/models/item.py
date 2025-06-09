@@ -21,6 +21,7 @@ class Item(Base):
     # For simplicity now, let's assume a single primary slot string, or comma-separated if multiple.
     # Or, better, just 'equippable_slot_type' (e.g. 'weapon', 'head', 'ring') and then CharacterInventoryItem handles specifics.
     # Let's go with a simple slot string for now that defines its primary use.
+    rarity: Mapped[str] = mapped_column(String(50), nullable=False, default="common", index=True)
     slot: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, comment="e.g., head, torso, main_hand, off_hand, ring, consumable, utility")
     
     properties: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True, comment="e.g., {'damage': '1d6', 'armor_class': 5, 'modifier': {'strength': 1}}")

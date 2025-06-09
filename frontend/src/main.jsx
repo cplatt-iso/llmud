@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
-import './style.css' // Our one stylesheet to rule them all
+import './index.css'
 import useGameStore from './state/gameStore';
 
 window.useGameStore = useGameStore;

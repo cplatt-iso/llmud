@@ -125,6 +125,7 @@
     "name": "Greataxe",
     "description": "A massive, intimidating axe that requires two hands to wield. It sacrifices defense for pure, unadulterated chopping power.",
     "item_type": "weapon",
+    "rarity": "uncommon",
     "slot": "main_hand",
     "properties": { "damage": "1d12", "damage_type": "slashing", "weapon_type": "axe", "two_handed": true },
     "weight": 10.0, "value": 30, "stackable": false, "max_stack_size": 1
@@ -165,6 +166,7 @@
     "name": "Sharpened Bone",
     "description": "A long, sharpened piece of bone. It could serve as a crude shiv in a pinch.",
     "item_type": "weapon",
+    "rarity": "common",
     "slot": "main_hand",
     "properties": { "damage": "1d4", "damage_type": "piercing", "weapon_type": "dagger", "finesse": true },
     "weight": 0.5, "value": 1, "stackable": false, "max_stack_size": 1
@@ -173,6 +175,7 @@
     "name": "The Destructor",
     "description": "Point and Kill",
     "item_type": "weapon",
+    "rarity": "legendary",
     "slot": "main_hand",
     "properties": { "damage": "10d99", "damage_type": "slashing", "weapon_type": "sword" },
     "weight": 1.0, "value": 500000, "stackable": false, "max_stack_size": 1

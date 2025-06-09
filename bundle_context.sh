@@ -51,40 +51,32 @@ CORE_FILES_TO_BUNDLE=(
     "bundle_context.sh"
     "README.md"
 
-    # --- Backend - Key Schemas and API Endpoints ---
-    "backend/app/api/v1/endpoints/user.py"
-    "backend/app/api/v1/endpoints/character.py"
-    "backend/app/websocket_router.py"
-    "backend/app/schemas/character.py"
-    "backend/app/schemas/item.py"
-    "backend/app/schemas/command.py" # For HTTP commands like score, inventory
-    "backend/app/schemas/map.py"
+    # --- Backend - Models & Schemas (The Blueprint of Power) ---
+    "backend/app/models/player.py"          # CRITICAL: For adding the 'is_sysop' flag.
+    "backend/app/models/character.py"       # CRITICAL: For adding 'god_level' and 'titles'.
+    "backend/app/models/item.py"            # For referencing items in 'giveme'.
+    "backend/app/schemas/player.py"         # To match the model changes.
+    "backend/app/schemas/character.py"      # To match the model changes.
 
-    # --- NEW Frontend - The Core Application ---
-    "frontend/package.json"
-    "frontend/vite.config.js"
-    "frontend/src/App.jsx"                 # The main app router/gatekeeper
-    "frontend/src/main.jsx"               # The application entry point
-    "frontend/src/index.html"             # The root HTML file
-    "frontend/src/style.css"              # Our one stylesheet to rule them all
+    # --- Backend - The Command & Control Logic ---
+    "backend/app/websocket_router.py"       # CRITICAL: The main dispatcher where we'll check for Sysop roles.
+    "backend/app/ws_command_parsers/ws_interaction_parser.py" # For the new 'equip'/'unequip' logic.
+    # We will likely create a new file like 'ws_debug_parser.py' for 'giveme' and other sysop commands.
 
-    # --- NEW Frontend - State and Services (The Brains) ---
-    "frontend/src/state/gameStore.js"         # CRITICAL: Zustand global state
-    "frontend/src/services/apiService.js"     # CRITICAL: Handles all HTTP calls
-    "frontend/src/services/webSocketService.js" # CRITICAL: Handles WebSocket communication
+    # --- Backend - Dependencies & Game State ---
+    "backend/app/api/dependencies.py"       # Always good to have for context on getting users/characters.
+    "backend/app/game_state.py"             # To see how active sessions are managed.
 
-    # --- NEW Frontend - Key Components (The Body) ---
-    "frontend/src/components/GameLayout.jsx"
-    "frontend/src/components/LoginScreen.jsx"
-    "frontend/src/components/CharacterSelectionScreen.jsx"
-    "frontend/src/components/Map.jsx"
-    "frontend/src/components/Terminal.jsx"
-    "frontend/src/components/CommandInput.jsx"
+    # --- Frontend - The User's Point of Interaction ---
+    "frontend/src/state/gameStore.js"         # CRITICAL: The state will need to handle new data.
+    "frontend/src/services/webSocketService.js" # CRITICAL: To see how messages are sent/received.
+    "frontend/src/components/CommandInput.jsx"  # CRITICAL: Where the user types the commands.
+    "frontend/src/components/Inventory.jsx"     # To verify equip/unequip/giveme works.
+    "frontend/src/components/ItemName.jsx"      # The component that makes our items look sexy.
 
-    # --- LEGACY JS (For Reference Only) ---
-    # "frontend/src/main.js"      
-    # "frontend/src/ui.js"        
-    # "frontend/src/api.js"
+    # --- Frontend - Core App Structure ---
+    "frontend/src/App.jsx"
+    "frontend/src/main.jsx"
 )
 
 echo "--- START OF CORE BUNDLED FILES ---" >> "$OUTPUT_FILE"

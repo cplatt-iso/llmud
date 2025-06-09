@@ -1,0 +1,13 @@
+#character-info-bar {
+  display: flex;
+  background-color: var(--color-background-light);
+  color: var(--color-text-secondary);
+  padding: 6px 10px;
+  font-family: var(--font-family-ui);
+  font-size: 0.9em;
+  border-bottom: 1px solid var(--color-border-medium);
+}
+#character-info-bar span { margin: 0 5px; }
+.char-info-separator { color: #007700; }
+#char-info-name { font-weight: bold; color: var(--color-text-loud); }
+#char-info-class { font-style: italic; color: var(--color-text-link); }

@@ -8,6 +8,7 @@ class ItemBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = None
     item_type: str = Field(..., description="e.g., weapon, armor, potion, junk")
+    rarity: str = "common"
     slot: Optional[str] = Field(None, description="Primary equippable slot type, e.g., head, main_hand, consumable")
     properties: Optional[Dict[str, Any]] = Field(None, description="e.g., {'damage': '1d6', 'armor_class': 5}")
     weight: float = Field(0.0, ge=0)

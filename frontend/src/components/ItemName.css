@@ -1,0 +1,74 @@
+/* ### UPDATED STYLING ### */
+/* The main container for the icon and text */
+.item-name-container {
+  font-weight: bold;
+  cursor: help;
+  transition: all 0.1s ease-in-out;
+  display: inline-flex; /* Use flexbox to align icon and text nicely */
+  align-items: center;
+  padding: 2px 4px; /* Add a little padding for the hover effect */
+  border-radius: 4px;
+}
+
+.item-name-container:hover {
+  outline: 1px solid yellow;
+  transform: scale(1.05);
+  text-shadow: 0 0 5px yellow;
+  background-color: rgba(255, 255, 0, 0.1);
+}
+
+/* NEW: Style for the icon */
+.item-icon {
+    margin-right: 6px; /* Space between icon and text */
+    font-size: 1.1em; /* Make the icon slightly larger */
+    line-height: 1; /* Prevent extra vertical space */
+}
+
+/* Rarity Colors now apply to the whole container */
+.rarity-common .item-text { color: #ffffff; }
+.rarity-uncommon .item-text { color: #1eff00; }
+.rarity-rare .item-text { color: #0070dd; }
+.rarity-epic .item-text { color: #a335ee; }
+.rarity-legendary .item-text { color: #ff8000; }
+
+
+/* --- Tooltip Styling (Unchanged) --- */
+.item-tooltip-main {
+  background-color: #111111 !important;
+  border: 1px solid #00ff00 !important;
+  color: #cccccc !important;
+  max-width: 350px !important;
+  padding: 0 !important;
+  opacity: 1 !important;
+  z-index: 9999 !important;
+  border-radius: 4px !important;
+}
+
+.item-tooltip-content {
+  padding: 10px 15px;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+.item-tooltip-content .desc {
+  font-style: italic;
+  color: #00aa00;
+  margin: 0 0 10px 0;
+  border-bottom: 1px dashed #005500;
+  padding-bottom: 10px;
+}
+.item-tooltip-content .props {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.item-tooltip-content .prop-line {
+  margin: 0;
+  display: flex;
+  justify-content: space-between;
+}
+.item-tooltip-content .prop-key {
+  color: #bbbbbb;
+}
+.item-tooltip-content .prop-value {
+  color: #00ffdd;
+  font-weight: bold;
+}

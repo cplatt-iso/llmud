@@ -173,40 +173,53 @@ def create_character(
     db_character_data = character_in.model_dump(exclude_unset=True)
     
     # Start with base defaults
-    final_char_args = DEFAULT_STATS.copy() 
-    # Ensure JSONB fields from defaults are mutable lists/dicts if needed downstream directly
+    final_char_args = DEFAULT_STATS.copy()
     final_char_args["learned_skills"] = list(final_char_args["learned_skills"]) 
     final_char_args["learned_traits"] = list(final_char_args["learned_traits"])
 
-    class_template_id_to_set: Optional[uuid.UUID] = None
-    class_name_from_input = db_character_data.get("class_name", "Adventurer") 
+    class_name_from_input = db_character_data.get("class_name", "Adventurer")
     
-    # Fetch the class template; "Adventurer" is the default if none specified or found
-    class_template: Optional[models.CharacterClassTemplate] = crud.crud_character_class.get_character_class_template_by_name(db, name=class_name_from_input)
-    if not class_template and class_name_from_input != "Adventurer": # If a specific class was requested but not found, try Adventurer
-        logger.warning(f"Character class template '{class_name_from_input}' not found. Attempting to default to 'Adventurer'.")
-        class_template = crud.crud_character_class.get_character_class_template_by_name(db, name="Adventurer")
+    # ### REWRITTEN LOGIC FOR CLARITY AND ROBUSTNESS ###
+    
+    # 1. Attempt to fetch the requested class template.
+    class_template = crud.crud_character_class.get_character_class_template_by_name(
+        db, name=class_name_from_input
+    )
+    
+    # 2. If the requested class wasn't found, log a warning and explicitly fetch the 'Adventurer' template as a fallback.
+    if not class_template:
+        logger.warning(
+            f"Character class template '{class_name_from_input}' not found. "
+            f"Defaulting to 'Adventurer'."
+        )
+        class_template = crud.crud_character_class.get_character_class_template_by_name(
+            db, name="Adventurer"
+        )
 
-    effective_class_name = "Adventurer" # Fallback name
-
+    # 3. If even the 'Adventurer' template is missing (a critical DB/seed error), we proceed without a class template.
     if class_template:
         class_template_id_to_set = class_template.id
-        effective_class_name = class_template.name # Use the name from the template
+        effective_class_name = class_template.name
         
         # Apply base stat modifiers from class template
         if class_template.base_stat_modifiers:
             for stat, modifier in class_template.base_stat_modifiers.items():
                 if stat in final_char_args: 
-                    final_char_args[stat] = final_char_args.get(stat, 0) + modifier # Use .get for safety if stat wasn't in DEFAULT_STATS
+                    final_char_args[stat] += modifier
         
         # Apply starting health/mana bonuses
-        final_char_args["max_health"] = final_char_args.get("max_health", 0) + class_template.starting_health_bonus
-        final_char_args["current_health"] = final_char_args["max_health"] # Full health at creation
-        final_char_args["max_mana"] = final_char_args.get("max_mana", 0) + class_template.starting_mana_bonus
-        final_char_args["current_mana"] = final_char_args["max_mana"] # Full mana at creation
+        final_char_args["max_health"] += class_template.starting_health_bonus
+        final_char_args["current_health"] = final_char_args["max_health"]
+        final_char_args["max_mana"] += class_template.starting_mana_bonus
+        final_char_args["current_mana"] = final_char_args["max_mana"]
     else:
-        logger.warning(f"No class template found for '{class_name_from_input}' or 'Adventurer'. Character will use raw default stats.")
-        # effective_class_name remains "Adventurer" or could be set to something generic
+        # This is a panic state. The 'Adventurer' class should ALWAYS exist.
+        logger.error(
+            "CRITICAL: Could not find 'Adventurer' class template. "
+            "Character will be created with raw default stats and no class."
+        )
+        class_template_id_to_set = None
+        effective_class_name = "Lost" # A sign that something is very wrong
 
     db_character = models.Character(
         name=db_character_data["name"],
@@ -216,26 +229,24 @@ def create_character(
         character_class_template_id=class_template_id_to_set,
         **final_char_args 
     )
-    db.add(db_character) # db_character is now pending
+    db.add(db_character)
 
     if class_template: 
         db_character.class_template_ref = class_template
 
-    initial_ability_messages = _grant_abilities_for_level(db, db_character, 1) 
+    initial_ability_messages = _grant_abilities_for_level(db, db_character, 1)
     if initial_ability_messages:
         logger.info(f"Character '{db_character.name}' initial abilities granted: {', '.join(initial_ability_messages)}")
 
     # Grant starting equipment
     if class_template and class_template.starting_equipment_refs:
-        logger.info(f"Attempting to grant starting equipment for {db_character.name} (ID pending: {db_character.id})")
+        logger.info(f"Attempting to grant starting equipment for {db_character.name}")
         for item_ref_name_or_tag in class_template.starting_equipment_refs:
             item_template_to_add = crud.crud_item.get_item_by_name(db, name=item_ref_name_or_tag)
-            if not item_template_to_add: 
+            if not item_template_to_add:
                  item_template_to_add = crud.crud_item.get_item_by_item_tag(db, item_tag=item_ref_name_or_tag)
 
             if item_template_to_add:
-                # Call the modified add_item_to_character_inventory, passing the character_obj
-                # This function will now append to db_character.inventory_items
                 _, msg = crud.crud_character_inventory.add_item_to_character_inventory(
                     db, character_obj=db_character, item_id=item_template_to_add.id, quantity=1
                 )
@@ -243,23 +254,10 @@ def create_character(
             else:
                 logger.warning(f"Starting equipment item/tag '{item_ref_name_or_tag}' not found for class '{class_template.name}'.")
     
-    # Before commit, let's see if items are in the pending list
-    if hasattr(db_character, 'inventory_items') and db_character.inventory_items:
-        logger.info(f"Character {db_character.name} has {len(db_character.inventory_items)} items in inventory_items relationship before commit.")
-        for idx, item_entry in enumerate(db_character.inventory_items):
-            logger.debug(f"  Item {idx}: Item ID {item_entry.item_id}, Qty {item_entry.quantity}, Char ID (on entry) {item_entry.character_id}")
-    else:
-        logger.warning(f"Character {db_character.name} has NO items in inventory_items relationship before commit.")
-
     db.commit() 
     db.refresh(db_character) 
-    # After refresh, inventory_items should be populated from DB if commit was successful
-    if hasattr(db_character, 'inventory_items') and db_character.inventory_items:
-         logger.info(f"Character {db_character.name} has {len(db_character.inventory_items)} items in inventory_items AFTER commit & refresh.")
-    else:
-        logger.info(f"Character {db_character.name} has NO items in inventory_items AFTER commit & refresh.")
 
-    logger.info(f"Character '{db_character.name}' created successfully with ID {db_character.id}.")
+    logger.info(f"Character '{db_character.name}' created successfully with class '{effective_class_name}' and ID {db_character.id}.")
     return db_character
 
 def update_character_room(db: Session, character_id: uuid.UUID, new_room_id: uuid.UUID) -> Optional[models.Character]:

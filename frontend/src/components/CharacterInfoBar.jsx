@@ -1,6 +1,6 @@
 import React from 'react';
 import useGameStore from '../state/gameStore';
-
+import './CharacterInfoBar.css'; // Import your CSS for styling
 function CharacterInfoBar() {
 
   const name = useGameStore((state) => state.characterName);

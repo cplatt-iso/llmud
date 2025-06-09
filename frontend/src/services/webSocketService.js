@@ -72,6 +72,16 @@ const handleMessage = (event) => {
                     state.characterLevel = serverData.level;
                 });
                 break;
+            
+            // ### THE NEW CASE FOR REAL-TIME INVENTORY ###
+            case "inventory_update":
+                console.log("[WS] Received real-time inventory_update.");
+                setState(state => {
+                    // This directly overwrites the inventory slice of the state.
+                    // If the modal is open, React will re-render it automagically.
+                    state.inventory = serverData.inventory_data;
+                });
+                break;
 
             // Add more cases here as needed...
             case "game_event":

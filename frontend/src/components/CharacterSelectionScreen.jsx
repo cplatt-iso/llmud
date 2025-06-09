@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import useGameStore from '../state/gameStore';
 import { apiService } from '../services/apiService';
+import './CharacterSelectionScreen.css';
 
 function CharacterSelectionScreen() {
     // Select state and actions individually from the store.
@@ -8,6 +9,8 @@ function CharacterSelectionScreen() {
     const setCharacterList = useGameStore((state) => state.setCharacterList);
     const selectCharacter = useGameStore((state) => state.selectCharacter);
     const token = useGameStore((state) => state.token);
+    
+    const startCharacterCreation = useGameStore((state) => state.startCharacterCreation);
 
     // Local state for this component's loading and error handling.
     const [isLoading, setIsLoading] = useState(true);
@@ -97,12 +100,18 @@ function CharacterSelectionScreen() {
                         </div>
                     ))
                 ) : (
-                    <div className="char-card">
+                    // This message is now more accurate when no characters are loaded
+                    <div className="no-chars-message">
                         <p>No characters found on this account.</p>
                     </div>
                 )}
             </div>
-            {/* TODO: Add a "Create New Character" button and flow here */}
+            {/* The button to trigger the creation flow, which now calls the correctly pulled action */}
+            <div className="char-creation-prompt">
+                <button onClick={startCharacterCreation} className="create-char-button">
+                    Create New Character
+                </button>
+            </div>
         </div>
     );
 }

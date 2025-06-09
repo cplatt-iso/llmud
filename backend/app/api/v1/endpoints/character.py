@@ -7,7 +7,7 @@ from typing import Any, List
 from .... import schemas, crud, models
 from ....db.session import get_db
 # from ....crud.crud_room import get_room_by_coords # No longer needed for this file directly if only used in create
-from ....api.dependencies import get_current_player
+from ....api.dependencies import get_current_player, get_current_active_character
 from ....game_state import active_game_sessions # <<< ADDED THIS IMPORT
 import logging
 
@@ -101,3 +101,44 @@ def select_character_for_session(
     print(f"Player '{current_player.username}' (ID: {current_player.id}) selected character '{character.name}' (ID: {character.id}).")
     print(f"Active sessions: {active_game_sessions}") # For debugging
     return current_room_orm # FastAPI will convert ORM to schemas.RoomInDB
+
+@router.get("/me/active", response_model=schemas.Character)
+def get_current_active_character_details(
+    *,
+    # This glorious dependency does all the work for us.
+    active_character: models.Character = Depends(get_current_active_character)
+) -> Any:
+    """
+    Retrieve the full details for the currently selected character in the session.
+    """
+    return active_character
+
+@router.get("/me/inventory", response_model=schemas.CharacterInventoryDisplay)
+def get_character_inventory_display(
+    *,
+    db: Session = Depends(get_db),
+    active_character: models.Character = Depends(get_current_active_character)
+) -> Any:
+    """
+    Retrieve and organize the active character's inventory for display.
+    """
+    inventory_items_orm = crud.crud_character_inventory.get_character_inventory(db, character_id=active_character.id)
+    
+    equipped_items = {}
+    backpack_items = []
+    
+    for item_orm in inventory_items_orm:
+        item_schema = schemas.CharacterInventoryItem.from_orm(item_orm)
+        if item_schema.equipped and item_schema.equipped_slot:
+            equipped_items[item_schema.equipped_slot] = item_schema
+        else:
+            backpack_items.append(item_schema)
+            
+    return schemas.CharacterInventoryDisplay(
+        equipped_items=equipped_items,
+        backpack_items=backpack_items,
+        platinum=active_character.platinum_coins,
+        gold=active_character.gold_coins,
+        silver=active_character.silver_coins,
+        copper=active_character.copper_coins
+    )

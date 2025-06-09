@@ -16,6 +16,45 @@ from app.schemas.common_structures import ExitDetail, InteractableDetail
 
 logger = logging.getLogger(__name__) # Added logger
 
+async def _send_inventory_update_to_player(db: Session, character: models.Character):
+    """
+    Helper function to construct and send a full inventory update to a player.
+    """
+    if not character or not character.id:
+        logger.error("Cannot send inventory update: Invalid character object provided.")
+        return
+
+    logger.debug(f"Constructing and sending real-time inventory update to character {character.name} ({character.id})")
+
+    inventory_items_orm = crud.crud_character_inventory.get_character_inventory(db, character_id=character.id)
+    
+    equipped_items = {}
+    backpack_items = []
+    
+    for item_orm in inventory_items_orm:
+        item_schema = schemas.CharacterInventoryItem.from_orm(item_orm)
+        if item_schema.equipped and item_schema.equipped_slot:
+            equipped_items[item_schema.equipped_slot] = item_schema
+        else:
+            backpack_items.append(item_schema)
+            
+    inventory_display_data = schemas.CharacterInventoryDisplay(
+        equipped_items=equipped_items,
+        backpack_items=backpack_items,
+        platinum=character.platinum_coins,
+        gold=character.gold_coins,
+        silver=character.silver_coins,
+        copper=character.copper_coins
+    )
+
+    payload = {
+        "type": "inventory_update",
+        "inventory_data": inventory_display_data.model_dump(exclude_none=True)
+    }
+
+    await connection_manager.send_personal_message(payload, character.player_id)
+    logger.debug(f"Inventory update payload sent to player_id {character.player_id}")
+    
 async def handle_ws_get_take(
     db: Session,
     player: models.Player,
@@ -23,13 +62,15 @@ async def handle_ws_get_take(
     current_room_orm: models.Room, 
     args_str: str 
 ):
-    # Dynamic description for room data payload
+    # ... (code to prepare room schema is unchanged) ...
     dynamic_desc = get_dynamic_room_description(current_room_orm)
     current_room_data_dict = schemas.RoomInDB.from_orm(current_room_orm).model_dump()
     current_room_data_dict["description"] = dynamic_desc
     current_room_schema_with_dynamic_desc = schemas.RoomInDB(**current_room_data_dict)
 
+
     if args_str.lower() == "all":
+        # ... (code for 'get all' logic is unchanged up until the commit) ...
         items_on_ground_orm = crud.crud_room_item.get_items_in_room(db, room_id=current_room_orm.id)
         if not items_on_ground_orm:
             await combat.send_combat_log(player.id, ["There is nothing on the ground here to get."], room_data=current_room_schema_with_dynamic_desc)
@@ -41,24 +82,20 @@ async def handle_ws_get_take(
         anything_actually_picked_up = False
 
         for room_item_instance in items_on_ground_orm:
-            if not room_item_instance.item:  # Ensure ItemTemplate is loaded
+            if not room_item_instance.item:
                 logger.warning(f"RoomItemInstance {room_item_instance.id} in room {current_room_orm.id} has no associated ItemTemplate. Skipping for 'get all'.")
                 continue
 
-            # Check if the item is gettable (assuming ItemTemplate has is_gettable attribute)
-            if not getattr(room_item_instance.item, 'is_gettable', True): # Default to True if attr missing, for safety, but ideally it's always there
-                # You could inform the player about ungettable items if desired:
-                # failed_to_pick_up_messages.append(f"Cannot pick up {room_item_instance.item.name} (not gettable).")
+            if not getattr(room_item_instance.item, 'is_gettable', True):
                 continue
             
             _inv_add_entry, add_message = crud.crud_character_inventory.add_item_to_character_inventory(
                 db, character_obj=current_char_state,
-                item_id=room_item_instance.item_id, # This is the ItemTemplate ID
+                item_id=room_item_instance.item_id,
                 quantity=room_item_instance.quantity
             )
 
             if _inv_add_entry:
-                # Successfully added to inventory, now remove from room
                 crud.crud_room_item.remove_item_from_room(
                     db, room_item_instance_id=room_item_instance.id,
                     quantity_to_remove=room_item_instance.quantity
@@ -67,21 +104,26 @@ async def handle_ws_get_take(
                 if room_item_instance.quantity > 1:
                     item_name_with_qty += f" (x{room_item_instance.quantity})"
                 
-                # Use a more direct message for "all"
                 picked_up_item_messages.append(f"You take the {item_name_with_qty}.")
                 picked_up_item_names_for_broadcast.append(item_name_with_qty)
                 anything_actually_picked_up = True
             else:
                 failed_to_pick_up_messages.append(f"Could not take {room_item_instance.item.name}: {add_message.replace('You pick up the ', '').replace('You add ', '').replace(' to your inventory.', '')}")
-
+        
         if not anything_actually_picked_up and not failed_to_pick_up_messages:
             await combat.send_combat_log(player.id, ["There was nothing gettable on the ground."], room_data=current_room_schema_with_dynamic_desc)
             return
+
+        if anything_actually_picked_up:
+            db.commit()
+            await _send_inventory_update_to_player(db, current_char_state) # ### UPDATE PUSH ###
+        else:
+            db.rollback() # If nothing was picked up, rollback any potential changes
         
-        db.commit()
         db.refresh(current_char_state)
         refreshed_room_orm = crud.crud_room.get_room_by_id(db, current_room_orm.id)
 
+        # ... (rest of the 'get all' response logic is unchanged) ...
         updated_room_schema_for_response = current_room_schema_with_dynamic_desc # Default
         if refreshed_room_orm:
             updated_dynamic_desc = get_dynamic_room_description(refreshed_room_orm)
@@ -95,7 +137,7 @@ async def handle_ws_get_take(
         if failed_to_pick_up_messages:
             final_log_to_player.extend(failed_to_pick_up_messages)
         
-        if not final_log_to_player: # Should be covered by the "nothing gettable" case
+        if not final_log_to_player:
             final_log_to_player.append("No items were picked up.")
 
         xp_for_next = crud.crud_character.get_xp_for_level(current_char_state.level + 1)
@@ -116,7 +158,8 @@ async def handle_ws_get_take(
         return
 
     # --- Existing logic for single item "get" ---
-    if not args_str: # This check is now effectively part of the single item logic path
+    # ... (code for resolving single item is unchanged) ...
+    if not args_str:
         await combat.send_combat_log(player.id, ["Get what?"], room_data=current_room_schema_with_dynamic_desc)
         return
     
@@ -133,7 +176,6 @@ async def handle_ws_get_take(
         await combat.send_combat_log(player.id, [f"Cannot find '{args_str}' on the ground here."], room_data=current_room_schema_with_dynamic_desc)
         return
     
-    # Check if the single item is gettable
     if not getattr(target_room_item_instance.item, 'is_gettable', True):
         await combat.send_combat_log(player.id, [f"You cannot pick up the {target_room_item_instance.item.name}."], room_data=current_room_schema_with_dynamic_desc)
         return
@@ -151,22 +193,22 @@ async def handle_ws_get_take(
         db, room_item_instance_id=target_room_item_instance.id,
         quantity_to_remove=target_room_item_instance.quantity
     )
-    final_pickup_message = add_message # This message comes from add_item_to_character_inventory
+    final_pickup_message = add_message
     
-    db.commit() 
+    db.commit()
+    await _send_inventory_update_to_player(db, current_char_state) # ### UPDATE PUSH ###
+    
     db.refresh(current_char_state) 
     refreshed_room_orm = crud.crud_room.get_room_by_id(db, current_room_orm.id)
     
-    # Prepare updated room schema with dynamic description for the final response
-    updated_room_schema_for_response = current_room_schema_with_dynamic_desc # Default
+    # ... (rest of the single 'get' response logic is unchanged) ...
+    updated_room_schema_for_response = current_room_schema_with_dynamic_desc
     if refreshed_room_orm:
         updated_dynamic_desc = get_dynamic_room_description(refreshed_room_orm)
         updated_room_data_dict = schemas.RoomInDB.from_orm(refreshed_room_orm).model_dump()
         updated_room_data_dict["description"] = updated_dynamic_desc
         updated_room_schema_for_response = schemas.RoomInDB(**updated_room_data_dict)
-    # else: # Fallback already handled by setting default above
-        # updated_room_schema_for_response = current_room_schema_with_dynamic_desc
-        
+
     xp_for_next = crud.crud_character.get_xp_for_level(current_char_state.level + 1)
     vitals_payload = {
         "current_hp": current_char_state.current_health, "max_hp": current_char_state.max_health,

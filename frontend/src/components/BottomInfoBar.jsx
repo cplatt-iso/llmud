@@ -1,4 +1,5 @@
 import React from 'react';
+import './BottomInfoBar.css'; // Import your CSS for styling
 
 function BottomInfoBar() {
   // Hardcoded for now

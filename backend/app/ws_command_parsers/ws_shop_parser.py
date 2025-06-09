@@ -8,6 +8,10 @@ from sqlalchemy.orm import Session
 from app import crud, models, schemas
 from app.game_logic import combat  # For sending messages to the player
 from app.commands.utils import get_visible_length
+# ### IMPORT THE HELPER FUNCTION ###
+# This path assumes you created the helper in the interaction_parser. Adjust if you put it elsewhere.
+from app.ws_command_parsers.ws_interaction_parser import _send_inventory_update_to_player
+
 
 logger = logging.getLogger(__name__)
 
@@ -318,6 +322,11 @@ async def handle_ws_buy(
     _, add_item_message = crud.crud_character_inventory.add_item_to_character_inventory(
         db, character_obj=updated_char, item_id=item_to_buy.id, quantity=1
     )
+    
+    db.commit()
+    await _send_inventory_update_to_player(db, updated_char)
+    db.refresh(updated_char)
+    
     price_str = _format_price(item_price)
     success_message = f"You buy a {item_to_buy.name} for {price_str}."
 
@@ -383,6 +392,10 @@ async def handle_ws_sell(
         await combat.send_combat_log(player.id, ["An error occurred with your character data."])
         db.rollback()
         return
+        
+    db.commit()
+    await _send_inventory_update_to_player(db, updated_char)
+    db.refresh(updated_char)
         
     price_str = _format_price(sell_price)
     success_message = f"You sell your {item_template.name} for {price_str}."
@@ -451,6 +464,10 @@ async def handle_ws_sell_all_junk(
         await combat.send_combat_log(player.id, ["An error occurred with your character data."])
         db.rollback()
         return
+        
+    db.commit()
+    await _send_inventory_update_to_player(db, updated_char)
+    db.refresh(updated_char)
 
     price_str = _format_price(total_payout_copper)
     sold_details = ", ".join([f"{qty}x {name}" for name, qty in sorted(sold_items_summary.items())])

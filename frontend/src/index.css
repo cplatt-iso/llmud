@@ -1,0 +1,107 @@
+/* src/index.css */
+
+/* :root contains the default theme variables for our app */
+:root {
+  /* Fonts */
+  --font-family-main: 'Courier New', Courier, monospace;
+  --font-family-ui: 'Consolas', 'Monaco', monospace;
+
+  /* Core Colors */
+  --color-background-body: #000;
+  --color-background-dark: #030303;
+  --color-background-medium: #080808;
+  --color-background-light: #111;
+
+  /* Text Colors */
+  --color-text-primary: #00ff00;
+  --color-text-secondary: #00dd00;
+  --color-text-muted: #cccccc;
+  --color-text-loud: #ffffff;
+  --color-text-accent: #ffff00;
+  --color-text-error: #ff4444;
+  --color-text-system: #00aa00;
+  --color-text-link: #00ddaa;
+
+  /* Border Colors */
+  --color-border-strong: #00ff00;
+  --color-border-medium: #005500;
+  --color-border-faint: #333;
+
+  /* UI Element Specifics */
+  --color-shadow: #003300;
+  --color-prompt: var(--color-text-secondary);
+  --color-button-bg: var(--color-border-medium);
+  --color-button-text: var(--color-text-primary);
+  --color-button-border: var(--color-border-strong);
+  --color-button-hover-bg: #007700;
+}
+
+/* Base Body Styles */
+body {
+  background-color: var(--color-background-body);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-main);
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+/* Global Utility Classes (from the old style.css) */
+.header-text {
+  text-align: center;
+  margin-bottom: 20px;
+}
+.header-text h1 {
+  margin: 0 0 5px 0;
+  font-size: 1.8em;
+  line-height: 1.2;
+}
+.header-text h2 {
+    color: var(--color-text-accent);
+}
+.header-text p {
+  margin: 0;
+  font-size: 0.9em;
+  color: var(--color-text-secondary);
+}
+
+.game-area-wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 1200px;
+}
+
+.mud-container {
+  position: relative;
+  width: 100%;
+  max-width: 900px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border-medium);
+}
+
+.loading-screen, .error-screen {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  font-size: 1.5em;
+}
+.error-screen {
+  color: var(--color-text-error);
+}
+
+.currency {
+  margin-left: 10px;
+  font-weight: bold;
+}
+.currency.platinum { color: #e5e4e2; }
+.currency.gold { color: #FFD700; }
+.currency.silver { color: #C0C0C0; }
+.currency.copper { color: #B87333; }

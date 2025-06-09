@@ -1,6 +1,7 @@
 import React from 'react';
 import TerminalOutput from './TerminalOutput';
-import useGameStore from '../state/gameStore'; // <<< IMPORT THE STORE
+import useGameStore from '../state/gameStore'; 
+import './Terminal.css';
 
 function Terminal() {
   // Pull the logLines directly from our global state!

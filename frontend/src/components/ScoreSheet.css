@@ -1,0 +1,9 @@
+.score-sheet-container { color: var(--color-text-muted); }
+.score-header {
+  text-align: center; margin-bottom: 20px; font-size: 1.1em;
+  color: var(--color-text-loud);
+  border-bottom: 1px dashed var(--color-border-medium);
+  padding-bottom: 10px;
+}
+.score-stats { display: flex; justify-content: space-around; }
+.stat-column p { font-size: 1.1em; color: var(--color-text-link); }
