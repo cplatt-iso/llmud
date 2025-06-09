@@ -12,7 +12,7 @@ body {
 }
 
 #map-column {
-    display: none;
+    display: flex;
     flex-direction: column;
     margin-left: 15px;
     width: 350px;
@@ -264,7 +264,7 @@ body {
 }
 
 #vitals-monitor {
-    display: none;
+    display: flex;
     flex-direction: row;
     justify-content: space-around;
     align-items: center;
@@ -437,7 +437,7 @@ body {
 }
 
 #character-info-bar {
-    display: none;
+    display: flex;
     background-color: #111;
     color: #00dd00;
     padding: 6px 10px;
@@ -474,7 +474,6 @@ body {
 }
 
 #bottom-info-bar {
-    display: none; /* Should be display: flex; when active */
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -531,6 +530,154 @@ body {
     color: #e5e4e2;
 }
 
+.shop-box-border {
+    color: var(--shop-border-color);
+}
+.shop-box-title {
+    color: var(--shop-title-color);
+    font-weight: bold;
+}
+.shop-item-number {
+    color: var(--prompt-color);
+}
+.shop-item-name {
+    color: var(--item-name-color);
+}
+
 .terminal-line {}
 
 .room-description {}
+
+/* Add this to the BOTTOM of style.css */
+
+.login-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.login-form {
+  background-color: #111;
+  border: 1px solid #005500;
+  padding: 20px 30px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 0 15px #003300;
+}
+
+.login-form h2 {
+  text-align: center;
+  margin-top: 0;
+  color: #ffff00;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  color: #00dd00;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 8px;
+  background-color: #030303;
+  border: 1px solid #005500;
+  color: #00ff00;
+  font-family: inherit;
+  box-sizing: border-box; /* Important */
+}
+
+.login-form button {
+  width: 100%;
+  padding: 10px;
+  background-color: #005500;
+  border: 1px solid #00ff00;
+  color: #00ff00;
+  font-family: inherit;
+  font-size: 1.1em;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.login-form button:hover:not(:disabled) {
+  background-color: #007700;
+}
+
+.login-form button:disabled {
+  background-color: #333;
+  border-color: #555;
+  color: #777;
+  cursor: not-allowed;
+}
+
+.error-message {
+    color: #ff4444;
+    background-color: rgba(255, 0, 0, 0.1);
+    border: 1px solid #ff4444;
+    padding: 10px;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+/* Character Selection Screen Styles */
+.char-select-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px;
+  color: #00ff00;
+}
+
+.char-select-container h2 {
+    color: #ffff00;
+}
+
+.char-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+}
+
+.char-card {
+  background-color: #111;
+  border: 1px solid #005500;
+  padding: 15px 25px;
+  min-width: 200px;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+.char-card:hover {
+  background-color: #002c00;
+  box-shadow: 0 0 10px #00ff00;
+}
+
+.char-card h3 {
+  margin: 0 0 5px 0;
+  color: #ffffff;
+}
+
+.char-card p {
+  margin: 0;
+  color: #00ddaa;
+}
+
+.loading-screen, .error-screen {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-size: 1.5em;
+}
+.error-screen {
+    color: #ff4444;
+}

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 import sys # For detailed print statements
 from app.core.config import settings
 import logging # Import logging
+from fastapi.middleware.cors import CORSMiddleware 
 
 # --- Setup Logging First ---
 # This needs to happen before other modules that might use logging are imported,
@@ -70,6 +71,20 @@ except Exception as e:
 logger.debug("--- main.py - Creating FastAPI app instance ---")
 app = FastAPI(title=settings.PROJECT_NAME)
 logger.info("--- main.py - FastAPI app instance CREATED ---")
+
+origins = [
+    "http://localhost:5174",
+    "http://192.168.88.115:5174",
+    "https://llmud.trazen.org"
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.on_event("startup")
 def on_startup_sync():

@@ -1,5 +1,5 @@
 # backend/app/api/v1/endpoints/user.py
-from fastapi import APIRouter, Depends, HTTPException, status, Body, Form # Added Body
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Form, Request # Added Body
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import Any
@@ -11,7 +11,9 @@ from app.db.session import get_db
 from app.core.security import verify_password, create_access_token # Import create_access_token
 from app.core.config import settings # For ACCESS_TOKEN_EXPIRE_MINUTES
 from app.api.dependencies import get_current_player # Add this import
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter() 
 
 class UserLoginRequest(BaseModel):
@@ -21,6 +23,19 @@ class UserLoginRequest(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+@router.get("/debug-headers")
+def debug_headers(request: Request):
+    """
+    A simple, unprotected endpoint to dump all received headers to the log.
+    """
+    header_log_message = "\n" + "="*50 + "\nHEADERS RECEIVED AT /debug-headers:\n"
+    for name, value in request.headers.items():
+        header_log_message += f"  {name}: {value}\n"
+    header_log_message += "="*50
+    logger.info(header_log_message) # Using INFO to make sure it prints
+    
+    return {"message": "Headers logged to backend console."}
 
 @router.post("/login", response_model=Token)
 def login_user_for_access_token(

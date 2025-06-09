@@ -7,11 +7,91 @@ from sqlalchemy.orm import Session
 
 from app import crud, models, schemas
 from app.game_logic import combat  # For sending messages to the player
+from app.commands.utils import get_visible_length
 
 logger = logging.getLogger(__name__)
 
-# Let's define the merchant's cut. They're greedy bastards.
-MERCHANT_BUY_PRICE_MODIFIER = 0.25 # They buy from players at 25% of the item's base value.
+MERCHANT_BUY_PRICE_MODIFIER = 0.25
+
+def _format_shop_list_for_display(merchant_name: str, items: List[models.Item]) -> str:
+    """Creates a beautiful, formatted ASCII box for the shop list. This version isn't fucked."""
+    if not items:
+        return f"{merchant_name} has nothing to sell."
+
+    # --- Step 1: Prepare all data rows first ---
+    headers = {'num': '#', 'name': 'Item', 'price': 'Price'}
+    rows = [
+        {
+            'num': f"{i}.",
+            'name': item.name,
+            'price': _format_price(item.value)
+        }
+        for i, item in enumerate(items, 1)
+    ]
+
+    # --- Step 2: Calculate column widths based on REAL data ---
+    # The width of a column is the max length of its header or any of its data cells
+    num_col_width = max(len(row['num']) for row in rows)
+    name_col_width = max([len(row['name']) for row in rows] + [len(headers['name'])])
+    price_col_width = max([get_visible_length(row['price']) for row in rows] + [len(headers['price'])])
+
+    # --- Step 3: Build the fucking box line by line ---
+    output_lines = []
+    T_L, T_R, B_L, B_R = "┌", "┐", "└", "┘"
+    HOR, VER = "─", "│"
+    T_J, B_J, L_J, R_J, CROSS = "┬", "┴", "├", "┤", "┼"
+    
+    border_class = "shop-box-border"
+    title_class = "shop-box-title"
+    
+    # Define padding for a cleaner look
+    col_padding = " "
+    
+    # Create the horizontal separator line
+    top_sep = f"{T_J}{HOR * (num_col_width + 2)}{T_J}{HOR * (name_col_width + 2)}{T_J}{HOR * (price_col_width + 2)}{T_J}"
+    mid_sep = f"{L_J}{HOR * (num_col_width + 2)}{CROSS}{HOR * (name_col_width + 2)}{CROSS}{HOR * (price_col_width + 2)}{R_J}"
+    bot_sep = f"{B_L}{HOR * (num_col_width + 2)}{B_J}{HOR * (name_col_width + 2)}{B_J}{HOR * (price_col_width + 2)}{B_R}"
+
+    # Top border with title
+    title = f" {merchant_name}'s Wares "
+    total_width = len(top_sep) - 4 # Exclude the end caps for title calculation
+    output_lines.append(f"<span class='{border_class}'>{T_L}{HOR*2}<span class='{title_class}'>{title}</span>{HOR*(total_width - len(title) - 2)}{T_R}</span>")
+    
+    # Header row
+    header_line = (
+        f"<span class='{border_class}'>{VER}</span>"
+        f"{col_padding}{headers['num'].ljust(num_col_width)}{col_padding}"
+        f"<span class='{border_class}'>{VER}</span>"
+        f"{col_padding}{headers['name'].ljust(name_col_width)}{col_padding}"
+        f"<span class='{border_class}'>{VER}</span>"
+        f"{col_padding}{headers['price'].rjust(price_col_width)}{col_padding}"
+        f"<span class='{border_class}'>{VER}</span>"
+    )
+    output_lines.append(header_line)
+
+    # Separator after header
+    output_lines.append(f"<span class='{border_class}'>{mid_sep}</span>")
+
+    # Data rows
+    for row in rows:
+        price_padding = " " * (price_col_width - get_visible_length(row['price']))
+        row_line = (
+            f"<span class='{border_class}'>{VER}</span>"
+            f"{col_padding}<span class='shop-item-number'>{row['num'].ljust(num_col_width)}</span>{col_padding}"
+            f"<span class='{border_class}'>{VER}</span>"
+            f"{col_padding}<span class='shop-item-name'>{row['name'].ljust(name_col_width)}</span>{col_padding}"
+            f"<span class='{border_class}'>{VER}</span>"
+            f"{col_padding}{price_padding}{row['price']}{col_padding}"
+            f"<span class='{border_class}'>{VER}</span>"
+        )
+        output_lines.append(row_line)
+
+    # Footer
+    output_lines.append(f"<span class='{border_class}'>{bot_sep}</span>")
+    output_lines.append(f"Type <span class='command-suggestion'>buy <# or name></span> to purchase.")
+    
+    return "\n".join(output_lines)
+
 
 def _get_merchant_in_room(db: Session, room: models.Room) -> Optional[models.NpcTemplate]:
     """Finds the first NPC with npc_type 'merchant' in a given room."""
@@ -186,24 +266,11 @@ async def handle_ws_list(
         return
 
     shop_items = _get_shop_inventory_items(db, merchant)
-    if not shop_items:
-        await combat.send_combat_log(
-            player.id, [f"{merchant.name} has nothing to sell right now."]
-        )
-        return
-
-    header = f"<span class='shop-header'>{merchant.name} is selling:</span>"
-    item_lines = [
-        (
-            f"<div class='shop-list-item'><span class='shop-item-number'>{i}.</span> "
-            f"<span class='shop-item-name'>{item.name}</span> <span class='shop-item-price'>"
-            f"{_format_price(item.value)}</span></div>"
-        )
-        for i, item in enumerate(shop_items, 1)
-    ]
-
-    full_message = f"{header}\n" + "\n".join(item_lines)
-    await combat.send_combat_log(player.id, [full_message])
+    
+    # NEW: Use our fancy formatter
+    formatted_list = _format_shop_list_for_display(merchant.name, shop_items)
+    
+    await combat.send_combat_log(player.id, [formatted_list])
 
 
 async def handle_ws_buy(

@@ -51,44 +51,40 @@ CORE_FILES_TO_BUNDLE=(
     "bundle_context.sh"
     "README.md"
 
-    # --- Backend - Core application & Logging ---
-    "$BACKEND_APP_DIR/main.py"
-    "$BACKEND_APP_DIR/core/config.py"
-    "$BACKEND_APP_DIR/websocket_router.py"    # For routing new commands
+    # --- Backend - Key Schemas and API Endpoints ---
+    "backend/app/api/v1/endpoints/user.py"
+    "backend/app/api/v1/endpoints/character.py"
+    "backend/app/websocket_router.py"
+    "backend/app/schemas/character.py"
+    "backend/app/schemas/item.py"
+    "backend/app/schemas/command.py" # For HTTP commands like score, inventory
+    "backend/app/schemas/map.py"
 
-    # --- Backend - PRIMARY FOCUS FOR NEXT STEPS (Shops, NPCs, and Commerce) ---
-    # "$BACKEND_APP_DIR/commands/shop_parser.py"       # CRITICAL: We will create this file for list/buy commands.
-    "$BACKEND_APP_DIR/crud/crud_character.py"         # CRITICAL: For update_character_currency
-    "$BACKEND_APP_DIR/crud/crud_character_inventory.py" # CRITICAL: For add_item_to_character_inventory
-    "$BACKEND_APP_DIR/crud/crud_npc.py"               # CRITICAL: For getting NPC data
-    "$BACKEND_APP_DIR/crud/crud_item.py"              # CRITICAL: For getting item price/value
-    "$BACKEND_APP_DIR/commands/utils.py"              # IMPORTANT: For formatting shop lists
-    "$BACKEND_APP_DIR/game_logic/npc_dialogue_ticker.py" # IMPORTANT: The AI part we just built
-    "$BACKEND_APP_DIR/services/world_service.py"        # IMPORTANT: Where our broadcast logic lives
+    # --- NEW Frontend - The Core Application ---
+    "frontend/package.json"
+    "frontend/vite.config.js"
+    "frontend/src/App.jsx"                 # The main app router/gatekeeper
+    "frontend/src/main.jsx"               # The application entry point
+    "frontend/src/index.html"             # The root HTML file
+    "frontend/src/style.css"              # Our one stylesheet to rule them all
 
-    # --- Backend - Essential Models for Shop Logic ---
-    "$BACKEND_APP_DIR/models/item.py"               # Defines item value
-    "$BACKEND_APP_DIR/models/character.py"          # Defines player currency
-    "$BACKEND_APP_DIR/models/character_inventory_item.py" # The destination for purchased items
-    "$BACKEND_APP_DIR/models/npc_template.py"       # Defines the NPC and their shop_inventory
-    "$BACKEND_APP_DIR/models/room.py"               # Defines npc_placements
+    # --- NEW Frontend - State and Services (The Brains) ---
+    "frontend/src/state/gameStore.js"         # CRITICAL: Zustand global state
+    "frontend/src/services/apiService.js"     # CRITICAL: Handles all HTTP calls
+    "frontend/src/services/webSocketService.js" # CRITICAL: Handles WebSocket communication
 
-    # --- Backend - Essential Schemas for Shop Logic ---
-    "$BACKEND_APP_DIR/schemas/item.py"
-    "$BACKEND_APP_DIR/schemas/character.py"
-    "$BACKEND_APP_DIR/schemas/npc.py"
-    "$BACKEND_APP_DIR/schemas/room.py"
+    # --- NEW Frontend - Key Components (The Body) ---
+    "frontend/src/components/GameLayout.jsx"
+    "frontend/src/components/LoginScreen.jsx"
+    "frontend/src/components/CharacterSelectionScreen.jsx"
+    "frontend/src/components/Map.jsx"
+    "frontend/src/components/Terminal.jsx"
+    "frontend/src/components/CommandInput.jsx"
 
-    # --- Seed Data (ABSOLUTELY CRITICAL) ---
-    "$BACKEND_APP_DIR/seeds/npcs.json"                  # MAJOR FOCUS: Defines what merchants sell
-    "$BACKEND_APP_DIR/seeds/items.json"                 # MAJOR FOCUS: Defines item properties and prices
-    "$BACKEND_APP_DIR/seeds/rooms_z0.json"              # For placing the shops
-    "$BACKEND_APP_DIR/seeds/loot_tables.json"           # For context on the game economy
-    "$BACKEND_APP_DIR/seeds/mob_spawn_definitions.json" # For world context
-
-    # --- Frontend (Relevant for displaying shop info) ---
-    "$FRONTEND_SRC_DIR/main.js"      # To see if command submission or response handling breaks
-    "$FRONTEND_SRC_DIR/ui.js"        # If shop list formatting needs CSS tweaks
+    # --- LEGACY JS (For Reference Only) ---
+    # "frontend/src/main.js"      
+    # "frontend/src/ui.js"        
+    # "frontend/src/api.js"
 )
 
 echo "--- START OF CORE BUNDLED FILES ---" >> "$OUTPUT_FILE"

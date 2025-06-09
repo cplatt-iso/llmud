@@ -1,6 +1,6 @@
 # backend/app/api/dependencies.py
 from typing import Optional
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
@@ -11,21 +11,30 @@ from app import models, schemas, crud
 from app.db.session import get_db
 from app.game_state import active_game_sessions # <<< ADDED THIS IMPORT
 
-reusable_oauth2 = OAuth2PasswordBearer(
-    tokenUrl=f"{settings.API_V1_STR}/users/login"
-)
-
 ALGORITHM = settings.ALGORITHM
 SECRET_KEY = settings.SECRET_KEY
 
 async def get_current_player(
-    db: Session = Depends(get_db), token: str = Depends(reusable_oauth2)
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(None) # <<< THIS IS THE MAGIC
 ) -> models.Player:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
+    if authorization is None:
+        raise credentials_exception
+    
+    # Manually split the "Bearer <token>" string
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            raise credentials_exception
+    except ValueError:
+        raise credentials_exception
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username_or_player_id: Optional[str] = payload.get("sub")
@@ -37,7 +46,7 @@ async def get_current_player(
         except ValueError:
             raise credentials_exception
             
-    except JWTError as e:
+    except JWTError:
         raise credentials_exception
     
     player = crud.crud_player.get_player(db, player_id=player_uuid)

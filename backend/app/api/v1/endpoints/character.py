@@ -1,5 +1,5 @@
 # backend/app/api/v1/endpoints/character.py
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
 from sqlalchemy.orm import Session
 import uuid
 from typing import Any, List
@@ -9,7 +9,9 @@ from ....db.session import get_db
 # from ....crud.crud_room import get_room_by_coords # No longer needed for this file directly if only used in create
 from ....api.dependencies import get_current_player
 from ....game_state import active_game_sessions # <<< ADDED THIS IMPORT
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -56,7 +58,7 @@ def read_characters_for_current_player(
 ):
     """
     Retrieve all characters for the currently authenticated player.
-    """
+    """ 
     characters = crud.crud_character.get_characters_by_player(db, player_id=current_player.id)
     return characters
 
