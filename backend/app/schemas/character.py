@@ -64,6 +64,9 @@ class CharacterInDBBase(CharacterBase):  # Inherits cleanly from CharacterBase
     silver_coins: int # type: ignore
     copper_coins: int # type: ignore
 
+    god_level: int
+    titles: Optional[List[str]] = None
+
     # --- Skills & Traits ---
     learned_skills: Optional[List[str]] = None 
     learned_traits: Optional[List[str]] = None 

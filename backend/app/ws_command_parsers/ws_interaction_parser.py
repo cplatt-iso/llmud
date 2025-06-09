@@ -55,6 +55,88 @@ async def _send_inventory_update_to_player(db: Session, character: models.Charac
     await connection_manager.send_personal_message(payload, character.player_id)
     logger.debug(f"Inventory update payload sent to player_id {character.player_id}")
     
+async def handle_ws_equip(
+    db: Session,
+    player: models.Player,
+    character: models.Character,
+    args_str: str
+):
+    """Handles the 'equip' or 'eq' command."""
+    if not args_str:
+        await combat.send_combat_log(player.id, ["Usage: equip <item_in_backpack> [target_slot]"])
+        return
+        
+    # TODO: Advanced parsing to separate item name from optional target slot
+    # For now, simple matching on the whole args_str
+    
+    backpack_items = [
+        inv_item for inv_item in character.inventory_items if not inv_item.equipped
+    ]
+
+    if not backpack_items:
+        await combat.send_combat_log(player.id, ["Your backpack is empty."])
+        return
+    
+    # Simple search logic for now
+    possible_matches = [
+        item for item in backpack_items 
+        if item.item and args_str.lower() in item.item.name.lower()
+    ]
+
+    target_inv_item: Optional[models.CharacterInventoryItem] = None
+    if len(possible_matches) == 1:
+        target_inv_item = possible_matches[0]
+    elif len(possible_matches) > 1:
+        # Check for an exact match
+        exact_match = next((item for item in possible_matches if item.item.name.lower() == args_str.lower()), None)
+        if exact_match:
+            target_inv_item = exact_match
+        else:
+            await combat.send_combat_log(player.id, [f"Multiple items match '{args_str}'. Be more specific."])
+            return
+    
+    if not target_inv_item:
+        await combat.send_combat_log(player.id, [f"You do not have '{args_str}' in your backpack."])
+        return
+
+    # At this point, target_inv_item is the CharacterInventoryItem to equip
+    equipped_entry, message = crud.crud_character_inventory.equip_item_from_inventory(
+        db, character_obj=character, inventory_item_id=target_inv_item.id
+    )
+
+    if equipped_entry:
+        await combat.send_combat_log(player.id, [message.replace("Staged equipping of", "You equip the")])
+    else:
+        await combat.send_combat_log(player.id, [f"You can't equip that: {message}"])
+    
+    # The inventory update will be pushed after commit in the router
+
+async def handle_ws_unequip(
+    db: Session,
+    player: models.Player,
+    character: models.Character,
+    args_str: str
+):
+    """Handles the 'unequip' or 'uneq' command."""
+    if not args_str:
+        await combat.send_combat_log(player.id, ["Usage: unequip <slot_name>"])
+        return
+
+    slot_to_unequip = args_str.lower().strip()
+    
+    if slot_to_unequip not in models.item.EQUIPMENT_SLOTS:
+        await combat.send_combat_log(player.id, [f"'{slot_to_unequip}' is not a valid equipment slot."])
+        return
+
+    unequipped_entry, message = crud.crud_character_inventory.unequip_item_to_inventory(
+        db, character_obj=character, slot_to_unequip=slot_to_unequip
+    )
+
+    if unequipped_entry:
+        await combat.send_combat_log(player.id, [message.replace("Staged unequipping of", "You unequip the")])
+    else:
+        await combat.send_combat_log(player.id, [f"You can't unequip from there: {message}"])
+
 async def handle_ws_get_take(
     db: Session,
     player: models.Player,

@@ -1,5 +1,6 @@
 # backend/app/websocket_manager.py
 import uuid
+import logging # <<<< MAKE SURE LOGGING IS IMPORTED
 from typing import Dict, List, Optional
 from fastapi import WebSocket
 from fastapi.encoders import jsonable_encoder
@@ -7,6 +8,8 @@ from fastapi.encoders import jsonable_encoder
 # We need access to the database to find out where characters are.
 from app.db.session import SessionLocal
 from app import crud
+
+logger = logging.getLogger(__name__) # <<<< GET A LOGGER
 
 class ConnectionManager:
     def __init__(self):
@@ -22,13 +25,12 @@ class ConnectionManager:
         self.active_player_connections[player_id] = websocket
         self.player_active_characters[player_id] = character_id
         
-        # When a character connects, update their location in our cache.
         with SessionLocal() as db:
             character = crud.crud_character.get_character(db, character_id=character_id)
             if character:
                 self.character_locations[character_id] = character.current_room_id
         
-        print(f"Player {player_id} (Character {character_id}) connected via WebSocket.")
+        logger.info(f"Player {player_id} (Character {character_id}) connected via WebSocket.")
 
     def disconnect(self, player_id: uuid.UUID):
         character_id = self.player_active_characters.get(player_id)
@@ -39,24 +41,18 @@ class ConnectionManager:
         if player_id in self.player_active_characters:
             del self.player_active_characters[player_id]
         
-        print(f"Player {player_id} disconnected from WebSocket.")
+        logger.info(f"Player {player_id} disconnected from WebSocket.")
 
     def get_character_id(self, player_id: uuid.UUID) -> Optional[uuid.UUID]:
         return self.player_active_characters.get(player_id)
         
     def update_character_location(self, character_id: uuid.UUID, room_id: uuid.UUID):
-        """Updates the cached location of a character."""
         self.character_locations[character_id] = room_id
 
-    # NEW METHOD #1: This is what the dialogue ticker needs.
     def get_all_player_locations(self) -> Dict[uuid.UUID, uuid.UUID]:
-        """Returns a dictionary mapping online character_id -> room_id."""
         return self.character_locations
 
-    # NEW METHOD #2: Also for the dialogue ticker.
     def is_character_online(self, character_id: uuid.UUID) -> bool:
-        """Checks if a character is currently connected via WebSocket."""
-        # A character is online if they are in our location cache.
         return character_id in self.character_locations
 
     def is_player_connected(self, player_id: uuid.UUID) -> bool:
@@ -69,7 +65,7 @@ class ConnectionManager:
                 encoded_payload = jsonable_encoder(message_payload)
                 await websocket.send_json(encoded_payload)
             except Exception as e:
-                print(f"Error sending WS message to {player_id}: {e}")
+                logger.error(f"Error sending personal WS message to {player_id}: {e}")
 
     async def broadcast_to_players(self, message_payload: dict, player_ids: List[uuid.UUID]):
         encoded_payload = jsonable_encoder(message_payload)
@@ -79,10 +75,21 @@ class ConnectionManager:
                 try:
                     await websocket.send_json(encoded_payload)
                 except Exception as e:
-                    print(f"Error broadcasting to player {player_id}: {e}")
+                    logger.error(f"Error broadcasting to player {player_id}: {e}")
     
-    # This was a stub, we don't need it. broadcast_say_to_room handles this logic better.
-    # async def broadcast_to_room(...)
+    # --- THIS IS THE NEW METHOD THAT MY BROKEN CODE WAS TRYING TO CALL ---
+    async def broadcast(self, message_payload: dict):
+        """Sends a message to every single connected WebSocket client."""
+        logger.info(f"Broadcasting global message: {message_payload.get('message', 'No message content')}")
+        encoded_payload = jsonable_encoder(message_payload)
+        # We iterate over the WebSocket objects directly
+        for connection in self.active_player_connections.values():
+            try:
+                await connection.send_json(encoded_payload)
+            except Exception as e:
+                # Log the error but continue trying to send to others. One bad client shouldn't stop a broadcast.
+                logger.warning(f"Failed to broadcast to a client: {e}")
+    # --- END OF NEW METHOD ---
 
     def get_all_active_player_ids(self) -> List[uuid.UUID]:
         return list(self.active_player_connections.keys())

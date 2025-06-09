@@ -5,6 +5,7 @@ import uuid
 import logging # Import logging
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from .. import models, schemas
 
@@ -12,6 +13,13 @@ logger = logging.getLogger(__name__) # Get a logger for this module
 
 # Path to the seeds directory (relative to this file)
 SEED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "seeds")
+
+def search_items_by_name(db: Session, name_part: str) -> List[models.Item]:
+    """
+    Performs a case-insensitive partial search for items by name.
+    """
+    return db.query(models.Item).filter(func.lower(models.Item.name).ilike(f"%{name_part.lower()}%")).all()
+
 
 def _load_seed_data_for_items(filename: str) -> List[Dict[str, Any]]:
     filepath = os.path.join(SEED_DIR, filename)

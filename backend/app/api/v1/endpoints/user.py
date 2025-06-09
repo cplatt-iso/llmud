@@ -82,8 +82,22 @@ def register_new_user(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A player with this username already exists.",
             )
-        player = crud.crud_player.create_player(db, player_in=player_in)
+
+        # --- THE GENESIS PROTOCOL ---
+        # Check if any players exist in the database.
+        is_first_player = crud.crud_player.count_players(db) == 0
+        
+        if is_first_player:
+            logger.info("The Genesis Player is registering. Anointing as Sysop.")
+        
+        # Call the modified create_player function, passing the result of our check.
+        player = crud.crud_player.create_player(
+            db, player_in=player_in, is_sysop=is_first_player
+        )
+        # --- END GENESIS PROTOCOL ---
+
         return player
+        
     except HTTPException as http_exc:
         raise http_exc
     except Exception as e:

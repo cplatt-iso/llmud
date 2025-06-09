@@ -13,6 +13,9 @@ from .ws_interaction_parser import (
     handle_ws_search_examine,
     handle_ws_contextual_interactable,
     handle_ws_use_ooc_skill,
+    handle_ws_equip,
+    handle_ws_unequip,
+    _send_inventory_update_to_player
 )
 from .ws_movement_parser import (
     handle_ws_movement,
@@ -42,4 +45,7 @@ __all__ = [
     "handle_ws_buy",
     "handle_ws_sell",
     "handle_ws_sell_all_junk",
+    "handle_ws_equip",
+    "handle_ws_unequip",
+    "_send_inventory_update_to_player",
 ]
