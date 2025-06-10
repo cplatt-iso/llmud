@@ -1,0 +1,51 @@
+.ability-list-container {
+  padding: 10px;
+  color: var(--color-text-primary);
+}
+
+.ability-list-header {
+  color: var(--color-text-accent);
+  border-bottom: 1px solid var(--color-border-medium);
+  padding-bottom: 10px;
+  margin-bottom: 15px;
+}
+
+.ability-entry {
+  margin-bottom: 15px;
+  padding: 10px;
+  border: 1px solid var(--color-border-faint);
+  background-color: var(--color-background-medium);
+}
+
+.ability-entry.unlearned {
+  opacity: 0.5;
+  background-color: #050505;
+}
+
+.ability-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+
+.ability-level {
+  color: var(--color-text-system);
+  font-family: var(--font-family-ui);
+}
+
+.ability-name {
+  font-weight: bold;
+  font-size: 1.1em;
+  color: var(--color-text-loud);
+}
+
+.ability-entry.learned .ability-name {
+  color: var(--color-text-link);
+}
+
+.ability-description {
+  margin: 0 0 0 15px; /* Indent description */
+  font-style: italic;
+  color: var(--color-text-muted);
+}

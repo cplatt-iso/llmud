@@ -1,67 +1,89 @@
-.terminal-output {
+/*
+  Terminal.css - I AM SANE AND MY CODE IS GOOD.
+*/
+
+/* --- THE ACTUAL SCROLLING CONTAINER --- */
+#output.terminal-output {
   flex-grow: 1;
-  height: 70vh;
-  overflow-y: scroll;
-  background-color: var(--color-background-dark);
-  padding: 10px;
-  box-sizing: border-box;
-  white-space: pre-wrap;
-  line-height: 1.4;
-  border-bottom: 1px solid var(--color-border-medium);
+  overflow-y: auto;
   display: flex;
-  flex-direction: column-reverse;
-  /* This width fix should be in here */
-  min-width: 900px;
-  width: 65ch; 
+  flex-direction: column; /* <<< THIS IS THE FIX. IT MUST BE 'column'. NOT 'column-reverse'. */
+  padding: 10px;
 }
 
-.terminal-output::-webkit-scrollbar { width: 10px; }
-.terminal-output::-webkit-scrollbar-track { background: var(--color-background-medium); }
-.terminal-output::-webkit-scrollbar-thumb {
+/* --- SCROLLBAR STYLING --- */
+#output.terminal-output::-webkit-scrollbar {
+  width: 10px;
+}
+#output.terminal-output::-webkit-scrollbar-track {
+  background: var(--color-background-dark);
+}
+#output.terminal-output::-webkit-scrollbar-thumb {
   background-color: var(--color-border-medium);
   border-radius: 5px;
   border: 2px solid var(--color-background-dark);
 }
 
+
+/* --- COMMAND INPUT STYLING --- */
 .terminal-input-line {
   display: flex;
   align-items: center;
   background-color: var(--color-background-dark);
   padding: 8px 10px;
+  border-top: 1px solid var(--color-border-medium);
 }
 
-#prompt-text {
+#prompt-text::before {
+  content: '>';
   margin-right: 8px;
   color: var(--color-prompt);
+  font-weight: bold;
 }
 
-.terminal-input {
+#commandInput.terminal-input {
   flex-grow: 1;
-  background-color: transparent;
-  border: none;
-  color: var(--color-text-primary);
-  font-family: inherit;
-  font-size: 1em;
-  outline: none;
-  padding: 0;
+  background-color: transparent !important;
+  border: none !important;
+  color: var(--color-text-primary) !important;
+  font-family: inherit !important;
+  font-size: 1em !important;
+  outline: none !important;
+  padding: 0 !important;
 }
 
-/* --- PRE-EXISTING UTILITY CLASSES --- */
-.system-message-inline {
-  color: var(--color-text-system);
+
+/* --- MOB AND MISC STYLING --- */
+.terminal-line {
+  line-height: 1.4;
+  white-space: pre-wrap;
+  /* We add this to prevent the lines from shrinking when the flex container is small */
+  flex-shrink: 0;
+}
+
+.terminal-line .mob-name { font-weight: bold; }
+.terminal-line .difficulty-trivial { color: #808080; }
+.terminal-line .difficulty-easy    { color: #4CAF50; }
+.terminal-line .difficulty-neutral { color: #FFEB3B; }
+.terminal-line .difficulty-hard    { color: #FF9800; }
+.terminal-line .difficulty-deadly  { color: #F44336; }
+
+.placeholder-content {
+  margin: auto;
+  font-style: italic;
+  color: #666;
+}
+
+.terminal-line .npc-name {
+  color: var(--color-text-loud); /* Bright White */
+  font-weight: bold;
+}
+
+.terminal-line .npc-paren {
+  color: var(--color-text-loud); /* Bright White */
+}
+
+.terminal-line .npc-title {
+  color: #00ffff; /* A pure, beautiful Cyan */
   font-style: italic;
 }
-.combat-success { color: #33cc33; font-weight: bold; }
-.combat-death { color: var(--color-text-error); font-weight: bold; }
-.ooc-chat-message { color: #9999ff; font-style: italic; }
-.exit { color: #87ceeb; /* A nice sky blue for exits */ }
-
-
-/* --- THIS IS THE SHIT THAT WAS MISSING --- */
-/* --- NEW MOB DIFFICULTY COLORS --- */
-.mob-name { font-weight: bold; }
-.difficulty-trivial { color: #808080; } /* Grey */
-.difficulty-easy    { color: #4CAF50; } /* Green */
-.difficulty-neutral { color: #FFEB3B; } /* Yellow */
-.difficulty-hard    { color: #FF9800; } /* Orange */
-.difficulty-deadly  { color: #F44336; } /* Red */

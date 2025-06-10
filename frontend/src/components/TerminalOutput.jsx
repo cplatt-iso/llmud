@@ -1,33 +1,33 @@
 import React from 'react';
 import LookResult from './LookResult';
 
-// A new, memoized component for simple HTML lines
-const MemoizedHtmlLine = React.memo(function HtmlLine({ html }) {
-  return <div className="terminal-line" dangerouslySetInnerHTML={{ __html: html }} />;
-});
-
-function TerminalOutput({ logLines }) {
+// Use React.forwardRef to allow the parent to get a ref to the inner div
+const TerminalOutput = React.forwardRef(function TerminalOutput({ logLines }, ref) {
   return (
-    <div id="output" className="terminal-output">
+    // Attach the forwarded ref to the div that actually scrolls
+    <div id="output" className="terminal-output" ref={ref}>
       {logLines.map((line) => {
-        const key = line.id;
+        const key = line.id || Math.random(); // Use a fallback key just in case
 
-        switch (line.type) {
-          case 'look':
-            return (
-              <div key={key} className="terminal-line look-result-wrapper">
-                <LookResult data={line.data} />
-              </div>
-            );
-          
-          case 'html':
-          case 'echo': // For player commands
-          default:
-            return <MemoizedHtmlLine key={key} html={line.data} />;
+        // Your existing rendering logic is correct
+        if (typeof line.data === 'object' && line.data !== null && line.type === 'look') {
+          return (
+            <div key={key} className="terminal-line look-result-wrapper">
+              <LookResult data={line.data} />
+            </div>
+          );
         }
+        
+        return (
+          <div
+            key={key}
+            className="terminal-line"
+            dangerouslySetInnerHTML={{ __html: line.data }}
+          />
+        );
       })}
     </div>
   );
-}
+});
 
 export default TerminalOutput;

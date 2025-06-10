@@ -1,6 +1,5 @@
 import React from 'react'; // Make sure to import React
 import GroundItems from './GroundItems';
-import './LookResult.css';
 
 // Wrap the entire component in React.memo
 const LookResult = React.memo(function LookResult({ data }) {

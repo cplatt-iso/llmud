@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import useGameStore from '../state/gameStore';
-import './Map.css';
+
 
 // Constants can live outside the component for clarity
 const TILE_SIZE = 24;

@@ -55,10 +55,10 @@ export const apiService = {
         return fetchData('/character-class/templates', {}, token);
     },
     fetchCharacterDetails: (token) => {
-    return fetchData('/character/me/active', {}, token);
+        return fetchData('/character/me/active', {}, token);
     },
     fetchInventory: (token) => {
-    return fetchData('/character/me/inventory', {}, token);
+        return fetchData('/character/me/inventory', {}, token);
     },
     selectCharacterOnBackend: (characterId, token) => {
         return fetchData(`/character/${characterId}/select`, { method: 'POST' }, token);
@@ -66,11 +66,14 @@ export const apiService = {
     fetchMapData: (token) => {
         // This endpoint might need to be adjusted if it needs a z-level or other params
         return fetchData('/map/level_data', {}, token);
-    },    
+    },
     createCharacter: (characterData, token) => {
         return fetchData('/character/create', {
             method: 'POST',
             body: characterData // e.g., { name: 'Grog', class_name: 'Barbarian' }
         }, token);
-    }
+    },
+    fetchAbilities: (token) => {
+        return fetchData('/character/me/abilities', {}, token);
+    },
 };

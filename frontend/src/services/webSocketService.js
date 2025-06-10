@@ -28,7 +28,7 @@ const handleMessage = (event) => {
                     // Welcome package logs are also just HTML
                     if (serverData.log && serverData.log.length > 0) {
                         const newLogEntries = serverData.log.map(line => createLogEntry('html', line));
-                        state.logLines.unshift(...newLogEntries.reverse());
+                        state.logLines.push(...newLogEntries);
                     }
                     if (serverData.character_vitals) {
                         state.vitals.hp.current = serverData.character_vitals.current_hp;
@@ -52,7 +52,7 @@ const handleMessage = (event) => {
                     // Combat logs are arrays of HTML strings
                     if (serverData.log && serverData.log.length > 0) {
                         const newLogEntries = serverData.log.map(line => createLogEntry('html', line));
-                        state.logLines.unshift(...newLogEntries.reverse());
+                        state.logLines.push(...newLogEntries);
                     }
                     if (serverData.character_vitals) {
                         state.vitals.hp.current = serverData.character_vitals.current_hp;
@@ -82,7 +82,7 @@ const handleMessage = (event) => {
             case "look_response":
                 setState(state => {
                     // This is our special structured log object
-                    state.logLines.unshift(createLogEntry('look', serverData));
+                    state.logLines.push(createLogEntry('look', serverData)); 
                 });
                 break;
 
@@ -111,7 +111,7 @@ const handleMessage = (event) => {
             case "ooc_message":
                 setState((state) => {
                     // These are single HTML strings
-                    state.logLines.unshift(createLogEntry('html', serverData.message));
+                    state.logLines.push(createLogEntry('html', serverData.message));
                 });
                 break;
 
@@ -119,7 +119,7 @@ const handleMessage = (event) => {
                 console.warn("Unhandled WS message type:", serverData.type);
                 // Even for unhandled types, let's log them as plain text
                 setState(state => {
-                    state.logLines.unshift(createLogEntry('html', `<span class="system-message-inline">Unhandled event: ${serverData.type}</span>`));
+                    state.logLines.push(createLogEntry('html', `<span class="system-message-inline">Unhandled event: ${serverData.type}</span>`));
                 });
                 break;
         }
@@ -135,14 +135,14 @@ const handleClose = (event) => {
     socket = null;
     setState(state => {
         const closeMessage = `! Game server connection closed. (Code: ${event.code} ${event.reason || ''})`.trim();
-        state.logLines.unshift(createLogEntry('html', `<span class="system-message-inline">${closeMessage}</span>`));
+        state.logLines.push(createLogEntry('html', `<span class="system-message-inline">${closeMessage}</span>`));
     });
 };
 
 const handleError = (event) => {
     console.error("WebSocket error observed:", event);
     setState(state => {
-        state.logLines.unshift(createLogEntry('html', '<span class="system-message-inline">! WebSocket connection error.</span>'));
+        state.logLines.push(createLogEntry('html', '<span class="system-message-inline">! WebSocket connection error.</span>'));
     });
 };
 
@@ -184,7 +184,7 @@ export const webSocketService = {
         } else {
             console.error("Cannot send WS message: Not connected.");
             setState(state => {
-                state.logLines.unshift(createLogEntry('html', '<span class="system-message-inline">! Cannot send command: Not connected to game server.</span>'));
+                state.logLines.push(createLogEntry('html', '<span class="system-message-inline">! Cannot send command: Not connected to game server.</span>'));
             });
         }
     },
@@ -193,7 +193,7 @@ export const webSocketService = {
     // to keep the log creation logic consistent.
     addClientLog: (type, data) => {
         setState(state => {
-            state.logLines.unshift(createLogEntry(type, data));
+            state.logLines.push(createLogEntry(type, data));
         })
     }
 };

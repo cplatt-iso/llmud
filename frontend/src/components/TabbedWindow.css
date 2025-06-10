@@ -1,0 +1,13 @@
+/* frontend/src/components/TabbedWindow.css */
+.tab-content-wrapper {
+  flex-grow: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column; /* ENSURE THIS IS NOT REVERSE */
+  background-color: var(--color-background-dark);
+}
+
+/* TerminalOutput itself will handle padding and its own internal styles */
+.terminal-output {
+  padding: 10px;
+}

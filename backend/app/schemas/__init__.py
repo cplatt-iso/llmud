@@ -38,3 +38,7 @@ from .npc import (
     NpcTemplateBase, NpcTemplateCreate, NpcTemplateUpdate, NpcTemplateInDB,
     RoomNpcInstance
 )
+
+from .abilities import (
+    AbilityDetail, CharacterAbilitiesResponse
+)

@@ -1,6 +1,6 @@
 import React from 'react';
 import useGameStore from '../state/gameStore'; // <<< IMPORT
-import './BottomInfoBar.css';
+
 
 function BottomInfoBar() {
   // --- PULL DYNAMIC DATA FROM THE STORE ---

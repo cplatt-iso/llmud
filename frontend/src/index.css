@@ -74,16 +74,32 @@ body {
   flex-direction: row;
   align-items: flex-start;
   width: 100%;
-  max-width: 1200px;
+  max-width: 1300px; /* Give it a bit more room maybe */
 }
 
 .mud-container {
-  position: relative;
-  width: 100%;
-  max-width: 900px;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--color-border-medium);
+  width: 900px;
+  height: 85vh;
+  border: 2px solid var(--color-border-strong); /* THE BRIGHT OUTER BORDER */
+  background-color: #000;
+  position: relative;
+}
+
+.terminal-window-container {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1; 
+  min-height: 0;
+  background-color: #000;
+  /* THE MUTED INNER BORDER */
+  border-top: 1px solid var(--color-border-medium);
+  border-bottom: 1px solid var(--color-border-medium);
+}
+
+.game-footer-bar {
+  flex-shrink: 0;
 }
 
 .loading-screen, .error-screen {

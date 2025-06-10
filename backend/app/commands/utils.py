@@ -316,7 +316,7 @@ def format_inventory_for_player_message(
 def format_room_npcs_for_player_message(
     room_npcs: List[models.NpcTemplate]
 ) -> str:
-    """Formats NPCs in the room into a readable string."""
+    """Formats NPCs in the room into a readable string with detailed styling spans."""
     if not room_npcs:
         return ""
 
@@ -325,10 +325,19 @@ def format_room_npcs_for_player_message(
     sorted_room_npcs = sorted(room_npcs, key=lambda c: c.name)
 
     for npc_template in sorted_room_npcs:
+        # The glorious, corrected string formatting:
         npc_name_html = f"<span class='npc-name'>{npc_template.name}</span>"
-        # Example: Bjorne Ironhand (Weaponsmith)
-        npc_type_html = f"<span class='npc-type'>({npc_template.npc_type.replace('_', ' ').title()})</span>"
-        lines.append(f"  {npc_name_html} {npc_type_html}")
+        
+        # We build the title part separately for clarity and styling hooks
+        npc_type_display = npc_template.npc_type.replace('_', ' ').title()
+        
+        npc_full_title_html = (
+            f"<span class='npc-paren'>(</span>"
+            f"<span class='npc-title'>{npc_type_display}</span>"
+            f"<span class='npc-paren'>)</span>"
+        )
+        
+        lines.append(f"  {npc_name_html} {npc_full_title_html}")
 
     return "\n".join(lines)
 

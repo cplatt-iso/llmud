@@ -1,9 +1,18 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import { apiService } from '../services/apiService';
+import { v4 as uuidv4 } from 'uuid'; // You need to have run 'npm install uuid'
+
+// This helper function creates the structured log object our frontend now expects.
+// It needs to be defined at the top level of the module so it's accessible.
+const createLogLine = (data, type = 'html') => ({
+  id: uuidv4(),
+  type,
+  data,
+});
 
 const initialState = {
-  sessionState: 'LOGGED_OUT', // 'LOGGED_OUT', 'LOGGING_IN', 'CHAR_SELECT', 'IN_GAME'
+  sessionState: 'LOGGED_OUT',
   token: null,
   characterId: null,
   characterName: '',
@@ -12,18 +21,21 @@ const initialState = {
   characterList: [],
   classTemplates: [],
   logLines: [
-    '<span class="system-message-inline">Zustand brain is online. Please log in.</span>',
-  ].reverse(),
+    createLogLine('<span class="system-message-inline">Zustand brain is online. Please log in.</span>')
+  ],
   vitals: {
     hp: { current: 100, max: 100 },
     mp: { current: 50, max: 50 },
     xp: { current: 0, max: 100 },
+    platinum: 0, gold: 0, silver: 0, copper: 0,
   },
   mapData: null,
   currentRoomId: null,
-  activeModal: null, // null, 'inventory', 'score', 'skills', 'traits'
-  characterStats: null, // Will hold the full character data for the score sheet
-  inventory: null, // Will hold the full inventory data
+  activeTab: 'Terminal',
+  characterStats: null,
+  inventory: null,
+  abilities: null,
+  whoListData: null,
 };
 
 
@@ -32,71 +44,105 @@ const useGameStore = create(
     ...initialState,
 
     // === ACTIONS ===
-
     setSessionState: (newState) => set({ sessionState: newState }),
-
-    login: (token) => {
-      // console.log('[gameStore] login action called with token:', token);
-      set({
-        token: token,
-        sessionState: 'CHAR_SELECT', // Set both at the same time!
-      });
-    },
-    startCharacterCreation: () => {
-        set({ sessionState: 'CHAR_CREATE' });
-    },
-
-    setClassTemplates: (templates) => {
-        set({ classTemplates: templates });
-    },
-
-    finishCharacterCreation: () => {
-        // After creating a character, we go back to the selection screen
-        // to see our new masterpiece in the list.
-        set({ sessionState: 'CHAR_SELECT' });
-    },
-    fetchScoreAndOpenModal: async () => {
-      const token = get().token;
-      if (!token) return;
-      // If the data is already there, just open the modal. No need to fetch again.
-      if (get().characterStats) {
-        set({ activeModal: 'score' });
-        return;
-      }
-      try {
-        const charDetails = await apiService.fetchCharacterDetails(token);
-        set({ characterStats: charDetails, activeModal: 'score' });
-      } catch (error) {
-        console.error("Failed to fetch character details:", error);
-        get().addLogLine("! Could not retrieve character score sheet.");
-      }
-    },
-
+    login: (token) => set({ token: token, sessionState: 'CHAR_SELECT' }),
+    startCharacterCreation: () => set({ sessionState: 'CHAR_CREATE' }),
+    setClassTemplates: (templates) => set({ classTemplates: templates }),
+    finishCharacterCreation: () => set({ sessionState: 'CHAR_SELECT' }),
     setCharacterList: (characters) => set({ characterList: characters }),
 
     selectCharacter: (character) => {
-      set({
-        characterId: character.id,
-        characterName: character.name,
-        characterClass: character.class_name,
-        characterLevel: character.level,
-        currentRoomId: character.current_room_id,
-        sessionState: 'IN_GAME',
-        logLines: [`<span class="system-message-inline">Welcome, ${character.name}!</span>`].reverse()
+      set((state) => {
+        state.characterId = character.id;
+        state.characterName = character.name;
+        state.characterClass = character.class_name;
+        state.characterLevel = character.level;
+        state.currentRoomId = character.current_room_id;
+        state.sessionState = 'IN_GAME';
+        state.logLines = [createLogLine(`<span class="system-message-inline">Welcome, ${character.name}!</span>`)];
       });
       get().fetchMapData();
     },
 
-    addLogLine: (line) => {
+    addLogLine: (data, type = 'html') => {
       set((state) => {
-        state.logLines.unshift(line);
+        state.logLines.push(createLogLine(data, type));
       });
+    },
+
+    setVitals: (vitalsUpdate) => {
+      set((state) => {
+        if (vitalsUpdate.current_hp !== undefined) state.vitals.hp.current = vitalsUpdate.current_hp;
+        if (vitalsUpdate.max_hp !== undefined) state.vitals.hp.max = vitalsUpdate.max_hp;
+        if (vitalsUpdate.current_mp !== undefined) state.vitals.mp.current = vitalsUpdate.current_mp;
+        if (vitalsUpdate.max_mp !== undefined) state.vitals.mp.max = vitalsUpdate.max_mp;
+        if (vitalsUpdate.current_xp !== undefined) state.vitals.xp.current = vitalsUpdate.current_xp;
+        if (vitalsUpdate.next_level_xp !== undefined) state.vitals.xp.max = vitalsUpdate.next_level_xp;
+        if (vitalsUpdate.platinum !== undefined) state.vitals.platinum = vitalsUpdate.platinum;
+        if (vitalsUpdate.gold !== undefined) state.vitals.gold = vitalsUpdate.gold;
+        if (vitalsUpdate.silver !== undefined) state.vitals.silver = vitalsUpdate.silver;
+        if (vitalsUpdate.copper !== undefined) state.vitals.copper = vitalsUpdate.copper;
+        if (vitalsUpdate.level !== undefined) state.characterLevel = vitalsUpdate.level;
+      });
+    },
+
+    setInventory: (inventoryData) => {
+      set({ inventory: inventoryData });
+    },
+
+    setActiveTab: (tabName) => {
+      set({ activeTab: tabName });
+      const state = get();
+      if (tabName === 'Score' && !state.characterStats) {
+        state.fetchScoreSheet();
+      }
+      if ((tabName === 'Backpack' || tabName === 'Equipment') && !state.inventory) {
+        state.fetchInventory();
+      }
+      if ((tabName === 'Skills/Spells' || tabName === 'Traits') && !state.abilities) {
+        state.fetchAbilities();
+      }
+    },
+
+    fetchAbilities: async () => {
+      const token = get().token;
+      if (!token) return;
+      try {
+        const abilitiesData = await apiService.fetchAbilities(token);
+        set({ abilities: abilitiesData });
+      } catch (error) {
+        console.error("Failed to fetch abilities:", error);
+        get().addLogLine("! Could not retrieve skills and traits list.");
+      }
+    },
+
+    fetchScoreSheet: async () => {
+      const token = get().token;
+      if (!token) return;
+      try {
+        const charDetails = await apiService.fetchCharacterDetails(token);
+        set({ characterStats: charDetails });
+      } catch (error) {
+        console.error("Failed to fetch score sheet:", error);
+        get().addLogLine("! Could not retrieve character score sheet.");
+      }
+    },
+
+    fetchInventory: async () => {
+      const token = get().token;
+      if (!token) return;
+      try {
+        const inventoryData = await apiService.fetchInventory(token);
+        set({ inventory: inventoryData });
+      } catch (error) {
+        console.error("Failed to fetch inventory:", error);
+        get().addLogLine("! Could not retrieve inventory.");
+      }
     },
 
     fetchMapData: async () => {
       const token = get().token;
       if (!token) return;
-
       try {
         const mapData = await apiService.fetchMapData(token);
         set({ mapData: mapData });
@@ -106,73 +152,13 @@ const useGameStore = create(
       }
     },
 
-    setVitals: (vitalsUpdate) => {
-      set((state) => {
-        state.vitals = { ...state.vitals, ...vitalsUpdate };
-      });
+    fetchWhoList: async () => {
+      get().addLogLine("! 'Who' command not yet implemented.");
     },
 
-    setInventory: (inventoryData) => {
-      set({ inventory: inventoryData });
-    },
-
-    fetchInventoryAndOpenModal: async () => {
-      const token = get().token;
-      if (!token) return;
-      // Same logic as score: if inventory data exists, just show it.
-      if (get().inventory) {
-        set({ activeModal: 'inventory' });
-        return;
-      }
-      try {
-        const inventoryData = await apiService.fetchInventory(token);
-        // We now use our dedicated setter
-        get().setInventory(inventoryData);
-        set({ activeModal: 'inventory' });
-      } catch (error) {
-        console.error("Failed to fetch inventory:", error);
-        get().addLogLine("! Could not retrieve inventory.");
-      }
-    },
-
-    // --- NEW MODAL ACTIONS ---
-    openModal: (modalName) => set({ activeModal: modalName }),
-
-    closeModal: () => {
-      const currentModal = get().activeModal;
-      // If we're closing the inventory, nullify its data to ensure a fresh fetch next time.
-      if (currentModal === 'inventory') {
-        set({ activeModal: null, inventory: null });
-      } else if (currentModal === 'score') {
-        set({ activeModal: null, characterStats: null });
-      } else {
-        set({ activeModal: null });
-      }
-    },
-
-    // --- FULLY IMPLEMENTED LOGOUT ---
     logout: () => {
-      console.log("[gameStore] Logging out.");
-      set((state) => {
-        // We can't just reset to initialState because we want to keep the log message.
-        // So we reset each property manually.
-        state.sessionState = 'LOGGED_OUT';
-        state.token = null;
-        state.characterId = null;
-        state.characterName = '';
-        state.characterClass = '';
-        state.characterLevel = 1;
-        state.characterList = [];
-        state.vitals = { hp: { current: 100, max: 100 }, mp: { current: 50, max: 50 }, xp: { current: 0, max: 100 } };
-        state.mapData = null;
-        state.currentRoomId = null;
-        state.activeModal = null;
-        state.characterStats = null;
-        // Add a nice logout message to the top of the new log
-        state.logLines = ['<span class="system-message-inline">You have been logged out. Please log in again.</span>'].reverse();
-      });
-    }
-
+      set({ ...initialState, logLines: [createLogLine('<span class="system-message-inline">You have been logged out. Please log in again.</span>')] });
+    },
   }))
 );
 

@@ -1,6 +1,5 @@
 import React from 'react';
 import ItemName from './ItemName';
-import './GroundItems.css';
 
 const GroundItems = React.memo(function GroundItems({ items }){
   if (!items || items.length === 0) {

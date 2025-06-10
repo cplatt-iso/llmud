@@ -9,6 +9,8 @@ from ....db.session import get_db
 # from ....crud.crud_room import get_room_by_coords # No longer needed for this file directly if only used in create
 from ....api.dependencies import get_current_player, get_current_active_character
 from ....game_state import active_game_sessions # <<< ADDED THIS IMPORT
+from app.schemas.abilities import CharacterAbilitiesResponse
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -142,3 +144,15 @@ def get_character_inventory_display(
         silver=active_character.silver_coins,
         copper=active_character.copper_coins
     )
+
+@router.get("/me/abilities", response_model=CharacterAbilitiesResponse)
+async def get_player_abilities(
+    *,
+    db: Session = Depends(get_db),
+    current_char: models.Character = Depends(get_current_active_character),
+):
+    """
+    Retrieve all available skills and traits for the player's character class.
+    """
+    abilities_data = crud.crud_character.get_character_abilities(db, character=current_char)
+    return CharacterAbilitiesResponse(**abilities_data)

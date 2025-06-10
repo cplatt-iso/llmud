@@ -442,3 +442,57 @@ def get_characters_in_room(db: Session, *, room_id: uuid.UUID, exclude_character
     if exclude_character_id:
         query = query.filter(models.Character.id != exclude_character_id)
     return query.all()
+
+def get_character_abilities(db: Session, character: models.Character) -> Dict[str, List[schemas.AbilityDetail]]:
+    """
+    Constructs a detailed list of all possible skills and traits for a character's class,
+    marking which ones have been learned.
+    """
+    response_payload = {"skills": [], "traits": []}
+    class_template = _fetch_class_template_for_character(db, character)
+
+    if not class_template or not class_template.skill_tree_definition:
+        logger.warning(f"No class template or skill tree for {character.name}")
+        return response_payload
+
+    skill_tree = class_template.skill_tree_definition
+
+    # Process Skills
+    char_skills = set(character.learned_skills or [])
+    all_class_skills: Dict[str, models.SkillTemplate] = {s.skill_id_tag: s for s in crud.crud_skill.get_skill_templates(db)}
+
+    for level, skill_tags in skill_tree.get("core_skills_by_level", {}).items():
+        for tag in skill_tags:
+            skill_template = all_class_skills.get(tag)
+            if skill_template:
+                # Ensure description is a string, and provide a default if None
+                description_str = str(skill_template.description) if skill_template.description is not None else "No description available."
+                response_payload["skills"].append(schemas.AbilityDetail(
+                    name=skill_template.name,
+                    description=description_str,
+                    level_required=int(level),
+                    has_learned=(tag in char_skills)
+                ))
+
+    # Process Traits
+    char_traits = set(character.learned_traits or [])
+    all_class_traits: Dict[str, models.TraitTemplate] = {t.trait_id_tag: t for t in crud.crud_trait.get_trait_templates(db)}
+    
+    for level, trait_tags in skill_tree.get("core_traits_by_level", {}).items():
+        for tag in trait_tags:
+            trait_template = all_class_traits.get(tag)
+            if trait_template:
+                # Ensure description is a string, and provide a default if None
+                description_str = str(trait_template.description) if trait_template.description is not None else "No description available."
+                response_payload["traits"].append(schemas.AbilityDetail(
+                    name=trait_template.name,
+                    description=description_str,
+                    level_required=int(level),
+                    has_learned=(tag in char_traits)
+                ))
+    
+    # Sort by level required
+    response_payload["skills"].sort(key=lambda x: x.level_required)
+    response_payload["traits"].sort(key=lambda x: x.level_required)
+
+    return response_payload

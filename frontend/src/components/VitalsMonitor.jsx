@@ -1,6 +1,6 @@
 import React from 'react';
 import useGameStore from '../state/gameStore'; // <<< IMPORT THE STORE
-import './VitalsMonitor.css'; // Import your CSS for styling
+
 function VitalsMonitor() {
   // Pull the entire vitals object from the store
   const vitals = useGameStore((state) => state.vitals);

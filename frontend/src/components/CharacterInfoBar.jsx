@@ -1,6 +1,5 @@
 import React from 'react';
 import useGameStore from '../state/gameStore';
-import './CharacterInfoBar.css';
 
 function CharacterInfoBar() {
   const name = useGameStore((state) => state.characterName);
