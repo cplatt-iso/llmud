@@ -12,28 +12,6 @@ from .utils import ( # Assuming these are all in utils.py now
 from app.websocket_manager import connection_manager # For broadcasting
 from app.schemas.common_structures import ExitDetail 
 
-# --- Helper Function (Ideally in utils.py) ---
-def format_room_mobs_for_player_message(
-    room_mobs: List[models.RoomMobInstance]
-) -> Tuple[str, Dict[int, uuid.UUID]]:
-    """Formats mobs in the room into a readable string, numbered."""
-    lines = []
-    mob_map: Dict[int, uuid.UUID] = {}
-
-    if room_mobs:
-        lines.append("\nAlso here:") # Or "Creatures present:"
-        for idx, mob_instance in enumerate(room_mobs):
-            template = mob_instance.mob_template
-            mob_name = template.name if template else "Unknown Creature"
-            
-            mob_number_html = f"<span class='inv-backpack-number'>{idx + 1}.</span>" # Re-use style for numbering
-            mob_name_html = f"<span class='inv-item-name'>{mob_name}</span>" # Re-use style for name
-
-            lines.append(f"  {mob_number_html} {mob_name_html}")
-            mob_map[idx + 1] = mob_instance.id
-    return "\n".join(lines), mob_map
-# --- End Helper Function ---
-
 
 async def handle_look(context: CommandContext) -> schemas.CommandResponse:
     message_to_player_parts: List[str] = []
@@ -56,7 +34,10 @@ async def handle_look(context: CommandContext) -> schemas.CommandResponse:
 
         other_mobs_in_room = crud.crud_mob.get_mobs_in_room(context.db, room_id=context.current_room_orm.id)
         if other_mobs_in_room:
-            mobs_text, _ = format_room_mobs_for_player_message(other_mobs_in_room)
+            mobs_text, _ = format_room_mobs_for_player_message(
+                room_mobs=other_mobs_in_room, 
+                character=context.active_character
+            )
             if mobs_text: message_to_player_parts.append(mobs_text)
         
         # <<< NEW: List other characters (excluding self) when looking at a target
@@ -80,7 +61,10 @@ async def handle_look(context: CommandContext) -> schemas.CommandResponse:
         message_to_player_parts.append(ground_items_text)
         
     mobs_in_room_orm = crud.crud_mob.get_mobs_in_room(context.db, room_id=context.current_room_orm.id)
-    mobs_text, _ = format_room_mobs_for_player_message(mobs_in_room_orm)
+    mobs_text, _ = format_room_mobs_for_player_message(
+        room_mobs=mobs_in_room_orm, 
+        character=context.active_character
+    )
     if mobs_text:
         message_to_player_parts.append(mobs_text)
 
@@ -202,7 +186,10 @@ async def handle_move(context: CommandContext) -> schemas.CommandResponse:
         if ground_items_text: arrival_message_parts.append(ground_items_text)
             
         mobs_in_new_room_orm = crud.crud_mob.get_mobs_in_room(context.db, room_id=target_room_orm_for_move.id)
-        mobs_text, _ = format_room_mobs_for_player_message(mobs_in_new_room_orm)
+        mobs_text, _ = format_room_mobs_for_player_message(
+            room_mobs=mobs_in_new_room_orm, 
+            character=context.active_character
+        )
         if mobs_text: arrival_message_parts.append(mobs_text)
 
         other_characters_in_new_room = crud.crud_character.get_characters_in_room(

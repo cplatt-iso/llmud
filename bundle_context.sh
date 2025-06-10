@@ -52,27 +52,47 @@ CORE_FILES_TO_BUNDLE=(
     "README.md"
 
     # --- Backend - Models & Schemas (The Blueprint of Power) ---
-    "backend/app/models/player.py"          # CRITICAL: For adding the 'is_sysop' flag.
-    "backend/app/models/character.py"       # CRITICAL: For adding 'god_level' and 'titles'.
-    "backend/app/models/item.py"            # For referencing items in 'giveme'.
-    "backend/app/schemas/player.py"         # To match the model changes.
-    "backend/app/schemas/character.py"      # To match the model changes.
+    "backend/app/models/player.py"
+    "backend/app/models/character.py"
+    "backend/app/models/item.py"
+    "backend/app/models/room.py"
+    "backend/app/models/mob_template.py"
+    "backend/app/schemas/player.py"
+    "backend/app/schemas/character.py"
+    "backend/app/schemas/map.py"
+    "backend/app/schemas/room.py"
+    "backend/app/schemas/mob.py"
 
     # --- Backend - The Command & Control Logic ---
-    "backend/app/websocket_router.py"       # CRITICAL: The main dispatcher where we'll check for Sysop roles.
-    "backend/app/ws_command_parsers/ws_interaction_parser.py" # For the new 'equip'/'unequip' logic.
-    # We will likely create a new file like 'ws_debug_parser.py' for 'giveme' and other sysop commands.
+    "backend/app/websocket_router.py"
+    "backend/app/ws_command_parsers/ws_interaction_parser.py"
+    "backend/app/ws_command_parsers/ws_info_parser.py"
+    "backend/app/ws_command_parsers/ws_movement_parser.py"
 
     # --- Backend - Dependencies & Game State ---
-    "backend/app/api/dependencies.py"       # Always good to have for context on getting users/characters.
-    "backend/app/game_state.py"             # To see how active sessions are managed.
+    "backend/app/api/dependencies.py"
+    "backend/app/game_state.py"
+
+    # --- World & Seed Data (The Soul of the Machine) ---
+    "backend/app/seeds/rooms_z0.json"
+    "backend/app/seeds/exits_z0.json"
+    "backend/app/seeds/items.json"
+    "backend/app/seeds/mob_templates.json"
+    "backend/app/seeds/mob_spawn_definitions.json"
+    "backend/app/seeds/loot_tables.json"
+    "backend/app/seeds/skills.json"
+    "backend/app/seeds/traits.json"
+    "backend/app/seeds/character_classes.json"
+    "backend/app/seeds/npcs.json"
 
     # --- Frontend - The User's Point of Interaction ---
-    "frontend/src/state/gameStore.js"         # CRITICAL: The state will need to handle new data.
-    "frontend/src/services/webSocketService.js" # CRITICAL: To see how messages are sent/received.
-    "frontend/src/components/CommandInput.jsx"  # CRITICAL: Where the user types the commands.
-    "frontend/src/components/Inventory.jsx"     # To verify equip/unequip/giveme works.
-    "frontend/src/components/ItemName.jsx"      # The component that makes our items look sexy.
+    "frontend/src/state/gameStore.js"
+    "frontend/src/services/webSocketService.js"
+    "frontend/src/components/CommandInput.jsx"
+    "frontend/src/components/Inventory.jsx"
+    "frontend/src/components/ItemName.jsx"
+    "frontend/src/components/Map.jsx"
+    "frontend/src/components/TerminalOutput.jsx"
 
     # --- Frontend - Core App Structure ---
     "frontend/src/App.jsx"

@@ -21,6 +21,8 @@ class RoomBase(BaseModel):
     y: int
     z: int
     room_type: RoomTypeEnum = Field(default=RoomTypeEnum.STANDARD)
+    zone_name: Optional[str] = None
+    zone_level_range: Optional[str] = None
 
 # This schema is specifically for CREATING rooms from the seeder JSON.
 # It must match the structure of the "data" block in rooms_z0.json exactly.

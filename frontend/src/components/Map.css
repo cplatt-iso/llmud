@@ -3,14 +3,13 @@
   flex-direction: column;
   margin-left: 15px;
   width: 350px;
-  height: 350px;
   flex-shrink: 0;
 }
 
-.map-title-bar, #map-zone-bar {
+.map-ui-bar, #map-zone-bar { /* Renamed for clarity, affects both title and zone */
   background-color: var(--color-background-light);
   color: var(--color-text-secondary);
-  padding: 6px 10px;
+  padding: 4px 10px;
   font-family: var(--font-family-ui);
   font-size: 0.9em;
   border: 1px solid var(--color-border-medium);
@@ -18,10 +17,12 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex-shrink: 0;
 }
 
 #map-viewport {
-  flex-grow: 1;
+  /* flex-grow: 1;  <<< REMOVE THIS LAZY RECTANGLE SHIT */
+  aspect-ratio: 1 / 1; /* <<< ADD THIS DIVINE GEOMETRY */
   border: 1px solid var(--color-border-strong);
   border-top: none;
   border-bottom: none;

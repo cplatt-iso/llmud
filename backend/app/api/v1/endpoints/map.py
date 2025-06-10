@@ -46,12 +46,15 @@ def get_map_data_for_current_level(
                 name=room_orm.name,
                 exits=simple_exits_for_map, # Pass the simplified exits dict
                 is_current_room=(room_orm.id == active_character.current_room_id),
-                is_visited=True 
+                is_visited=True,
+                room_type=room_orm.room_type
             )
         )
     
     return schemas.MapLevelDataResponse(
         z_level=character_z_level,
         current_room_id=active_character.current_room_id,
-        rooms=map_rooms_data
+        rooms=map_rooms_data,
+        current_zone_name=current_room.zone_name,
+        current_zone_level_range=current_room.zone_level_range
     )

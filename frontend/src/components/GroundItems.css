@@ -1,0 +1,26 @@
+.ground-items-container {
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+
+.ground-items-header {
+  margin: 0 0 5px 0;
+  font-style: italic;
+  color: var(--color-text-secondary);
+}
+
+.ground-item-line {
+  display: flex;
+  align-items: center;
+  margin-left: 1em; /* Indent the items */
+  gap: 0.5em;
+}
+
+.ground-item-number {
+  color: var(--color-text-system);
+}
+
+.ground-item-quantity {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}

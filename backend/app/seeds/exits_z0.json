@@ -1,366 +1,735 @@
 [
   {
-    "source_tag": "central_hub_0_0_0", "direction": "east", "target_tag": "east_storage_1_0_0",
+    "source_tag": "central_hub_0_0_0",
+    "direction": "east",
+    "target_tag": "east_storage_1_0_0",
     "details": {
-      "is_locked": true, "lock_id_tag": "cpu_east_door_lock",
+      "is_locked": true,
+      "lock_id_tag": "cpu_east_door_lock",
       "description_when_locked": "A heavy blast door to the east is sealed tight. The nearby lever might control it.",
       "description_when_unlocked": "The heavy blast door to the east stands open."
     }
   },
   {
-    "source_tag": "east_storage_1_0_0", "direction": "west", "target_tag": "central_hub_0_0_0",
+    "source_tag": "east_storage_1_0_0",
+    "direction": "west",
+    "target_tag": "central_hub_0_0_0",
     "details": {
-      "is_locked": true, "lock_id_tag": "cpu_east_door_lock",
+      "is_locked": true,
+      "lock_id_tag": "cpu_east_door_lock",
       "description_when_locked": "The blast door to the west is sealed. It seems to be controlled from the other side.",
       "description_when_unlocked": "The blast door to the west is open."
     }
   },
   {
-    "source_tag": "central_hub_0_0_0", "direction": "north", "target_tag": "outskirts_gate_0_1_0", "details": {}
-  },
-  {
-    "source_tag": "outskirts_gate_0_1_0", "direction": "south", "target_tag": "central_hub_0_0_0", "details": {}
-  },
-  {
-    "source_tag": "outskirts_gate_0_1_0", "direction": "north", "target_tag": "beginner_path_0_2_0", "details": {}
-  },
-  {
-    "source_tag": "beginner_path_0_2_0", "direction": "south", "target_tag": "outskirts_gate_0_1_0", "details": {}
-  },
-  {
-    "source_tag": "beginner_path_0_2_0", "direction": "north", "target_tag": "ruined_shack_clearing_0_3_0", "details": {}
-  },
-  {
-    "source_tag": "ruined_shack_clearing_0_3_0", "direction": "south", "target_tag": "beginner_path_0_2_0", "details": {}
-  },
-  {
-    "source_tag": "ruined_shack_clearing_0_3_0", "direction": "north", "target_tag": "shack_interior_0_4_0", "details": {}
-  },
-  {
-    "source_tag": "shack_interior_0_4_0", "direction": "south", "target_tag": "ruined_shack_clearing_0_3_0", "details": {}
-  },
-  {
-    "source_tag": "ruined_shack_clearing_0_3_0", "direction": "west", "target_tag": "thorn_thicket_west_m1_3_0", "details": {}
-  },
-  {
-    "source_tag": "thorn_thicket_west_m1_3_0", "direction": "east", "target_tag": "ruined_shack_clearing_0_3_0", "details": {}
-  },
-  {
-    "source_tag": "ruined_shack_clearing_0_3_0", "direction": "east", "target_tag": "thorn_thicket_east_1_3_0", "details": {}
-  },
-  {
-    "source_tag": "thorn_thicket_east_1_3_0", "direction": "west", "target_tag": "ruined_shack_clearing_0_3_0", "details": {}
-  },
-  {
-    "source_tag": "thorn_thicket_east_1_3_0", "direction": "north", "target_tag": "rat_infested_cellar_1_4_0", "details": {}
-  },
-  {
-    "source_tag": "rat_infested_cellar_1_4_0", "direction": "south", "target_tag": "thorn_thicket_east_1_3_0", "details": {}
-  },
-  {
-    "source_tag": "rat_infested_cellar_1_4_0", "direction": "east", "target_tag": "deep_cellar_main_2_4_0",
-    "details": { "is_locked": false, "lock_id_tag": "cellar_door_east",
-                 "description_when_locked": "A rickety wooden door to the east is barred from the other side.",
-                 "description_when_unlocked": "The rickety wooden door to the east is slightly ajar." }
-  },
-  {
-    "source_tag": "deep_cellar_main_2_4_0", "direction": "west", "target_tag": "rat_infested_cellar_1_4_0",
-    "details": { "is_locked": false, "lock_id_tag": "cellar_door_east",
-                 "description_when_locked": "The wooden door to the west is barred.",
-                 "description_when_unlocked": "The wooden door to the west stands open." }
-  },
-  {
-    "source_tag": "deep_cellar_main_2_4_0", "direction": "north", "target_tag": "deep_cellar_nest_2_5_0", "details": {}
-  },
-  {
-    "source_tag": "deep_cellar_nest_2_5_0", "direction": "south", "target_tag": "deep_cellar_main_2_4_0", "details": {}
-  },
-  {
-    "source_tag": "shack_interior_0_4_0", "direction": "north", "target_tag": "goblin_lookout_0_5_0", "details": {}
-  },
-  {
-    "source_tag": "goblin_lookout_0_5_0", "direction": "south", "target_tag": "shack_interior_0_4_0", "details": {}
-  },
-  {
-    "source_tag": "goblin_lookout_0_5_0", "direction": "west", "target_tag": "goblin_trail_m1_5_0", "details": {}
-  },
-  {
-    "source_tag": "goblin_trail_m1_5_0", "direction": "east", "target_tag": "goblin_lookout_0_5_0", "details": {}
-  },
-  {
-    "source_tag": "goblin_trail_m1_5_0", "direction": "west", "target_tag": "goblin_camp_m2_5_0", "details": {}
-  },
-  {
-    "source_tag": "goblin_camp_m2_5_0", "direction": "east", "target_tag": "goblin_trail_m1_5_0", "details": {}
-  },
-  {
-    "source_tag": "goblin_camp_m2_5_0", "direction": "west", "target_tag": "goblin_cave_entrance_m3_5_0",
-    "details": { "is_locked": true, "lock_id_tag": "goblin_cave_flap", "key_item_tag_opens": "crude_goblin_key",
-                 "description_when_locked": "A grimy hide flap covers the cave entrance to the west, tied shut.",
-                 "description_when_unlocked": "The hide flap to the west is open, revealing a dark cave." }
-  },
-  {
-    "source_tag": "goblin_cave_entrance_m3_5_0", "direction": "east", "target_tag": "goblin_camp_m2_5_0",
-    "details": { "is_locked": true, "lock_id_tag": "goblin_cave_flap",
-                 "description_when_locked": "The hide flap to the east is secured from the other side.",
-                 "description_when_unlocked": "The hide flap to the east is open." }
-  },
-  {
-    "source_tag": "goblin_cave_entrance_m3_5_0", "direction": "north", "target_tag": "goblin_cave_storage_m3_6_0", "details": {}
-  },
-  {
-    "source_tag": "goblin_cave_storage_m3_6_0", "direction": "south", "target_tag": "goblin_cave_entrance_m3_5_0", "details": {}
-  },
-  {
-    "source_tag": "goblin_lookout_0_5_0", "direction": "north", "target_tag": "path_to_woods_0_6_0", "details": {}
-  },
-  {
-    "source_tag": "path_to_woods_0_6_0", "direction": "south", "target_tag": "goblin_lookout_0_5_0", "details": {}
-  },
-  {
-    "source_tag": "path_to_woods_0_6_0", "direction": "north", "target_tag": "woods_edge_0_7_0", "details": {}
-  },
-  {
-    "source_tag": "woods_edge_0_7_0", "direction": "south", "target_tag": "path_to_woods_0_6_0", "details": {}
-  },
-  {
-    "source_tag": "woods_edge_0_7_0", "direction": "north", "target_tag": "woods_gloomy_trail_0_8_0", "details": {}
-  },
-  {
-    "source_tag": "woods_gloomy_trail_0_8_0", "direction": "south", "target_tag": "woods_edge_0_7_0", "details": {}
-  },
-  {
-    "source_tag": "woods_gloomy_trail_0_8_0", "direction": "west", "target_tag": "woods_wolf_den_clearing_m1_8_0", "details": {}
-  },
-  {
-    "source_tag": "woods_wolf_den_clearing_m1_8_0", "direction": "east", "target_tag": "woods_gloomy_trail_0_8_0", "details": {}
-  },
-  {
-    "source_tag": "woods_wolf_den_clearing_m1_8_0", "direction": "west", "target_tag": "wolf_den_cave_m2_8_0", "details": {}
-  },
-  {
-    "source_tag": "wolf_den_cave_m2_8_0", "direction": "east", "target_tag": "woods_wolf_den_clearing_m1_8_0", "details": {}
-  },
-  {
-    "source_tag": "woods_gloomy_trail_0_8_0", "direction": "north", "target_tag": "woods_ancient_oak_0_9_0", "details": {}
-  },
-  {
-    "source_tag": "woods_ancient_oak_0_9_0", "direction": "south", "target_tag": "woods_gloomy_trail_0_8_0", "details": {}
-  },
-  {
-    "source_tag": "woods_ancient_oak_0_9_0", "direction": "east", "target_tag": "woods_spider_lair_1_9_0", "details": {}
-  },
-  {
-    "source_tag": "woods_spider_lair_1_9_0", "direction": "west", "target_tag": "woods_ancient_oak_0_9_0", "details": {}
-  },
-  {
-    "source_tag": "woods_spider_lair_1_9_0", "direction": "north", "target_tag": "woods_broodmother_web_1_10_0", "details": {}
-  },
-  {
-    "source_tag": "woods_broodmother_web_1_10_0", "direction": "south", "target_tag": "woods_spider_lair_1_9_0", "details": {}
-  },
-  {
-    "source_tag": "woods_ancient_oak_0_9_0", "direction": "west", "target_tag": "woods_hidden_shrine_m1_9_0", "details": {}
-  },
-  {
-    "source_tag": "woods_hidden_shrine_m1_9_0", "direction": "east", "target_tag": "woods_ancient_oak_0_9_0", "details": {}
-  },
-  {
-    "source_tag": "woods_hidden_shrine_m1_9_0", "direction": "west", "target_tag": "woods_shrine_niche_m2_9_0",
-    "details": { "is_locked": true, "lock_id_tag": "shrine_niche_seal",
-                 "description_when_locked": "A faint shimmering barrier blocks the niche to the west.",
-                 "description_when_unlocked": "The shimmering barrier to the west has dissipated." }
-  },
-  {
-    "source_tag": "woods_shrine_niche_m2_9_0", "direction": "east", "target_tag": "woods_hidden_shrine_m1_9_0",
-    "details": { "is_locked": true, "lock_id_tag": "shrine_niche_seal",
-                 "description_when_locked": "The way east is blocked by a shimmering barrier.",
-                 "description_when_unlocked": "The way east is clear." }
-  },
-  {
-    "source_tag": "woods_ancient_oak_0_9_0", "direction": "north", "target_tag": "woods_path_to_mine_0_10_0", "details": {}
-  },
-  {
-    "source_tag": "woods_path_to_mine_0_10_0", "direction": "south", "target_tag": "woods_ancient_oak_0_9_0", "details": {}
-  },
-  {
-    "source_tag": "woods_path_to_mine_0_10_0", "direction": "north", "target_tag": "mine_entrance_0_11_0", "details": {}
-  },
-  {
-    "source_tag": "mine_entrance_0_11_0", "direction": "south", "target_tag": "woods_path_to_mine_0_10_0", "details": {}
-  },
-  {
-    "source_tag": "mine_entrance_0_11_0", "direction": "north", "target_tag": "mine_entry_tunnel_0_12_0",
-    "details": { "is_locked": true, "lock_id_tag": "mine_gate_lock", "key_item_tag_opens": "foremans_mine_key",
-                 "description_when_locked": "A heavy iron gate, rusted shut, blocks the mine entrance to the north.",
-                 "description_when_unlocked": "The rusted iron gate to the north stands ajar." }
-  },
-  {
-    "source_tag": "mine_entry_tunnel_0_12_0", "direction": "south", "target_tag": "mine_entrance_0_11_0",
-    "details": { "is_locked": true, "lock_id_tag": "mine_gate_lock",
-                 "description_when_locked": "The iron gate to the south is locked from this side.",
-                 "description_when_unlocked": "The iron gate to the south is open." }
-  },
-  {
-    "source_tag": "mine_entry_tunnel_0_12_0", "direction": "west", "target_tag": "mine_foremans_office_m1_12_0", "details": {}
-  },
-  {
-    "source_tag": "mine_foremans_office_m1_12_0", "direction": "east", "target_tag": "mine_entry_tunnel_0_12_0", "details": {}
-  },
-  {
-    "source_tag": "mine_entry_tunnel_0_12_0", "direction": "north", "target_tag": "mine_shaft_junction_0_13_0", "details": {}
-  },
-  {
-    "source_tag": "mine_shaft_junction_0_13_0", "direction": "south", "target_tag": "mine_entry_tunnel_0_12_0", "details": {}
-  },
-  {
-    "source_tag": "mine_shaft_junction_0_13_0", "direction": "east", "target_tag": "mine_east_vein_1_13_0", "details": {}
-  },
-  {
-    "source_tag": "mine_east_vein_1_13_0", "direction": "west", "target_tag": "mine_shaft_junction_0_13_0", "details": {}
-  },
-  {
-    "source_tag": "mine_east_vein_1_13_0", "direction": "east", "target_tag": "mine_east_dead_end_2_13_0", "details": {}
-  },
-  {
-    "source_tag": "mine_east_dead_end_2_13_0", "direction": "west", "target_tag": "mine_east_vein_1_13_0", "details": {}
-  },
-  {
-    "source_tag": "mine_shaft_junction_0_13_0", "direction": "north", "target_tag": "mine_deep_shaft_0_14_0", "details": {}
-  },
-  {
-    "source_tag": "mine_deep_shaft_0_14_0", "direction": "south", "target_tag": "mine_shaft_junction_0_13_0", "details": {}
-  },
-  {
-    "source_tag": "mine_deep_shaft_0_14_0", "direction": "north", "target_tag": "mine_undead_chamber_0_15_0", "details": {}
-  },
-  {
-    "source_tag": "mine_undead_chamber_0_15_0", "direction": "south", "target_tag": "mine_deep_shaft_0_14_0", "details": {}
-  },
-  {
-    "source_tag": "mine_undead_chamber_0_15_0", "direction": "north", "target_tag": "bridge_to_sanctum_0_16_0", "details": {}
-  },
-  {
-    "source_tag": "bridge_to_sanctum_0_16_0", "direction": "south", "target_tag": "mine_undead_chamber_0_15_0", "details": {}
-  },
-  {
-    "source_tag": "bridge_to_sanctum_0_16_0", "direction": "north", "target_tag": "sanctum_gatehouse_0_17_0", "details": {}
-  },
-  {
-    "source_tag": "sanctum_gatehouse_0_17_0", "direction": "south", "target_tag": "bridge_to_sanctum_0_16_0", "details": {}
-  },
-  {
-    "source_tag": "sanctum_gatehouse_0_17_0", "direction": "north", "target_tag": "sanctum_courtyard_0_18_0",
-    "details": { "is_locked": true, "lock_id_tag": "sanctum_portcullis_lock", "key_item_tag_opens": "ornate_sanctum_key",
-                 "description_when_locked": "A massive iron portcullis blocks the way north. It looks incredibly heavy.",
-                 "description_when_unlocked": "The massive iron portcullis to the north has been raised." }
-  },
-  {
-    "source_tag": "sanctum_courtyard_0_18_0", "direction": "south", "target_tag": "sanctum_gatehouse_0_17_0",
-    "details": { "is_locked": true, "lock_id_tag": "sanctum_portcullis_lock",
-                 "description_when_locked": "The portcullis to the south is down, blocking the way.",
-                 "description_when_unlocked": "The portcullis to the south is raised." }
-  },
-  {
-    "source_tag": "sanctum_courtyard_0_18_0", "direction": "west", "target_tag": "sanctum_west_wing_m1_18_0", "details": {}
-  },
-  {
-    "source_tag": "sanctum_west_wing_m1_18_0", "direction": "east", "target_tag": "sanctum_courtyard_0_18_0", "details": {}
-  },
-  {
-    "source_tag": "sanctum_west_wing_m1_18_0", "direction": "west", "target_tag": "sanctum_library_m2_18_0", "details": {}
-  },
-  {
-    "source_tag": "sanctum_library_m2_18_0", "direction": "east", "target_tag": "sanctum_west_wing_m1_18_0", "details": {}
-  },
-  {
-    "source_tag": "sanctum_library_m2_18_0", "direction": "west", "target_tag": "sanctum_secret_study_m3_18_0",
-    "details": { "is_locked": true, "lock_id_tag": "library_secret_passage",
-                 "description_when_locked": "One of the bookshelves to the west looks like it might move, but it's firmly in place.",
-                 "description_when_unlocked": "A section of the western bookshelf has slid aside, revealing a passage."}
-  },
-  {
-    "source_tag": "sanctum_secret_study_m3_18_0", "direction": "east", "target_tag": "sanctum_library_m2_18_0",
-    "details": { "is_locked": true, "lock_id_tag": "library_secret_passage",
-                 "description_when_locked": "The passage to the east is hidden behind a bookshelf.",
-                 "description_when_unlocked": "The passage to the east is open."}
-  },
-  {
-    "source_tag": "sanctum_courtyard_0_18_0", "direction": "east", "target_tag": "sanctum_east_wing_1_18_0", "details": {}
-  },
-  {
-    "source_tag": "sanctum_east_wing_1_18_0", "direction": "west", "target_tag": "sanctum_courtyard_0_18_0", "details": {}
-  },
-  {
-    "source_tag": "sanctum_east_wing_1_18_0", "direction": "north", "target_tag": "sanctum_barracks_1_19_0", "details": {}
-  },
-  {
-    "source_tag": "sanctum_barracks_1_19_0", "direction": "south", "target_tag": "sanctum_east_wing_1_18_0", "details": {}
-  },
-  {
-    "source_tag": "sanctum_courtyard_0_18_0", "direction": "north", "target_tag": "sanctum_main_hall_0_19_0", "details": {}
-  },
-  {
-    "source_tag": "sanctum_main_hall_0_19_0", "direction": "south", "target_tag": "sanctum_courtyard_0_18_0", "details": {}
-  },
-  {
-    "source_tag": "sanctum_main_hall_0_19_0", "direction": "north", "target_tag": "sanctum_altar_chamber_0_20_0", "details": {}
-  },
-  {
-    "source_tag": "sanctum_altar_chamber_0_20_0", "direction": "south", "target_tag": "sanctum_main_hall_0_19_0", "details": {}
-  },
-  {
-    "source_tag": "sanctum_altar_chamber_0_20_0", "direction": "north", "target_tag": "sanctum_inner_sanctum_0_21_0",
-    "details": { "is_locked": true, "lock_id_tag": "altar_barrier_seal",
-                 "description_when_locked": "A crackling barrier of dark energy blocks passage further north beyond the altar.",
-                 "description_when_unlocked": "The dark energy barrier to the north has faded." }
-  },
-  {
-    "source_tag": "sanctum_inner_sanctum_0_21_0", "direction": "south", "target_tag": "sanctum_altar_chamber_0_20_0",
-    "details": { "is_locked": true, "lock_id_tag": "altar_barrier_seal",
-                 "description_when_locked": "The way south is blocked by a crackling energy barrier.",
-                 "description_when_unlocked": "The way south is clear." }
-  },
-  {
-    "source_tag": "central_hub_0_0_0", "direction": "south", "target_tag": "south_corridor_0_m1_0", "details": {}
-  },
-  {
-    "source_tag": "south_corridor_0_m1_0", "direction": "north", "target_tag": "central_hub_0_0_0", "details": {}
-  },
-  {
-    "source_tag": "south_corridor_0_m1_0", "direction": "south", "target_tag": "deep_archive_0_m2_0",
-    "details": { "is_locked": true, "lock_id_tag": "deep_archive_key_lock", "key_item_tag_opens": "archive_key_alpha",
-                 "description_when_locked": "A formidable iron door blocks passage south. It has a complex keyhole.",
-                 "description_when_unlocked": "The formidable iron door to the south is unlocked.",
-                 "skill_to_pick": {"skill_id_tag": "pick_lock_basic", "dc": 18} }
-  },
-  {
-    "source_tag": "deep_archive_0_m2_0", "direction": "north", "target_tag": "south_corridor_0_m1_0",
-    "details": { "is_locked": true, "lock_id_tag": "deep_archive_key_lock", "key_item_tag_opens": "archive_key_alpha",
-                 "description_when_locked": "The iron door to the north is locked from this side too.",
-                 "description_when_unlocked": "The iron door to the north is open.",
-                 "skill_to_pick": {"skill_id_tag": "pick_lock_basic", "dc": 18} }
-  },
-  {
-    "source_tag": "central_hub_0_0_0", "direction": "west", "target_tag": "west_corridor_m1_0_0", "details": {}
-  },
-  {
-    "source_tag": "west_corridor_m1_0_0", "direction": "east", "target_tag": "central_hub_0_0_0", "details": {}
-  },
-  {
-    "source_tag": "west_corridor_m1_0_0", "direction": "west", "target_tag": "weapon_shop_m2_0_0",
+    "source_tag": "central_hub_0_0_0",
+    "direction": "north",
+    "target_tag": "outskirts_gate_0_1_0",
     "details": {}
   },
   {
-    "source_tag": "weapon_shop_m2_0_0", "direction": "east", "target_tag": "west_corridor_m1_0_0",
+    "source_tag": "outskirts_gate_0_1_0",
+    "direction": "south",
+    "target_tag": "central_hub_0_0_0",
     "details": {}
   },
   {
-    "source_tag": "weapon_shop_m2_0_0", "direction": "south", "target_tag": "armor_shop_m2_m1_0",
+    "source_tag": "outskirts_gate_0_1_0",
+    "direction": "north",
+    "target_tag": "beginner_path_0_2_0",
     "details": {}
   },
   {
-    "source_tag": "armor_shop_m2_m1_0", "direction": "north", "target_tag": "weapon_shop_m2_0_0",
+    "source_tag": "beginner_path_0_2_0",
+    "direction": "south",
+    "target_tag": "outskirts_gate_0_1_0",
+    "details": {}
+  },
+  {
+    "source_tag": "beginner_path_0_2_0",
+    "direction": "north",
+    "target_tag": "ruined_shack_clearing_0_3_0",
+    "details": {}
+  },
+  {
+    "source_tag": "ruined_shack_clearing_0_3_0",
+    "direction": "south",
+    "target_tag": "beginner_path_0_2_0",
+    "details": {}
+  },
+  {
+    "source_tag": "ruined_shack_clearing_0_3_0",
+    "direction": "north",
+    "target_tag": "shack_interior_0_4_0",
+    "details": {}
+  },
+  {
+    "source_tag": "shack_interior_0_4_0",
+    "direction": "north",
+    "target_tag": "goblin_lookout_0_5_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "goblin_pass_gate",
+      "key_item_tag_opens": "goblin_pass_key",
+      "description_when_locked": "The path north is blocked by a crude gate made of sharpened bones and sticks. It seems to be a goblin checkpoint.",
+      "description_when_unlocked": "The crude goblin gate has been opened."
+    }
+  },
+  {
+    "source_tag": "ruined_shack_clearing_0_3_0",
+    "direction": "west",
+    "target_tag": "thorn_thicket_west_m1_3_0",
+    "details": {}
+  },
+  {
+    "source_tag": "thorn_thicket_west_m1_3_0",
+    "direction": "east",
+    "target_tag": "ruined_shack_clearing_0_3_0",
+    "details": {}
+  },
+  {
+    "source_tag": "ruined_shack_clearing_0_3_0",
+    "direction": "east",
+    "target_tag": "thorn_thicket_east_1_3_0",
+    "details": {}
+  },
+  {
+    "source_tag": "thorn_thicket_east_1_3_0",
+    "direction": "west",
+    "target_tag": "ruined_shack_clearing_0_3_0",
+    "details": {}
+  },
+  {
+    "source_tag": "thorn_thicket_east_1_3_0",
+    "direction": "north",
+    "target_tag": "rat_infested_cellar_1_4_0",
+    "details": {}
+  },
+  {
+    "source_tag": "rat_infested_cellar_1_4_0",
+    "direction": "south",
+    "target_tag": "thorn_thicket_east_1_3_0",
+    "details": {}
+  },
+  {
+    "source_tag": "rat_infested_cellar_1_4_0",
+    "direction": "east",
+    "target_tag": "deep_cellar_main_2_4_0",
+    "details": {
+      "is_locked": false,
+      "lock_id_tag": "cellar_door_east",
+      "description_when_locked": "A rickety wooden door to the east is barred from the other side.",
+      "description_when_unlocked": "The rickety wooden door to the east is slightly ajar."
+    }
+  },
+  {
+    "source_tag": "deep_cellar_main_2_4_0",
+    "direction": "west",
+    "target_tag": "rat_infested_cellar_1_4_0",
+    "details": {
+      "is_locked": false,
+      "lock_id_tag": "cellar_door_east",
+      "description_when_locked": "The wooden door to the west is barred.",
+      "description_when_unlocked": "The wooden door to the west stands open."
+    }
+  },
+  {
+    "source_tag": "deep_cellar_main_2_4_0",
+    "direction": "north",
+    "target_tag": "deep_cellar_nest_2_5_0",
+    "details": {}
+  },
+  {
+    "source_tag": "deep_cellar_nest_2_5_0",
+    "direction": "south",
+    "target_tag": "deep_cellar_main_2_4_0",
+    "details": {}
+  },
+  {
+    "source_tag": "shack_interior_0_4_0",
+    "direction": "north",
+    "target_tag": "goblin_lookout_0_5_0",
+    "details": {}
+  },
+  {
+    "source_tag": "goblin_lookout_0_5_0",
+    "direction": "south",
+    "target_tag": "shack_interior_0_4_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "goblin_pass_gate",
+      "key_item_tag_opens": "goblin_pass_key",
+      "description_when_locked": "The crude goblin gate to the south is locked from this side.",
+      "description_when_unlocked": "The crude goblin gate to the south is open."
+    }
+  },
+  {
+    "source_tag": "goblin_lookout_0_5_0",
+    "direction": "west",
+    "target_tag": "goblin_trail_m1_5_0",
+    "details": {}
+  },
+  {
+    "source_tag": "goblin_trail_m1_5_0",
+    "direction": "east",
+    "target_tag": "goblin_lookout_0_5_0",
+    "details": {}
+  },
+  {
+    "source_tag": "goblin_trail_m1_5_0",
+    "direction": "west",
+    "target_tag": "goblin_camp_m2_5_0",
+    "details": {}
+  },
+  {
+    "source_tag": "goblin_camp_m2_5_0",
+    "direction": "east",
+    "target_tag": "goblin_trail_m1_5_0",
+    "details": {}
+  },
+  {
+    "source_tag": "goblin_camp_m2_5_0",
+    "direction": "west",
+    "target_tag": "goblin_cave_entrance_m3_5_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "goblin_cave_flap",
+      "key_item_tag_opens": "crude_goblin_key",
+      "description_when_locked": "A grimy hide flap covers the cave entrance to the west, tied shut.",
+      "description_when_unlocked": "The hide flap to the west is open, revealing a dark cave."
+    }
+  },
+  {
+    "source_tag": "goblin_cave_entrance_m3_5_0",
+    "direction": "east",
+    "target_tag": "goblin_camp_m2_5_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "goblin_cave_flap",
+      "description_when_locked": "The hide flap to the east is secured from the other side.",
+      "description_when_unlocked": "The hide flap to the east is open."
+    }
+  },
+  {
+    "source_tag": "goblin_cave_entrance_m3_5_0",
+    "direction": "north",
+    "target_tag": "goblin_cave_storage_m3_6_0",
+    "details": {}
+  },
+  {
+    "source_tag": "goblin_cave_storage_m3_6_0",
+    "direction": "south",
+    "target_tag": "goblin_cave_entrance_m3_5_0",
+    "details": {}
+  },
+  {
+    "source_tag": "goblin_lookout_0_5_0",
+    "direction": "north",
+    "target_tag": "path_to_woods_0_6_0",
+    "details": {}
+  },
+  {
+    "source_tag": "path_to_woods_0_6_0",
+    "direction": "south",
+    "target_tag": "goblin_lookout_0_5_0",
+    "details": {}
+  },
+  {
+    "source_tag": "path_to_woods_0_6_0",
+    "direction": "north",
+    "target_tag": "woods_edge_0_7_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "whispering_woods_gate",
+      "key_item_tag_opens": "whispering_woods_key",
+      "description_when_locked": "A sturdy iron gate, adorned with wolf motifs, blocks the path into the dark forest. It seems to require a specific key.",
+      "description_when_unlocked": "The wolf-adorned gate stands open, inviting you into the woods."
+    }
+  },
+  {
+    "source_tag": "woods_edge_0_7_0",
+    "direction": "south",
+    "target_tag": "path_to_woods_0_6_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "whispering_woods_gate",
+      "key_item_tag_opens": "whispering_woods_key",
+      "description_when_locked": "The iron gate to the south is locked from this side.",
+      "description_when_unlocked": "The iron gate to the south is open."
+    }
+  },
+  {
+    "source_tag": "woods_edge_0_7_0",
+    "direction": "north",
+    "target_tag": "woods_gloomy_trail_0_8_0",
+    "details": {}
+  },
+  {
+    "source_tag": "woods_gloomy_trail_0_8_0",
+    "direction": "south",
+    "target_tag": "woods_edge_0_7_0",
+    "details": {}
+  },
+  {
+    "source_tag": "woods_gloomy_trail_0_8_0",
+    "direction": "west",
+    "target_tag": "woods_wolf_den_clearing_m1_8_0",
+    "details": {}
+  },
+  {
+    "source_tag": "woods_wolf_den_clearing_m1_8_0",
+    "direction": "east",
+    "target_tag": "woods_gloomy_trail_0_8_0",
+    "details": {}
+  },
+  {
+    "source_tag": "woods_wolf_den_clearing_m1_8_0",
+    "direction": "west",
+    "target_tag": "wolf_den_cave_m2_8_0",
+    "details": {}
+  },
+  {
+    "source_tag": "wolf_den_cave_m2_8_0",
+    "direction": "east",
+    "target_tag": "woods_wolf_den_clearing_m1_8_0",
+    "details": {}
+  },
+  {
+    "source_tag": "woods_gloomy_trail_0_8_0",
+    "direction": "north",
+    "target_tag": "woods_ancient_oak_0_9_0",
+    "details": {}
+  },
+  {
+    "source_tag": "woods_ancient_oak_0_9_0",
+    "direction": "south",
+    "target_tag": "woods_gloomy_trail_0_8_0",
+    "details": {}
+  },
+  {
+    "source_tag": "woods_ancient_oak_0_9_0",
+    "direction": "east",
+    "target_tag": "woods_spider_lair_1_9_0",
+    "details": {}
+  },
+  {
+    "source_tag": "woods_spider_lair_1_9_0",
+    "direction": "west",
+    "target_tag": "woods_ancient_oak_0_9_0",
+    "details": {}
+  },
+  {
+    "source_tag": "woods_spider_lair_1_9_0",
+    "direction": "north",
+    "target_tag": "woods_broodmother_web_1_10_0",
+    "details": {}
+  },
+  {
+    "source_tag": "woods_broodmother_web_1_10_0",
+    "direction": "south",
+    "target_tag": "woods_spider_lair_1_9_0",
+    "details": {}
+  },
+  {
+    "source_tag": "woods_ancient_oak_0_9_0",
+    "direction": "west",
+    "target_tag": "woods_hidden_shrine_m1_9_0",
+    "details": {}
+  },
+  {
+    "source_tag": "woods_hidden_shrine_m1_9_0",
+    "direction": "east",
+    "target_tag": "woods_ancient_oak_0_9_0",
+    "details": {}
+  },
+  {
+    "source_tag": "woods_hidden_shrine_m1_9_0",
+    "direction": "west",
+    "target_tag": "woods_shrine_niche_m2_9_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "shrine_niche_seal",
+      "description_when_locked": "A faint shimmering barrier blocks the niche to the west.",
+      "description_when_unlocked": "The shimmering barrier to the west has dissipated."
+    }
+  },
+  {
+    "source_tag": "woods_shrine_niche_m2_9_0",
+    "direction": "east",
+    "target_tag": "woods_hidden_shrine_m1_9_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "shrine_niche_seal",
+      "description_when_locked": "The way east is blocked by a shimmering barrier.",
+      "description_when_unlocked": "The way east is clear."
+    }
+  },
+  {
+    "source_tag": "woods_ancient_oak_0_9_0",
+    "direction": "north",
+    "target_tag": "woods_path_to_mine_0_10_0",
+    "details": {}
+  },
+  {
+    "source_tag": "woods_path_to_mine_0_10_0",
+    "direction": "south",
+    "target_tag": "woods_ancient_oak_0_9_0",
+    "details": {}
+  },
+  {
+    "source_tag": "woods_path_to_mine_0_10_0",
+    "direction": "north",
+    "target_tag": "mine_entrance_0_11_0",
+    "details": {}
+  },
+  {
+    "source_tag": "mine_entrance_0_11_0",
+    "direction": "south",
+    "target_tag": "woods_path_to_mine_0_10_0",
+    "details": {}
+  },
+  {
+    "source_tag": "mine_entrance_0_11_0",
+    "direction": "north",
+    "target_tag": "mine_entry_tunnel_0_12_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "mine_gate_lock",
+      "key_item_tag_opens": "foremans_mine_key",
+      "description_when_locked": "A heavy iron gate, rusted shut, blocks the mine entrance to the north.",
+      "description_when_unlocked": "The rusted iron gate to the north stands ajar."
+    }
+  },
+  {
+    "source_tag": "mine_entry_tunnel_0_12_0",
+    "direction": "south",
+    "target_tag": "mine_entrance_0_11_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "mine_gate_lock",
+      "description_when_locked": "The iron gate to the south is locked from this side.",
+      "description_when_unlocked": "The iron gate to the south is open."
+    }
+  },
+  {
+    "source_tag": "mine_entry_tunnel_0_12_0",
+    "direction": "west",
+    "target_tag": "mine_foremans_office_m1_12_0",
+    "details": {}
+  },
+  {
+    "source_tag": "mine_foremans_office_m1_12_0",
+    "direction": "east",
+    "target_tag": "mine_entry_tunnel_0_12_0",
+    "details": {}
+  },
+  {
+    "source_tag": "mine_entry_tunnel_0_12_0",
+    "direction": "north",
+    "target_tag": "mine_shaft_junction_0_13_0",
+    "details": {}
+  },
+  {
+    "source_tag": "mine_shaft_junction_0_13_0",
+    "direction": "south",
+    "target_tag": "mine_entry_tunnel_0_12_0",
+    "details": {}
+  },
+  {
+    "source_tag": "mine_shaft_junction_0_13_0",
+    "direction": "east",
+    "target_tag": "mine_east_vein_1_13_0",
+    "details": {}
+  },
+  {
+    "source_tag": "mine_east_vein_1_13_0",
+    "direction": "west",
+    "target_tag": "mine_shaft_junction_0_13_0",
+    "details": {}
+  },
+  {
+    "source_tag": "mine_east_vein_1_13_0",
+    "direction": "east",
+    "target_tag": "mine_east_dead_end_2_13_0",
+    "details": {}
+  },
+  {
+    "source_tag": "mine_east_dead_end_2_13_0",
+    "direction": "west",
+    "target_tag": "mine_east_vein_1_13_0",
+    "details": {}
+  },
+  {
+    "source_tag": "mine_shaft_junction_0_13_0",
+    "direction": "north",
+    "target_tag": "mine_deep_shaft_0_14_0",
+    "details": {}
+  },
+  {
+    "source_tag": "mine_deep_shaft_0_14_0",
+    "direction": "south",
+    "target_tag": "mine_shaft_junction_0_13_0",
+    "details": {}
+  },
+  {
+    "source_tag": "mine_deep_shaft_0_14_0",
+    "direction": "north",
+    "target_tag": "mine_undead_chamber_0_15_0",
+    "details": {}
+  },
+  {
+    "source_tag": "mine_undead_chamber_0_15_0",
+    "direction": "south",
+    "target_tag": "mine_deep_shaft_0_14_0",
+    "details": {}
+  },
+  {
+    "source_tag": "mine_undead_chamber_0_15_0",
+    "direction": "north",
+    "target_tag": "bridge_to_sanctum_0_16_0",
+    "details": {}
+  },
+  {
+    "source_tag": "bridge_to_sanctum_0_16_0",
+    "direction": "south",
+    "target_tag": "mine_undead_chamber_0_15_0",
+    "details": {}
+  },
+  {
+    "source_tag": "bridge_to_sanctum_0_16_0",
+    "direction": "north",
+    "target_tag": "sanctum_gatehouse_0_17_0",
+    "details": {}
+  },
+  {
+    "source_tag": "sanctum_gatehouse_0_17_0",
+    "direction": "south",
+    "target_tag": "bridge_to_sanctum_0_16_0",
+    "details": {}
+  },
+  {
+    "source_tag": "sanctum_gatehouse_0_17_0",
+    "direction": "north",
+    "target_tag": "sanctum_courtyard_0_18_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "sanctum_portcullis_lock",
+      "key_item_tag_opens": "ornate_sanctum_key",
+      "description_when_locked": "A massive iron portcullis blocks the way north. It looks incredibly heavy.",
+      "description_when_unlocked": "The massive iron portcullis to the north has been raised."
+    }
+  },
+  {
+    "source_tag": "sanctum_courtyard_0_18_0",
+    "direction": "south",
+    "target_tag": "sanctum_gatehouse_0_17_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "sanctum_portcullis_lock",
+      "description_when_locked": "The portcullis to the south is down, blocking the way.",
+      "description_when_unlocked": "The portcullis to the south is raised."
+    }
+  },
+  {
+    "source_tag": "sanctum_courtyard_0_18_0",
+    "direction": "west",
+    "target_tag": "sanctum_west_wing_m1_18_0",
+    "details": {}
+  },
+  {
+    "source_tag": "sanctum_west_wing_m1_18_0",
+    "direction": "east",
+    "target_tag": "sanctum_courtyard_0_18_0",
+    "details": {}
+  },
+  {
+    "source_tag": "sanctum_west_wing_m1_18_0",
+    "direction": "west",
+    "target_tag": "sanctum_library_m2_18_0",
+    "details": {}
+  },
+  {
+    "source_tag": "sanctum_library_m2_18_0",
+    "direction": "east",
+    "target_tag": "sanctum_west_wing_m1_18_0",
+    "details": {}
+  },
+  {
+    "source_tag": "sanctum_library_m2_18_0",
+    "direction": "west",
+    "target_tag": "sanctum_secret_study_m3_18_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "library_secret_passage",
+      "description_when_locked": "One of the bookshelves to the west looks like it might move, but it's firmly in place.",
+      "description_when_unlocked": "A section of the western bookshelf has slid aside, revealing a passage."
+    }
+  },
+  {
+    "source_tag": "sanctum_secret_study_m3_18_0",
+    "direction": "east",
+    "target_tag": "sanctum_library_m2_18_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "library_secret_passage",
+      "description_when_locked": "The passage to the east is hidden behind a bookshelf.",
+      "description_when_unlocked": "The passage to the east is open."
+    }
+  },
+  {
+    "source_tag": "sanctum_courtyard_0_18_0",
+    "direction": "east",
+    "target_tag": "sanctum_east_wing_1_18_0",
+    "details": {}
+  },
+  {
+    "source_tag": "sanctum_east_wing_1_18_0",
+    "direction": "west",
+    "target_tag": "sanctum_courtyard_0_18_0",
+    "details": {}
+  },
+  {
+    "source_tag": "sanctum_east_wing_1_18_0",
+    "direction": "north",
+    "target_tag": "sanctum_barracks_1_19_0",
+    "details": {}
+  },
+  {
+    "source_tag": "sanctum_barracks_1_19_0",
+    "direction": "south",
+    "target_tag": "sanctum_east_wing_1_18_0",
+    "details": {}
+  },
+  {
+    "source_tag": "sanctum_courtyard_0_18_0",
+    "direction": "north",
+    "target_tag": "sanctum_main_hall_0_19_0",
+    "details": {}
+  },
+  {
+    "source_tag": "sanctum_main_hall_0_19_0",
+    "direction": "south",
+    "target_tag": "sanctum_courtyard_0_18_0",
+    "details": {}
+  },
+  {
+    "source_tag": "sanctum_main_hall_0_19_0",
+    "direction": "north",
+    "target_tag": "sanctum_altar_chamber_0_20_0",
+    "details": {}
+  },
+  {
+    "source_tag": "sanctum_altar_chamber_0_20_0",
+    "direction": "south",
+    "target_tag": "sanctum_main_hall_0_19_0",
+    "details": {}
+  },
+  {
+    "source_tag": "sanctum_altar_chamber_0_20_0",
+    "direction": "north",
+    "target_tag": "sanctum_inner_sanctum_0_21_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "altar_barrier_seal",
+      "description_when_locked": "A crackling barrier of dark energy blocks passage further north beyond the altar.",
+      "description_when_unlocked": "The dark energy barrier to the north has faded."
+    }
+  },
+  {
+    "source_tag": "sanctum_inner_sanctum_0_21_0",
+    "direction": "south",
+    "target_tag": "sanctum_altar_chamber_0_20_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "altar_barrier_seal",
+      "description_when_locked": "The way south is blocked by a crackling energy barrier.",
+      "description_when_unlocked": "The way south is clear."
+    }
+  },
+  {
+    "source_tag": "central_hub_0_0_0",
+    "direction": "south",
+    "target_tag": "south_corridor_0_m1_0",
+    "details": {}
+  },
+  {
+    "source_tag": "south_corridor_0_m1_0",
+    "direction": "north",
+    "target_tag": "central_hub_0_0_0",
+    "details": {}
+  },
+  {
+    "source_tag": "south_corridor_0_m1_0",
+    "direction": "south",
+    "target_tag": "deep_archive_0_m2_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "deep_archive_key_lock",
+      "key_item_tag_opens": "archive_key_alpha",
+      "description_when_locked": "A formidable iron door blocks passage south. It has a complex keyhole.",
+      "description_when_unlocked": "The formidable iron door to the south is unlocked.",
+      "skill_to_pick": {
+        "skill_id_tag": "pick_lock_basic",
+        "dc": 18
+      }
+    }
+  },
+  {
+    "source_tag": "deep_archive_0_m2_0",
+    "direction": "north",
+    "target_tag": "south_corridor_0_m1_0",
+    "details": {
+      "is_locked": true,
+      "lock_id_tag": "deep_archive_key_lock",
+      "key_item_tag_opens": "archive_key_alpha",
+      "description_when_locked": "The iron door to the north is locked from this side too.",
+      "description_when_unlocked": "The iron door to the north is open.",
+      "skill_to_pick": {
+        "skill_id_tag": "pick_lock_basic",
+        "dc": 18
+      }
+    }
+  },
+  {
+    "source_tag": "central_hub_0_0_0",
+    "direction": "west",
+    "target_tag": "west_corridor_m1_0_0",
+    "details": {}
+  },
+  {
+    "source_tag": "west_corridor_m1_0_0",
+    "direction": "east",
+    "target_tag": "central_hub_0_0_0",
+    "details": {}
+  },
+  {
+    "source_tag": "west_corridor_m1_0_0",
+    "direction": "west",
+    "target_tag": "weapon_shop_m2_0_0",
+    "details": {}
+  },
+  {
+    "source_tag": "weapon_shop_m2_0_0",
+    "direction": "east",
+    "target_tag": "west_corridor_m1_0_0",
+    "details": {}
+  },
+  {
+    "source_tag": "weapon_shop_m2_0_0",
+    "direction": "south",
+    "target_tag": "armor_shop_m2_m1_0",
+    "details": {}
+  },
+  {
+    "source_tag": "armor_shop_m2_m1_0",
+    "direction": "north",
+    "target_tag": "weapon_shop_m2_0_0",
+    "details": {}
+  },
+  {
+    "source_tag": "shack_interior_0_4_0",
+    "direction": "south",
+    "target_tag": "ruined_shack_clearing_0_3_0",
     "details": {}
   }
 ]

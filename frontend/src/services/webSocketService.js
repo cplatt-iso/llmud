@@ -1,66 +1,93 @@
 import useGameStore from '../state/gameStore';
 
-// The same way we updated the API service
 const WS_PROTOCOL = 'wss:';
 const WS_HOST = 'llmud.trazen.org';
 
-// Again, direct access to the store for non-React files
-const { getState, setState } = useGameStore;
+const { getState, setState } = useGameStore;    
 
 let socket = null;
+
+// --- THE NEW MASTER SCRIBE FOR LOGS ---
+// This ensures every log entry is an object with a unique, stable ID.
+// This is CRITICAL for React performance.
+let logIdCounter = 0;
+const createLogEntry = (type, data) => ({
+  id: `log-${logIdCounter++}`,
+  type: type,
+  data: data,
+});
 
 const handleMessage = (event) => {
     try {
         const serverData = JSON.parse(event.data);
-        console.log("WS RCV:", serverData); // Good for debugging
+        console.log("WS RCV:", serverData); // Keep this for debugging, it's invaluable
 
-        // HERE IS THE MAGIC:
-        // We'll call setState directly based on the message type.
-        // This is like a mini-reducer.
         switch (serverData.type) {
             case "welcome_package":
-            case "combat_update": // COMBINED and CORRECTED
                 setState((state) => {
+                    // Welcome package logs are also just HTML
                     if (serverData.log && serverData.log.length > 0) {
-                        state.logLines.unshift(...serverData.log.reverse());
+                        const newLogEntries = serverData.log.map(line => createLogEntry('html', line));
+                        state.logLines.unshift(...newLogEntries.reverse());
                     }
                     if (serverData.character_vitals) {
-                        // The correct, nested mapping logic
                         state.vitals.hp.current = serverData.character_vitals.current_hp;
                         state.vitals.hp.max = serverData.character_vitals.max_hp;
                         state.vitals.mp.current = serverData.character_vitals.current_mp;
                         state.vitals.mp.max = serverData.character_vitals.max_mp;
                         state.vitals.xp.current = serverData.character_vitals.current_xp;
-                        // The welcome package uses next_level_xp, but other vitals updates might not.
-                        // Let's be safe.
                         if (serverData.character_vitals.next_level_xp !== undefined) {
                             state.vitals.xp.max = serverData.character_vitals.next_level_xp;
                         }
                         state.characterLevel = serverData.character_vitals.level;
                     }
-                    // Also update the current room if new data is provided
                     if (serverData.room_data) {
                         state.currentRoomId = serverData.room_data.id;
-                        // If the z-level changed, we should probably fetch a new map
-                        if (state.mapData && state.mapData.z_level !== serverData.room_data.z) {
-                            // We'll call fetchMapData outside the 'set' call
-                            state.needsNewMap = true; // Let's use a flag
-                        }
-                    }
-                    if (serverData.type === "combat_update") {
-                        state.isInCombat = !serverData.combat_over;
                     }
                 });
-                // Handle the side-effect of fetching a new map
+                break;
+
+            case "combat_update":
+                setState((state) => {
+                    // Combat logs are arrays of HTML strings
+                    if (serverData.log && serverData.log.length > 0) {
+                        const newLogEntries = serverData.log.map(line => createLogEntry('html', line));
+                        state.logLines.unshift(...newLogEntries.reverse());
+                    }
+                    if (serverData.character_vitals) {
+                        state.vitals.hp.current = serverData.character_vitals.current_hp;
+                        state.vitals.hp.max = serverData.character_vitals.max_hp;
+                        state.vitals.mp.current = serverData.character_vitals.current_mp;
+                        state.vitals.mp.max = serverData.character_vitals.max_mp;
+                        state.vitals.xp.current = serverData.character_vitals.current_xp;
+                        if (serverData.character_vitals.next_level_xp !== undefined) {
+                            state.vitals.xp.max = serverData.character_vitals.next_level_xp;
+                        }
+                        state.characterLevel = serverData.character_vitals.level;
+                    }
+                    if (serverData.room_data) {
+                        state.currentRoomId = serverData.room_data.id;
+                        if (state.mapData && state.mapData.z_level !== serverData.room_data.z) {
+                            state.needsNewMap = true;
+                        }
+                    }
+                    state.isInCombat = !serverData.combat_over;
+                });
                 if (getState().needsNewMap) {
-                    setState({ needsNewMap: false }); // Reset the flag
+                    setState({ needsNewMap: false });
                     getState().fetchMapData();
                 }
                 break;
 
-            case "vitals_update": // This one ALSO needs to be fixed!
+            case "look_response":
+                setState(state => {
+                    // This is our special structured log object
+                    state.logLines.unshift(createLogEntry('look', serverData));
+                });
+                break;
+
+            case "vitals_update":
                 setState((state) => {
-                    // Apply the same mapping logic here
                     state.vitals.hp.current = serverData.current_hp;
                     state.vitals.hp.max = serverData.max_hp;
                     state.vitals.mp.current = serverData.current_mp;
@@ -73,26 +100,27 @@ const handleMessage = (event) => {
                 });
                 break;
             
-            // ### THE NEW CASE FOR REAL-TIME INVENTORY ###
             case "inventory_update":
                 console.log("[WS] Received real-time inventory_update.");
                 setState(state => {
-                    // This directly overwrites the inventory slice of the state.
-                    // If the modal is open, React will re-render it automagically.
                     state.inventory = serverData.inventory_data;
                 });
                 break;
 
-            // Add more cases here as needed...
             case "game_event":
             case "ooc_message":
                 setState((state) => {
-                    state.logLines.unshift(serverData.message);
+                    // These are single HTML strings
+                    state.logLines.unshift(createLogEntry('html', serverData.message));
                 });
                 break;
 
             default:
                 console.warn("Unhandled WS message type:", serverData.type);
+                // Even for unhandled types, let's log them as plain text
+                setState(state => {
+                    state.logLines.unshift(createLogEntry('html', `<span class="system-message-inline">Unhandled event: ${serverData.type}</span>`));
+                });
                 break;
         }
 
@@ -103,18 +131,18 @@ const handleMessage = (event) => {
 
 const handleClose = (event) => {
     console.log("WebSocket connection closed:", event.code, event.reason);
-    setState({ isInCombat: false }); // Always reset combat status on disconnect
+    setState({ isInCombat: false });
     socket = null;
-    // Optionally, add a log line to inform the user
     setState(state => {
-        state.logLines.unshift(`! Game server connection closed. (Code: ${event.code} ${event.reason || ''})`.trim());
-    })
+        const closeMessage = `! Game server connection closed. (Code: ${event.code} ${event.reason || ''})`.trim();
+        state.logLines.unshift(createLogEntry('html', `<span class="system-message-inline">${closeMessage}</span>`));
+    });
 };
 
 const handleError = (event) => {
     console.error("WebSocket error observed:", event);
     setState(state => {
-        state.logLines.unshift("! WebSocket connection error.");
+        state.logLines.unshift(createLogEntry('html', '<span class="system-message-inline">! WebSocket connection error.</span>'));
     });
 };
 
@@ -155,10 +183,17 @@ export const webSocketService = {
             socket.send(JSON.stringify(payload));
         } else {
             console.error("Cannot send WS message: Not connected.");
-            // Optionally add a log line for the user
             setState(state => {
-                state.logLines.unshift("! Cannot send command: Not connected to game server.");
+                state.logLines.unshift(createLogEntry('html', '<span class="system-message-inline">! Cannot send command: Not connected to game server.</span>'));
             });
         }
+    },
+    
+    // This is a new helper function we can call from CommandInput.jsx
+    // to keep the log creation logic consistent.
+    addClientLog: (type, data) => {
+        setState(state => {
+            state.logLines.unshift(createLogEntry(type, data));
+        })
     }
 };

@@ -2,7 +2,7 @@
 import uuid
 from typing import Any, Dict, Optional, List, TYPE_CHECKING
 
-from sqlalchemy import Column, String, ForeignKey, Integer
+from sqlalchemy import Boolean, Column, String, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app import models
@@ -21,13 +21,14 @@ class Character(Base):
     id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(100), index=True, nullable=False, unique=True)
     class_name: Mapped[str] = mapped_column(String(50), nullable=False, default="Adventurer") # Keep as stored field
+    is_brief_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     owner: Mapped["Player"] = relationship(back_populates="characters", lazy="joined") 
 
     player_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("players.id"), nullable=False, index=True)
     god_level: Mapped[int] = mapped_column(Integer, default=0, nullable=False, comment="0 for mortals, 1-10 for gods")
     titles: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: [], comment="e.g., ['The Godslayer', 'Cheesewheel Enthusiast']")
     current_room_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("rooms.id"), nullable=False, index=True)
-
+    is_brief_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # --- Class Template Link ---
     character_class_template_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         PG_UUID(as_uuid=True),

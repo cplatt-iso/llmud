@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app import crud, models, schemas # For type hints and DB access
 from app.game_state import is_character_resting, set_character_resting_status
 from .combat_utils import send_combat_log, broadcast_combat_event # Use from local package
+from app.commands.utils import get_formatted_mob_name
 
 logger = logging.getLogger(__name__)
 
@@ -81,37 +82,54 @@ def end_combat_for_character(character_id: uuid.UUID, reason: str = "unknown"):
 
 
 async def mob_initiates_combat(db: Session, mob_instance: models.RoomMobInstance, target_character: models.Character):
-    """Handles a mob initiating combat with a character."""
-    if not mob_instance or mob_instance.current_health <= 0: return
-    if not target_character or target_character.current_health <= 0: return
+    """
+    Handles a mob initiating combat with a character, using formatted names
+    and broadcasting the correct messages to the right people.
+    """
+    if not mob_instance or mob_instance.current_health <= 0 or not mob_instance.mob_template:
+        return
+    if not target_character or target_character.current_health <= 0:
+        return
     
-    # Check if this specific engagement already exists
+    # Check if this specific engagement already exists to prevent spam
     if target_character.id in active_combats and mob_instance.id in active_combats[target_character.id]:
-        # logger.debug(f"Mob {mob_instance.mob_template.name} already fighting {target_character.name}.")
         return 
 
     logger.info(f"COMBAT: {mob_instance.mob_template.name} ({mob_instance.id}) initiates combat with {target_character.name} ({target_character.id})!")
     
+    # Set the combat state
     active_combats.setdefault(target_character.id, set()).add(mob_instance.id)
     mob_targets[mob_instance.id] = target_character.id  
-    # Mobs don't queue actions in character_queued_actions; their actions are determined in process_combat_round.
 
-    mob_name_html = f"<span class='inv-item-name'>{mob_instance.mob_template.name}</span>"
+    # --- THE TECHNICOLOR FIX ---
+    # Get the correctly formatted, color-coded name for the mob from the player's perspective.
+    mob_name_formatted = get_formatted_mob_name(mob_instance, target_character)
     char_name_html = f"<span class='char-name'>{target_character.name}</span>"
     
-    initiation_message_to_player_parts: List[str] = []
+    # --- MESSAGE TO THE POOR BASTARD GETTING ATTACKED ---
+    initiation_log_to_player: List[str] = []
+    
+    # Check if the player was resting and interrupt them.
     if is_character_resting(target_character.id): 
         set_character_resting_status(target_character.id, False)
-        initiation_message_to_player_parts.append("<span class='combat-warning'>You are startled from your rest!</span>")
+        initiation_log_to_player.append("<span class='combat-warning'>You are startled from your rest!</span>")
     
-    initiation_message_to_player_parts.append(f"{mob_name_html} turns its baleful gaze upon you and <span class='combat-hit-player'>attacks!</span>")
+    initiation_log_to_player.append(f"{mob_name_formatted} turns its baleful gaze upon you and <span class='combat-hit-player'>attacks!</span>")
     
+    # Send the log to the player who got attacked.
     player_room_orm = crud.crud_room.get_room_by_id(db, room_id=target_character.current_room_id)
     player_room_schema = schemas.RoomInDB.from_orm(player_room_orm) if player_room_orm else None
-    await send_combat_log(player_id=target_character.player_id, messages=initiation_message_to_player_parts, room_data=player_room_schema)
+    await send_combat_log(player_id=target_character.player_id, messages=initiation_log_to_player, room_data=player_room_schema)
     
-    broadcast_message = f"{mob_name_html} shrieks and <span class='combat-hit-player'>attacks</span> {char_name_html}!"
-    if "<span class='combat-warning'>You are startled from your rest!</span>" in " ".join(initiation_message_to_player_parts): # Check if rest was broken
-         broadcast_message = f"{char_name_html} is startled from their rest as {mob_name_html} <span class='combat-hit-player'>attacks</span>!"
+    # --- MESSAGE TO EVERYONE ELSE IN THE ROOM ---
+    # Note: We can't use the player-specific colored name for the broadcast,
+    # as the color depends on each observer's level. The broadcast function
+    # would need to be much smarter. For now, we'll use a generic span for others.
+    mob_name_generic_html = f"<span class='mob-name'>{mob_instance.mob_template.name}</span>"
     
+    broadcast_message = f"{mob_name_generic_html} shrieks and <span class='combat-hit-player'>attacks</span> {char_name_html}!"
+    if "<span class='combat-warning'>You are startled from your rest!</span>" in " ".join(initiation_log_to_player):
+         broadcast_message = f"{char_name_html} is startled from their rest as {mob_name_generic_html} <span class='combat-hit-player'>attacks</span>!"
+    
+    # The broadcast_combat_event function already correctly excludes the target player.
     await broadcast_combat_event(db, mob_instance.room_id, target_character.player_id, broadcast_message)

@@ -2,7 +2,7 @@
 import uuid
 from typing import Optional, Dict, Any, List # Added List
 
-from sqlalchemy import String, Text, Integer, Float # Keep Column, Add Float
+from sqlalchemy import Boolean, String, Text, Integer, Float # Keep Column, Add Float
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -26,8 +26,10 @@ class MobTemplate(Base):
     attack_speed_secs: Mapped[Optional[float]] = mapped_column(Float, nullable=True, default=3.0) # <<< MODIFIED
     aggro_radius: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=5) # <<< MODIFIED
     roam_radius: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=0) # <<< MODIFIED
+    is_boss: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     
     xp_value: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    
     
     # loot_table_ref: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, comment="Placeholder for loot table reference") # Replaced by loot_table_tags
     loot_table_tags: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: []) # <<< MODIFIED (JSONB for list of strings)

@@ -1,8 +1,8 @@
 import React from 'react';
 import useGameStore from '../state/gameStore';
-import './CharacterInfoBar.css'; // Import your CSS for styling
-function CharacterInfoBar() {
+import './CharacterInfoBar.css';
 
+function CharacterInfoBar() {
   const name = useGameStore((state) => state.characterName);
   const charClass = useGameStore((state) => state.characterClass);
   const level = useGameStore((state) => state.characterLevel);
@@ -13,7 +13,8 @@ function CharacterInfoBar() {
       <span className="char-info-separator">|</span>
       <span id="char-info-class">{charClass}</span>
       <span className="char-info-separator">|</span>
-      <span>Level: <span id="char-info-level">{level}</span></span>
+      {/* --- FIX FOR BROKEN LEVEL --- */}
+      <span>Level: <span id="char-info-level">{level || '?'}</span></span>
     </div>
   );
 }

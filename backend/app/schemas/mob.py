@@ -18,7 +18,8 @@ class MobTemplateBase(BaseModel):
     attack_speed_secs: Optional[float] = Field(3.0, gt=0, description="Time in seconds between attacks.") # <<< MODIFIED
     aggro_radius: Optional[int] = Field(5, ge=0, description="Radius in map units for auto-aggression.") # <<< MODIFIED
     roam_radius: Optional[int] = Field(0, ge=0, description="Radius from spawn point for roaming behavior. 0 means stationary unless pulled.") # <<< MODIFIED
-    
+    is_boss: bool = Field(False, description="Whether this mob is considered a boss.")
+
     xp_value: int = Field(0, ge=0)
     
     loot_table_tags: Optional[List[str]] = Field(default_factory=list, description="Tags to determine loot drops, e.g., ['goblin_common', 'small_treasure']") # <<< MODIFIED
@@ -63,6 +64,7 @@ class MobTemplateUpdate(BaseModel): # Does NOT inherit from MobTemplateBase
     faction_tags: Optional[List[str]] = None
     special_abilities: Optional[List[str]] = None
     properties: Optional[Dict[str, Any]] = None
+    is_boss: Optional[bool] = None
     
     @validator('currency_drop', pre=True, always=True)
     def check_currency_drop_update(cls, v): # Validator for update too

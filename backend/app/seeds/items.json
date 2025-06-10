@@ -179,5 +179,23 @@
     "slot": "main_hand",
     "properties": { "damage": "10d99", "damage_type": "slashing", "weapon_type": "sword" },
     "weight": 1.0, "value": 500000, "stackable": false, "max_stack_size": 1
+  },
+  {
+    "name": "Crude Goblin Totem",
+    "description": "A small, crudely carved wooden totem smelling of goblin. It's used by their lookouts to grant passage. It feels slightly greasy.",
+    "item_type": "key",
+    "rarity": "uncommon",
+    "slot": null,
+    "properties": { "item_tag": "goblin_pass_key" },
+    "weight": 0.2, "value": 25, "stackable": false, "max_stack_size": 1
+  },
+  {
+    "name": "Wolf's Head Key",
+    "description": "A heavy iron key with its head shaped like a snarling wolf. It feels cold to the touch and seems important for progressing into the nearby woods.",
+    "item_type": "key",
+    "rarity": "uncommon",
+    "slot": null,
+    "properties": { "item_tag": "whispering_woods_key" },
+    "weight": 0.5, "value": 50, "stackable": false, "max_stack_size": 1
   }
 ]

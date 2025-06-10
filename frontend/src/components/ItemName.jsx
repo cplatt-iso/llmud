@@ -1,5 +1,6 @@
 import React from 'react';
 import { Tooltip } from 'react-tooltip';
+import './ItemName.css'; // Assuming you have a CSS file for styling
 
 // Helper to format property names nicely (e.g., 'armor_class' -> 'Armor Class')
 const formatPropertyName = (propName) => {
@@ -55,7 +56,7 @@ const getIconForItemType = (item) => {
     }
 };
 
-function ItemName({ item }) {
+const ItemName = React.memo(function ItemName({ item }) {
   if (!item) return null;
 
   const renderTooltipContent = () => {
@@ -99,6 +100,6 @@ function ItemName({ item }) {
       />
     </>
   );
-}
+});
 
 export default ItemName;

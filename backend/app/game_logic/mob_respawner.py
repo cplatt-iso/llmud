@@ -1,81 +1,64 @@
-# backend/app/game_logic/mob_respawner.py
+# backend/app/game_logic/mob_respawner.py (REWRITTEN TO NOT BE A DUMBASS)
 import asyncio
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
-import random # For chance_to_spawn_percent
-from app.websocket_manager import connection_manager 
+import random
 
-from app import crud, models # Ensure models.RoomMobInstance is available
+from app import crud, models
+from app.game_state import mob_group_death_timestamps
+from app.websocket_manager import connection_manager
 
-# This task function will be registered by world_ticker.py
 async def manage_mob_populations_task(db: Session):
+    """
+    Checks the in-memory dictionary of depleted mob groups and respawns them
+    if their delay has passed.
+    """
     now = datetime.now(timezone.utc)
-    definitions_to_check = crud.crud_mob_spawn_definition.get_definitions_ready_for_check(db, current_time=now)
-
-    if not definitions_to_check:
-        return
-
-    for definition in definitions_to_check:
-        living_children_count = db.query(models.RoomMobInstance).filter(
-            models.RoomMobInstance.spawn_definition_id == definition.id,
-            models.RoomMobInstance.current_health > 0
-        ).count()
-
-        needed_to_reach_min = definition.quantity_min - living_children_count
+    
+    # Iterate over a copy of the items, so we can safely remove from the original dict
+    for def_id, death_timestamp in list(mob_group_death_timestamps.items()):
         
-        if needed_to_reach_min > 0:
-            can_spawn_up_to_max = definition.quantity_max - living_children_count
-            num_to_attempt_spawn = min(needed_to_reach_min, can_spawn_up_to_max)
+        spawn_def = crud.crud_mob_spawn_definition.get_definition(db, definition_id=def_id)
+        if not spawn_def:
+            # Clean up if the definition was deleted from the DB for some reason
+            del mob_group_death_timestamps[def_id]
+            continue
+            
+        # Check if enough time has passed since the group was depleted
+        if now >= death_timestamp + timedelta(seconds=spawn_def.respawn_delay_seconds):
+            
+            # How many are currently alive?
+            living_children_count = db.query(models.RoomMobInstance.id).filter(
+                models.RoomMobInstance.spawn_definition_id == def_id,
+                models.RoomMobInstance.current_health > 0
+            ).count()
 
-            if num_to_attempt_spawn > 0:
-                mob_template_for_log = crud.crud_mob.get_mob_template(db, definition.mob_template_id)
-                mob_name_for_log = mob_template_for_log.name if mob_template_for_log else "A mysterious creature"
-                room_for_log = crud.crud_room.get_room_by_id(db, definition.room_id)
-                room_name_for_log = room_for_log.name if room_for_log else "an unknown location"
-                
-                print(f"Mob Respawner: Definition '{definition.definition_name}' needs {needed_to_reach_min} (attempting {num_to_attempt_spawn}) of '{mob_name_for_log}' in '{room_name_for_log}'.")
+            # How many do we want? Let's aim for the max.
+            num_to_spawn = spawn_def.quantity_max - living_children_count
 
-                spawned_this_cycle_for_def = 0
-                for _ in range(num_to_attempt_spawn):
-                    if random.randint(1, 100) <= definition.chance_to_spawn_percent:
-                        new_mob = crud.crud_mob.spawn_mob_in_room(
-                            db,
-                            room_id=definition.room_id,
-                            mob_template_id=definition.mob_template_id,
-                            originating_spawn_definition_id=definition.id
-                        )
-                        if new_mob:
-                            spawned_this_cycle_for_def +=1
-                            # --- BROADCAST SPAWN MESSAGE TO ROOM ---
-                            # Ensure mob_template is loaded on new_mob for its name
-                            # spawn_mob_in_room should return an instance with mob_template eager loaded if possible,
-                            # or we fetch it again if necessary. Assuming new_mob.mob_template is accessible.
-                            # If not, fetch the template name again:
-                            spawned_mob_name = new_mob.mob_template.name if new_mob.mob_template else "A creature"
-                            
-                            spawn_message_payload = {
-                                "type": "game_event", # Or a more specific "mob_spawn_event"
-                                "message": f"<span class='inv-item-name'>{spawned_mob_name}</span> forms from the shadows!" 
-                                           # Or "...materializes out of thin air!"
-                                           # Or "...crawls out of a crack in the wall!"
-                            }
-                            
-                            # Get player_ids of characters in the room where the mob spawned
-                            player_ids_in_spawn_room = [
-                                char.player_id for char in crud.crud_character.get_characters_in_room(
-                                    db, room_id=definition.room_id 
-                                    # No need to exclude anyone, everyone sees the spawn
-                                ) if connection_manager.is_player_connected(char.player_id)
-                            ]
+            if num_to_spawn > 0:
+                print(f"RESPAWNER: Timer up for '{spawn_def.definition_name}'. Spawning {num_to_spawn} mobs.")
+                for _ in range(num_to_spawn):
+                    # No need to check spawn chance here, as the timer itself is the gate
+                    new_mob = crud.crud_mob.spawn_mob_in_room(
+                        db,
+                        room_id=spawn_def.room_id,
+                        mob_template_id=spawn_def.mob_template_id,
+                        originating_spawn_definition_id=spawn_def.id
+                    )
+                    # Broadcast spawn event (optional, but cool)
+                    if new_mob and new_mob.mob_template:
+                        spawn_message_payload = {
+                            "type": "game_event",
+                            "message": f"<span class='mob-name'>{new_mob.mob_template.name}</span> emerges from the shadows!"
+                        }
+                        player_ids_in_spawn_room = [
+                            char.player_id for char in crud.crud_character.get_characters_in_room(db, room_id=spawn_def.room_id)
+                            if connection_manager.is_player_connected(char.player_id)
+                        ]
+                        if player_ids_in_spawn_room:
+                            await connection_manager.broadcast_to_players(spawn_message_payload, player_ids_in_spawn_room)
 
-                            if player_ids_in_spawn_room:
-                                print(f"  Broadcasting spawn of '{spawned_mob_name}' to {len(player_ids_in_spawn_room)} players in room {definition.room_id}.")
-                                await connection_manager.broadcast_to_players(spawn_message_payload, player_ids_in_spawn_room)
-                            # --- END BROADCAST ---
-                if spawned_this_cycle_for_def > 0:
-                     print(f"  Successfully spawned {spawned_this_cycle_for_def} mobs for '{definition.definition_name}'.")
-
-        next_check = now + timedelta(seconds=definition.respawn_delay_seconds)
-        crud.crud_mob_spawn_definition.update_mob_spawn_definition_next_check_time(
-            db, definition_id=definition.id, next_check_time=next_check
-        )
+            # The timer has been acted upon, remove it from the book.
+            # If the group gets depleted again, a new timestamp will be set.
+            del mob_group_death_timestamps[def_id]

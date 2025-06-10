@@ -13,6 +13,33 @@ from app.schemas.common_structures import ExitDetail
 logger_utils = logging.getLogger(__name__)
 
 
+def get_formatted_mob_name(mob: models.RoomMobInstance, character: models.Character) -> str:
+    """
+    Returns a mob's name formatted with color-coded HTML based on level difference.
+    This is the ONE TRUE SOURCE for mob names in logs.
+    """
+    mob_template = mob.mob_template
+    if not mob_template:
+        return "<span class='mob-name difficulty-trivial'>Unknown Creature</span>"
+
+    # Check if level information is available for calculation
+    if character.level is None or mob_template.level is None:
+        boss_icon = "💀 " if mob_template.is_boss else ""
+        name_to_display = mob_template.name if mob_template.name else "Creature"
+        return f"<span class='mob-name difficulty-neutral'>{boss_icon}{name_to_display} (Level Unknown)</span>"
+
+    level_diff = (mob_template.level - character.level)
+    
+    if level_diff <= -10: difficulty = "trivial"
+    elif level_diff <= -3:  difficulty = "easy"
+    elif level_diff <= 2:   difficulty = "neutral"
+    elif level_diff <= 5:   difficulty = "hard"
+    else:                   difficulty = "deadly"
+
+    boss_icon = "💀 " if mob_template.is_boss else ""
+    
+    return f"<span class='mob-name difficulty-{difficulty}'>{boss_icon}{mob_template.name}</span>"
+
 def get_visible_length(s: str) -> int:
     """Removes HTML tags and returns the length of the visible string."""
     return len(re.sub(r'<[^>]+>', '', s))
@@ -144,7 +171,8 @@ def resolve_room_item_target(
 
 
 def format_room_mobs_for_player_message(
-    room_mobs: List[models.RoomMobInstance]
+    room_mobs: List[models.RoomMobInstance],
+    character: models.Character # It now needs the character to calculate level diff
 ) -> Tuple[str, Dict[int, uuid.UUID]]:
     """Formats mobs in the room into a readable string, numbered, and returns a map."""
     lines = []
@@ -156,13 +184,10 @@ def format_room_mobs_for_player_message(
         sorted_room_mobs = sorted(room_mobs, key=lambda m: m.mob_template.name if m.mob_template else "")
 
         for idx, mob_instance in enumerate(sorted_room_mobs):
-            template = mob_instance.mob_template
-            mob_name = template.name if template else "Unknown Creature"
+            formatted_name = get_formatted_mob_name(mob_instance, character)            
             mob_number_html = f"<span class='inv-backpack-number'>{idx + 1}.</span>"
-            mob_name_html = f"<span class='inv-item-name'>{mob_name}</span>"
-
-            lines.append(f"  {mob_number_html} {mob_name_html}")
-            mob_map[idx + 1] = mob_instance.id # Map display number to original instance ID
+            lines.append(f"  {mob_number_html} {formatted_name} is waiting.")
+            mob_map[idx + 1] = mob_instance.id
 
     return "\n".join(lines), mob_map
 

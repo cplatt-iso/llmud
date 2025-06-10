@@ -8,7 +8,6 @@
 .equipped-items-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 15px; }
 .inventory-item.equipped { display: flex; }
 .slot-name { color: #999; min-width: 100px; }
-.item-name { color: var(--color-text-link); font-weight: bold; }
 .item-quantity { color: #aaa; font-style: italic; }
 .inventory-empty-message { color: #666; font-style: italic; grid-column: 1 / -1; }
 .currency-footer .currency-display { display: flex; justify-content: space-around; }

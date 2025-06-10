@@ -79,7 +79,7 @@ async def handle_attack(context: CommandContext) -> schemas.CommandResponse:
     
     if combat_ended_in_this_http_round and target_mob_instance.current_health <= 0:
         remaining_mobs_orm = crud.crud_mob.get_mobs_in_room(context.db, room_id=context.current_room_orm.id)
-        mobs_text, _ = format_room_mobs_for_player_message(remaining_mobs_orm)
+        mobs_text, _ = format_room_mobs_for_player_message(remaining_mobs_orm, context.active_character)
         if mobs_text: message_parts.append(mobs_text)
 
     final_message = "\n".join(filter(None, message_parts)).strip()

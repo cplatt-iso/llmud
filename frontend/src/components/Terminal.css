@@ -10,6 +10,9 @@
   border-bottom: 1px solid var(--color-border-medium);
   display: flex;
   flex-direction: column-reverse;
+  /* This width fix should be in here */
+  min-width: 900px;
+  width: 65ch; 
 }
 
 .terminal-output::-webkit-scrollbar { width: 10px; }
@@ -43,7 +46,7 @@
   padding: 0;
 }
 
-/* Utility classes for terminal content */
+/* --- PRE-EXISTING UTILITY CLASSES --- */
 .system-message-inline {
   color: var(--color-text-system);
   font-style: italic;
@@ -51,3 +54,14 @@
 .combat-success { color: #33cc33; font-weight: bold; }
 .combat-death { color: var(--color-text-error); font-weight: bold; }
 .ooc-chat-message { color: #9999ff; font-style: italic; }
+.exit { color: #87ceeb; /* A nice sky blue for exits */ }
+
+
+/* --- THIS IS THE SHIT THAT WAS MISSING --- */
+/* --- NEW MOB DIFFICULTY COLORS --- */
+.mob-name { font-weight: bold; }
+.difficulty-trivial { color: #808080; } /* Grey */
+.difficulty-easy    { color: #4CAF50; } /* Green */
+.difficulty-neutral { color: #FFEB3B; } /* Yellow */
+.difficulty-hard    { color: #FF9800; } /* Orange */
+.difficulty-deadly  { color: #F44336; } /* Red */

@@ -1,4 +1,5 @@
 # backend/app/game_state.py
+import datetime
 import uuid
 from typing import Dict, Optional
 
@@ -7,6 +8,7 @@ active_game_sessions: Dict[uuid.UUID, uuid.UUID] = {}
 
 # Character ID -> Resting Status (True if resting)
 character_resting_status: Dict[uuid.UUID, bool] = {}
+mob_group_death_timestamps: Dict[uuid.UUID, datetime.datetime] = {}
 
 def is_character_resting(character_id: uuid.UUID) -> bool:
     return character_resting_status.get(character_id, False)

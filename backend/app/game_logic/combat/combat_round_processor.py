@@ -7,7 +7,7 @@ from typing import List, Optional, Tuple, Union, Dict, Any
 from sqlalchemy.orm import Session, attributes
 
 from app import crud, models, schemas
-from app.commands.utils import roll_dice
+from app.commands.utils import roll_dice, get_formatted_mob_name
 from .combat_utils import handle_mob_death_loot_and_cleanup
 
 # combat sub-package imports
@@ -116,15 +116,16 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
                         to_hit_roll = roll_dice("1d20")
 
                         updated_mob = None  # Ensure updated_mob is always defined
+                        mob_name_formatted = get_formatted_mob_name(mob_instance, character)
 
                         if (to_hit_roll + player_attack_bonus) >= mob_ac:
                             damage = max(1, roll_dice(player_damage_dice) + player_damage_bonus)
-                            round_log.append(f"<span class='char-name'>{character.name}</span> <span class='combat-success'>HITS</span> <span class='inv-item-name'>{mob_template.name}</span> for <span class='combat-hit'>{damage}</span> damage.")
+                            round_log.append(f"<span class='char-name'>{character.name}</span> <span class='combat-success'>HITS</span> {mob_name_formatted} for <span class='combat-hit'>{damage}</span> damage.")
                             await broadcast_combat_event(db, current_room_id_for_action_broadcasts, player_id,
-                                                          f"<span class='char-name'>{character.name}</span> HITS <span class='inv-item-name'>{mob_template.name}</span> for {damage} damage!")
+                                                          f"<span class='char-name'>{character.name}</span> HITS {mob_name_formatted} for {damage} damage!")
                             updated_mob = crud.crud_mob.update_mob_instance_health(db, mob_instance.id, -damage)
                         if updated_mob and updated_mob.current_health <= 0:
-                            round_log.append(f"<span class='combat-death'>The {mob_template.name} DIES! Fucking finally.</span>")
+                            round_log.append(f"<span class='combat-death'>The {mob_name_formatted} DIES! Fucking finally.</span>")
                             """ await broadcast_combat_event(db, current_room_id_for_action_broadcasts, player_id,
                                                           f"The <span class='inv-item-name'>{mob_template.name}</span> DIES!")
                             
@@ -179,11 +180,11 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
                             active_combats.get(character_id, set()).discard(updated_mob.id)
                             if updated_mob.id in mob_targets: mob_targets.pop(updated_mob.id, None)
                             elif updated_mob:
-                                round_log.append(f"  {mob_template.name} HP: <span class='combat-hp'>{updated_mob.current_health}/{mob_template.base_health}</span>.")
+                                round_log.append(f"  {mob_name_formatted} HP: <span class='combat-hp'>{updated_mob.current_health}/{mob_template.base_health}</span>.")
                         else: 
-                            round_log.append(f"<span class='char-name'>{character.name}</span> <span class='combat-miss'>MISSES</span> the <span class='inv-item-name'>{mob_template.name}</span>.")
+                            round_log.append(f"<span class='char-name'>{character.name}</span> <span class='combat-miss'>MISSES</span> the {mob_name_formatted}.")
                             await broadcast_combat_event(db, current_room_id_for_action_broadcasts, player_id,
-                                                          f"<span class='char-name'>{character.name}</span> MISSES the <span class='inv-item-name'>{mob_template.name}</span>.")
+                                                          f"<span class='char-name'>{character.name}</span> MISSES the {mob_name_formatted}.")
                     else: # Mob is dead or has 0 HP
                         round_log.append(f"Your target, {mob_instance.mob_template.name if mob_instance.mob_template else 'the creature'}, is already defeated.")
                         if target_mob_id: active_combats.get(character_id, set()).discard(target_mob_id)
@@ -278,19 +279,20 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
                    mob_instance_to_act.room_id == character.current_room_id:
                     mobs_attacking_character_this_round.append(mob_instance_to_act)
         
-        for mob_instance in mobs_attacking_character_this_round:
+        for mob_instance in mobs_attacking_character_this_round:            
             if character.current_health <= 0: break 
             mob_template = mob_instance.mob_template # Safe due to check above
             # ... (mob attack logic as before, character health is updated directly) ...
+            mob_name_formatted = get_formatted_mob_name(mob_instance, character)
             mob_attack_bonus = mob_template.level or 1 
             mob_damage_dice = mob_template.base_attack or "1d4"
             mob_to_hit_roll = roll_dice("1d20")
 
             if (mob_to_hit_roll + mob_attack_bonus) >= player_ac:
                 damage_to_player = max(1, roll_dice(mob_damage_dice))
-                round_log.append(f"<span class='inv-item-name'>{mob_template.name}</span> <span class='combat-success'>HITS</span> <span class='char-name'>{character.name}</span> for <span class='combat-hit-player'>{damage_to_player}</span> damage.")
+                round_log.append(f"<span class='inv-item-name'>{mob_name_formatted}</span> <span class='combat-success'>HITS</span> <span class='char-name'>{character.name}</span> for <span class='combat-hit-player'>{damage_to_player}</span> damage.")
                 await broadcast_combat_event(db, current_room_id_for_action_broadcasts, player_id,
-                                              f"<span class='inv-item-name'>{mob_template.name}</span> HITS <span class='char-name'>{character.name}</span> for {damage_to_player} damage!")
+                                              f"<span class='inv-item-name'>{mob_name_formatted}</span> HITS <span class='char-name'>{character.name}</span> for {damage_to_player} damage!")
                 character.current_health -= damage_to_player 
                 round_log.append(f"  Your HP: <span class='combat-hp'>{character.current_health}/{character.max_health}</span>.")
                 if character.current_health <= 0:
@@ -312,10 +314,9 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
                     round_log.append("You feel a surge of life, your wounds miraculously healed.")
                     break 
             else: 
-                round_log.append(f"<span class='inv-item-name'>{mob_template.name}</span> <span class='combat-miss'>MISSES</span> <span class='char-name'>{character.name}</span>.")
+                round_log.append(f"<span class='inv-item-name'>{mob_name_formatted}</span> <span class='combat-miss'>MISSES</span> <span class='char-name'>{character.name}</span>.")
                 await broadcast_combat_event(db, current_room_id_for_action_broadcasts, player_id,
-                                              f"<span class='inv-item-name'>{mob_template.name}</span> MISSES <span class='char-name'>{character.name}</span>.")
-    
+                                              f"<span class='inv-item-name'>{mob_name_formatted}</span> MISSES <span class='char-name'>{character.name}</span>.")
     # --- 6. End of Round Cleanup & Next Action Queuing ---
     if combat_resolved_this_round:
         end_combat_for_character(character_id, reason="combat_resolved_this_round_proc_round")

@@ -1,0 +1,16 @@
+.look-result-container {
+  padding: 5px 0;
+}
+
+.look-section {
+  margin-bottom: 0.5em;
+}
+
+.look-section:empty {
+  display: none; /* Hide empty sections */
+}
+
+.exits-line .exit {
+  color: #87CEEB;
+  font-weight: bold;
+}

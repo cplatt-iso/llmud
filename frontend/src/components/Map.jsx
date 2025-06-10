@@ -106,7 +106,7 @@ function Map() {
 
   return (
     <div id="map-column">
-      <div id="map-title-bar">
+      <div id="map-title-bar" className="map-ui-bar">
         <span id="map-title-text">Map</span> | Coords:
         <span id="map-coords-text">{currentRoom ? `${currentRoom.x}, ${currentRoom.y}, ${mapData.z_level}` : '?, ?, ?'}</span>
       </div>
@@ -160,8 +160,11 @@ function Map() {
           </g>
         </svg>
       </div>
-      <div id="map-zone-bar">
-        <span>Zone: [Zone Name Placeholder]</span>
+       <div id="map-zone-bar" className="map-ui-bar">
+        <span>
+          {mapData.current_zone_name || 'Unknown Zone'}
+          {mapData.current_zone_level_range && ` (Lvl ${mapData.current_zone_level_range})`}
+        </span>
       </div>
     </div>
   );

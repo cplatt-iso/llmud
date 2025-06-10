@@ -1,7 +1,11 @@
 [
   {
     "definition_name": "CPURatsMain",
-    "room_coords": { "x": 0, "y": 0, "z": 0 },
+    "room_coords": {
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
     "mob_template_name": "Giant Rat",
     "quantity_min": 1,
     "quantity_max": 2,
@@ -14,18 +18,12 @@
     }
   },
   {
-    "definition_name": "GoblinCampThugs",
-    "room_coords": { "x": -2, "y": 5, "z": 0 },
-    "mob_template_name": "Bandit Thug",
-    "quantity_min": 1,
-    "quantity_max": 2,
-    "respawn_delay_seconds": 240,
-    "is_active": true,
-    "roaming_behavior": null
-  },
-  {
     "definition_name": "GoblinLookoutScouts",
-    "room_coords": { "x": 0, "y": 5, "z": 0 },
+    "room_coords": {
+      "x": 0,
+      "y": 5,
+      "z": 0
+    },
     "mob_template_name": "Goblin Scout",
     "quantity_min": 1,
     "quantity_max": 3,
@@ -36,5 +34,71 @@
       "move_chance_percent": 25,
       "max_distance_from_spawn": 1
     }
+  },
+  {
+    "definition_name": "OutskirtsPathRats",
+    "room_coords": {
+      "x": 0,
+      "y": 2,
+      "z": 0
+    },
+    "mob_template_name": "Giant Rat",
+    "quantity_min": 1,
+    "quantity_max": 2,
+    "respawn_delay_seconds": 90,
+    "is_active": true
+  },
+  {
+    "definition_name": "OutskirtsCellarRats",
+    "room_coords": {
+      "x": 2,
+      "y": 4,
+      "z": 0
+    },
+    "mob_template_name": "Giant Rat",
+    "quantity_min": 2,
+    "quantity_max": 3,
+    "respawn_delay_seconds": 120,
+    "is_active": true
+  },
+  {
+    "definition_name": "OutskirtsShackSpiders",
+    "room_coords": {
+      "x": 0,
+      "y": 3,
+      "z": 0
+    },
+    "mob_template_name": "Forest Spider",
+    "quantity_min": 1,
+    "quantity_max": 2,
+    "respawn_delay_seconds": 180,
+    "is_active": true
+  },
+  {
+    "definition_name": "OutskirtsBossGuard",
+    "room_coords": {
+      "x": 0,
+      "y": 4,
+      "z": 0
+    },
+    "mob_template_name": "Bandit Waylayer",
+    "quantity_min": 1,
+    "quantity_max": 1,
+    "respawn_delay_seconds": 300,
+    "is_active": true
+  },
+  {
+    "definition_name": "GoblinCampBoss",
+    "room_coords": {
+      "x": -2,
+      "y": 5,
+      "z": 0
+    },
+    "mob_template_name": "Goblin Bone-Gnawer",
+    "quantity_min": 1,
+    "quantity_max": 1,
+    "respawn_delay_seconds": 360,
+    "is_active": true,
+    "roaming_behavior": null
   }
 ]

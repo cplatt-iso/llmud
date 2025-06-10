@@ -7,7 +7,7 @@ from typing import List, Optional, Tuple, Union, Dict, Any
 from sqlalchemy.orm import Session, attributes
 
 from app import crud, models, schemas
-from app.commands.utils import roll_dice
+from app.commands.utils import roll_dice, get_formatted_mob_name
 from .combat_utils import broadcast_combat_event, broadcast_to_room_participants
 from app.schemas.common_structures import ExitDetail # For door lock skills
 from app.game_logic.combat.combat_utils import handle_mob_death_loot_and_cleanup
@@ -55,7 +55,7 @@ async def resolve_skill_effect(
             if skill_template.target_type != "ENEMY_MOB" or not target_mob_instance: # Explicit check for this skill
                 skill_log.append(f"'Basic Punch' requires a valid enemy mob target.")
                 return skill_log, True, character_after_skill # Mana spent, but action failed
-
+            mob_name_formatted = get_formatted_mob_name(target_mob_instance, character)
             # Now target_mob_instance is guaranteed to be a valid RoomMobInstance
             mob_ac = target_mob_instance.mob_template.base_defense if target_mob_instance.mob_template.base_defense is not None else 10
             punch_char_ref = character_after_skill 
@@ -71,23 +71,23 @@ async def resolve_skill_effect(
 
             if (to_hit_roll + final_attack_bonus) >= mob_ac:
                 damage = max(1, roll_dice(damage_dice) + final_damage_bonus)
-                skill_log.append(f"<span class='char-name'>{punch_char_ref.name}</span> <span class='combat-success'>PUNCHES</span> <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span> for <span class='combat-hit'>{damage}</span> damage.")
+                skill_log.append(f"<span class='char-name'>{punch_char_ref.name}</span> <span class='combat-success'>PUNCHES</span> {mob_name_formatted} for <span class='combat-hit'>{damage}</span> damage.")
                 await broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
-                                              f"<span class='char-name'>{punch_char_ref.name}</span> PUNCHES <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span> for {damage} damage!")
+                                              f"<span class='char-name'>{punch_char_ref.name}</span> PUNCHES {mob_name_formatted} for {damage} damage!")
                 updated_mob = crud.crud_mob.update_mob_instance_health(db, target_mob_instance.id, -damage)
                 if updated_mob and updated_mob.current_health <= 0:
-                    skill_log.append(f"<span class='combat-death'>The {target_mob_instance.mob_template.name} DIES! Good punch, champ.</span>")
+                    skill_log.append(f"<span class='combat-death'>The {mob_name_formatted} DIES! Good punch, champ.</span>")
                     await broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
-                                                  f"The <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span> DIES!")
+                                                  f"The {mob_name_formatted} DIES!")
                     character_after_skill = await handle_mob_death_loot_and_cleanup(
                         db, character_after_skill, updated_mob, skill_log, player_id, current_room_id_for_broadcast
                     )
                 elif updated_mob:
-                     skill_log.append(f"  {target_mob_instance.mob_template.name} HP: <span class='combat-hp'>{updated_mob.current_health}/{target_mob_instance.mob_template.base_health}</span>.")
+                     skill_log.append(f"  {mob_name_formatted} HP: <span class='combat-hp'>{updated_mob.current_health}/{updated_mob.base_health}</span>.")
             else: 
-                skill_log.append(f"<span class='char-name'>{punch_char_ref.name}</span> <span class='combat-miss'>MISSES</span> the <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span> with a punch.")
+                skill_log.append(f"<span class='char-name'>{punch_char_ref.name}</span> <span class='combat-miss'>MISSES</span> the {mob_name_formatted} with a punch.")
                 await broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
-                                              f"<span class='char-name'>{punch_char_ref.name}</span> MISSES the <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span> with a punch.")
+                                              f"<span class='char-name'>{punch_char_ref.name}</span> MISSES the {mob_name_formatted} with a punch.")
 
         elif skill_template.skill_id_tag == "power_attack_melee":
             if skill_template.target_type != "ENEMY_MOB" or not target_mob_instance: # Explicit check

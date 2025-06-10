@@ -20,6 +20,7 @@ from app.commands.utils import (
     format_room_npcs_for_player_message
 )
 from app.game_state import is_character_resting, set_character_resting_status
+from app.ws_command_parsers.ws_info_parser import handle_ws_brief
 
 # Import all our glorious command parsers
 from app.ws_command_parsers import (
@@ -186,6 +187,8 @@ async def websocket_game_endpoint(
                         await handle_ws_get_take(db_loop, fresh_player, current_char_state, current_room_orm, args_str)
                     elif verb == "look" or verb == "l":
                         await handle_ws_look(db_loop, fresh_player, current_char_state, current_room_orm, args_str)
+                    elif verb == "brief":
+                        await handle_ws_brief(db_loop, fresh_player, current_char_state)
                     # ... other commands like unlock, search, shop commands would follow the same pattern ...
                     
                     else:

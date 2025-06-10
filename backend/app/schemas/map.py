@@ -2,6 +2,7 @@
 import uuid
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional
+from ..models.room import RoomTypeEnum 
 
 from .room import RoomInDB # We'll use the existing RoomInDB for individual room details
 
@@ -13,8 +14,11 @@ class MapRoomData(BaseModel):
     exits: Optional[Dict[str, str]] = Field(default_factory=dict)
     is_current_room: bool = False
     is_visited: bool = True # For now, all fetched rooms are considered visited
+    room_type: RoomTypeEnum
 
 class MapLevelDataResponse(BaseModel):
     z_level: int
-    current_room_id: Optional[uuid.UUID] = None
-    rooms: List[MapRoomData] = Field(default_factory=list)
+    current_room_id: uuid.UUID
+    rooms: List[MapRoomData]
+    current_zone_name: Optional[str] = None
+    current_zone_level_range: Optional[str] = None

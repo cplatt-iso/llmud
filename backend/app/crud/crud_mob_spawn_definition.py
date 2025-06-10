@@ -23,6 +23,13 @@ SEEDS_DIR = os.path.join(CRUD_DIR, "..", "seeds")
 def get_mob_spawn_definition(db: Session, definition_id: uuid.UUID) -> Optional[models.MobSpawnDefinition]:
     return db.query(models.MobSpawnDefinition).filter(models.MobSpawnDefinition.id == definition_id).first()
 
+def get_definition(db: Session, *, definition_id: uuid.UUID) -> Optional[models.MobSpawnDefinition]:
+    """
+    Retrieves a single mob spawn definition by its UUID.
+    Alias for get_mob_spawn_definition.
+    """
+    return get_mob_spawn_definition(db, definition_id)
+
 def get_mob_spawn_definition_by_name(db: Session, definition_name: str) -> Optional[models.MobSpawnDefinition]:
     return db.query(models.MobSpawnDefinition).filter(models.MobSpawnDefinition.definition_name == definition_name).first()
 
