@@ -1,6 +1,7 @@
 # backend/app/crud/crud_mob_spawn_definition.py
 import json
 import os
+import random
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
@@ -30,6 +31,9 @@ def get_definition(db: Session, *, definition_id: uuid.UUID) -> Optional[models.
     """
     return get_mob_spawn_definition(db, definition_id)
 
+def get_all_active_definitions(db: Session) -> List[models.MobSpawnDefinition]:
+    return db.query(models.MobSpawnDefinition).filter(models.MobSpawnDefinition.is_active == True).all()
+
 def get_mob_spawn_definition_by_name(db: Session, definition_name: str) -> Optional[models.MobSpawnDefinition]:
     return db.query(models.MobSpawnDefinition).filter(models.MobSpawnDefinition.definition_name == definition_name).first()
 
@@ -44,7 +48,7 @@ def create_mob_spawn_definition(db: Session, *, definition_in: schemas.MobSpawnD
         raise ValueError("quantity_min cannot be greater than quantity_max")
 
     db_definition_data = definition_in.model_dump()
-    db_definition_data["next_respawn_check_at"] = datetime.now(timezone.utc)
+    # db_definition_data["next_respawn_check_at"] = datetime.now(timezone.utc)
     
     db_definition = models.MobSpawnDefinition(**db_definition_data)
     db.add(db_definition)
@@ -89,7 +93,6 @@ def update_mob_spawn_definition(
 # --- Seeding (THE NEW HOTNESS) ---
 
 def _load_spawn_definitions_from_json() -> List[Dict[str, Any]]:
-    """Loads mob spawn definitions from the JSON seed file."""
     filepath = os.path.join(SEEDS_DIR, 'mob_spawn_definitions.json')
     try:
         with open(filepath, 'r') as f:
@@ -113,6 +116,10 @@ def seed_initial_mob_spawn_definitions(db: Session):
     seeded_count = 0
     updated_count = 0
     skipped_count = 0
+
+    logger.info("Clearing all existing mob instances for a clean seed...")
+    db.query(models.RoomMobInstance).delete()
+    logger.info("Existing mobs cleared.")
 
     for def_data in spawn_definitions_data:
         def_name = def_data.get("definition_name")
@@ -189,5 +196,33 @@ def seed_initial_mob_spawn_definitions(db: Session):
     else:
         logger.info("No new or updated spawn definitions to commit.")
         db.rollback() # Rollback if only skips occurred
+    
+        logger.info("--- Bootstrapping initial mob populations ---")
+    all_active_defs = get_all_active_definitions(db)
+    bootstrap_spawn_count = 0
+    for definition in all_active_defs:
+        # Check how many are ALREADY there for this definition (should be 0 after our purge)
+        living_children_count = db.query(models.RoomMobInstance).filter(
+            models.RoomMobInstance.spawn_definition_id == definition.id,
+            models.RoomMobInstance.current_health > 0
+        ).count()
+
+        if living_children_count < definition.quantity_min:
+            num_to_spawn = random.randint(definition.quantity_min, definition.quantity_max) - living_children_count
+            
+            if num_to_spawn > 0:
+                logger.info(f"  BOOTSTRAP: Spawning {num_to_spawn} mobs for '{definition.definition_name}'")
+                for _ in range(num_to_spawn):
+                    crud_mob.spawn_mob_in_room(
+                        db,
+                        room_id=definition.room_id,
+                        mob_template_id=definition.mob_template_id,
+                        originating_spawn_definition_id=definition.id
+                    )
+                    bootstrap_spawn_count += 1
+    
+    if bootstrap_spawn_count > 0:
+        logger.info(f"Committing {bootstrap_spawn_count} bootstrapped mob instances.")
+        db.commit()
 
     logger.info(f"Mob spawn definition seeding complete. New: {seeded_count}, Updated: {updated_count}, Skipped/Error: {skipped_count}")

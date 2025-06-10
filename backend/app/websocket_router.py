@@ -29,7 +29,7 @@ from app.ws_command_parsers import (
     handle_ws_get_take, handle_ws_unlock, handle_ws_search_examine,
     handle_ws_contextual_interactable, handle_ws_use_ooc_skill,
     handle_ws_look, handle_ws_rest,
-    handle_ws_list, handle_ws_buy, handle_ws_sell, handle_ws_sell_all_junk,
+    handle_ws_list, handle_ws_buy, handle_ws_sell, ws_shop_parser,
     # --- OUR NEWLY ANOINTED HANDLERS ---
     handle_ws_equip, handle_ws_unequip,
     # Need this for the inventory push
@@ -189,6 +189,12 @@ async def websocket_game_endpoint(
                         await handle_ws_look(db_loop, fresh_player, current_char_state, current_room_orm, args_str)
                     elif verb == "brief":
                         await handle_ws_brief(db_loop, fresh_player, current_char_state)
+                    elif verb == "list":
+                        await ws_shop_parser.handle_ws_list(db_loop, fresh_player, current_char_state, current_room_orm)
+                    elif verb == "buy":
+                        await ws_shop_parser.handle_ws_buy(db_loop, fresh_player, current_char_state, current_room_orm, args_str)
+                    elif verb == "sell": # <<< THIS IS THE NEW UNIFIED BLOCK
+                        await ws_shop_parser.handle_ws_sell(db_loop, fresh_player, current_char_state, current_room_orm, args_str)
                     # ... other commands like unlock, search, shop commands would follow the same pattern ...
                     
                     else:

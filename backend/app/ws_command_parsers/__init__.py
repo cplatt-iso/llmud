@@ -25,7 +25,6 @@ from .ws_shop_parser import (
     handle_ws_list,
     handle_ws_buy,
     handle_ws_sell,
-    handle_ws_sell_all_junk,
 )
 
 
@@ -44,7 +43,6 @@ __all__ = [
     "handle_ws_list",
     "handle_ws_buy",
     "handle_ws_sell",
-    "handle_ws_sell_all_junk",
     "handle_ws_equip",
     "handle_ws_unequip",
     "_send_inventory_update_to_player",
