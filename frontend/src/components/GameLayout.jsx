@@ -21,6 +21,7 @@ import './GroundItems.css'; // Importing GroundItems styles
 import './LookResult.css'; // Importing LookResult styles
 
 import './AbilityList.css'; 
+import './ChatWindow.css'; // Importing ChatWindow styles
 
 function GameLayout() {
   return (

@@ -7,6 +7,8 @@ import ScoreSheet from './ScoreSheet';
 import Inventory from './Inventory';
 import SkillsList from './SkillsList';
 import TraitsList from './TraitsList';
+import ChatWindow from './ChatWindow';
+
 // No CSS import here if GameLayout handles it.
 
 const TabContent = () => {
@@ -30,6 +32,8 @@ const TabContent = () => {
       case 'Terminal':
         // Pass the ref down to the component that has the scrollbar
         return <TerminalOutput ref={terminalOutputRef} logLines={logLines} />;
+      case 'Chat':
+        return <ChatWindow />;
       case 'Score':
         return <ScoreSheet />;
       case 'Backpack':

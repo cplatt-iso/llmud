@@ -25,3 +25,30 @@
   border-bottom: 2px solid #0f0;
   margin-bottom: -2px; /* Pull it down to cover the container border */
 }
+
+@keyframes pulse-glow {
+  0% {
+    box-shadow: 0 0 5px #ffab00, inset 0 0 3px #ffab00;
+  }
+  50% {
+    box-shadow: 0 0 12px #ffab00, inset 0 0 5px #ffab00;
+  }
+  100% {
+    box-shadow: 0 0 5px #ffab00, inset 0 0 3px #ffab00;
+  }
+}
+
+/* --- THE STYLE FOR THE UNREAD TAB --- */
+.tab-button.has-unread {
+  color: #ffab00; /* A nice amber/gold color for the text */
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+/* --- ENSURE THE 'ACTIVE' STATE OVERRIDES THE GLOW --- */
+/* This is important so the glow stops the instant you click it,
+   even before the state has a chance to update. */
+.tab-button.active.has-unread {
+  color: var(--color-text-primary); /* Revert text color to the active style */
+  animation: none; /* Turn off the animation immediately */
+  /* The other 'active' styles like background and border will apply automatically */
+}

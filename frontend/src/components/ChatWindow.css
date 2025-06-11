@@ -1,0 +1,14 @@
+/* frontend/src/components/ChatWindow.css */
+
+/*
+  For now, we can piggy-back off the styles in Terminal.css since
+  the ChatWindow.jsx component re-uses the 'terminal-output' and
+  'terminal-line' classes. If we need unique chat styling later,
+  we can add it here. For example:
+*/
+
+#chat-output.terminal-output {
+  /* Example of a future override:
+  background-color: var(--color-background-medium);
+  */
+}

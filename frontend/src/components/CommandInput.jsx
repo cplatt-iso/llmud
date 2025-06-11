@@ -67,6 +67,11 @@ function CommandInput() {
         case 'eq':
           setActiveTab('Equipment');
           return;
+        
+        case 'chat':
+        case 'c':
+          setActiveTab('Chat');
+          return;
 
         case 'who':
           setActiveTab('Who');

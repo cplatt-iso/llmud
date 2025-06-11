@@ -20,6 +20,8 @@ const handleMessage = (event) => {
         const serverData = JSON.parse(event.data);
         console.log("WS RCV:", serverData);
 
+        const { addLogLine, addChatLine } = useGameStore.getState();
+
         switch (serverData.type) {
             case "welcome_package":
                 setState((state) => {
@@ -102,9 +104,9 @@ const handleMessage = (event) => {
             // <<< FIX FOR SILENT NPCS AND OTHER ROOM MESSAGES >>>
             case "game_event":
             case "ooc_message":
-                setState((state) => {
-                    state.logLines.push(createLogEntry('html', serverData.message));
-                });
+                if (serverData.message) {
+                    addChatLine(serverData.message); // This will add to both logs
+                }
                 break;
 
             default:

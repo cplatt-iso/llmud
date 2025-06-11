@@ -23,6 +23,8 @@ const initialState = {
   logLines: [
     createLogLine('<span class="system-message-inline">Zustand brain is online. Please log in.</span>')
   ],
+  chatLines: [],
+  hasUnreadChatMessages: false,
   vitals: {
     hp: { current: 100, max: 100 },
     mp: { current: 50, max: 50 },
@@ -70,6 +72,19 @@ const useGameStore = create(
       });
     },
 
+    addChatLine: (data, type = 'html') => {
+      set((state) => {
+        const chatLine = createLogLine(data, type);
+        state.logLines.push(chatLine);
+        state.chatLines.push(chatLine);
+        
+        // <<< THE CORE LOGIC: Set the flag if the user isn't looking >>>
+        if (get().activeTab !== 'Chat') {
+          state.hasUnreadChatMessages = true;
+        }
+      });
+    },
+
     setVitals: (vitalsUpdate) => {
       set((state) => {
         if (vitalsUpdate.current_hp !== undefined) state.vitals.hp.current = vitalsUpdate.current_hp;
@@ -92,6 +107,11 @@ const useGameStore = create(
 
     setActiveTab: (tabName) => {
       set({ activeTab: tabName });
+      if (tabName === 'Chat') {
+        set({ hasUnreadChatMessages: false });
+      }
+      set({ activeTab: tabName });
+
       const state = get();
       if (tabName === 'Score' && !state.characterStats) {
         state.fetchScoreSheet();
