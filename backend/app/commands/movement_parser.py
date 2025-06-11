@@ -4,85 +4,68 @@ from typing import Dict, List, Optional, Tuple # Ensure all are imported
 
 from app import schemas, crud, models 
 from .command_args import CommandContext
-from .utils import ( # Assuming these are all in utils.py now
+from app.commands.utils import (
     format_room_items_for_player_message,
     format_room_mobs_for_player_message,
-    format_room_characters_for_player_message # Make sure this is imported
+    format_room_characters_for_player_message,
+    format_room_npcs_for_player_message, # Make sure this is imported
+    get_dynamic_room_description,
+    get_formatted_mob_name
 )
 from app.websocket_manager import connection_manager # For broadcasting
 from app.schemas.common_structures import ExitDetail 
 
 
 async def handle_look(context: CommandContext) -> schemas.CommandResponse:
-    message_to_player_parts: List[str] = []
-    look_target_name = " ".join(context.args).strip() if context.args else None
+    # This is no longer a simple text formatter. It builds a structured response.
+    # We will basically steal the logic from the old, bad ws_info_parser.
+    db = context.db
+    character = context.active_character
+    room = context.current_room_orm
 
+    # Look at a specific target (logic would go here, for now we focus on general look)
+    look_target_name = " ".join(context.args).strip()
     if look_target_name:
-        # ... (existing logic for looking at specific items/mobs) ...
-        # Ensure this section also lists other characters if looking at a target
-        # For brevity, I'll skip repeating the full "look at target" block, but add char listing there too.
-
-        # At the end of "look at target", after item/mob description, add other entities:
-        # ... (after specific target description)
-        # message_to_player_parts.append(f"\n\n{context.current_room_schema.name}\n{context.current_room_schema.description}")
-        
-        # List other items, mobs, AND characters
-        other_items_on_ground = crud.crud_room_item.get_items_in_room(context.db, room_id=context.current_room_orm.id)
-        if other_items_on_ground:
-            ground_items_text, _ = format_room_items_for_player_message(other_items_on_ground)
-            if ground_items_text: message_to_player_parts.append(ground_items_text)
-
-        other_mobs_in_room = crud.crud_mob.get_mobs_in_room(context.db, room_id=context.current_room_orm.id)
-        if other_mobs_in_room:
-            mobs_text, _ = format_room_mobs_for_player_message(
-                room_mobs=other_mobs_in_room, 
-                character=context.active_character
-            )
-            if mobs_text: message_to_player_parts.append(mobs_text)
-        
-        # <<< NEW: List other characters (excluding self) when looking at a target
-        other_characters_in_room = crud.crud_character.get_characters_in_room(
-            context.db, 
-            room_id=context.current_room_orm.id, 
-            exclude_character_id=context.active_character.id
+        # TODO: Implement look-at-target logic here, which would also return a CommandResponse
+        # For now, we'll just fall through to a generic "can't find it"
+        return schemas.CommandResponse(
+            message_to_player=f"You look for '{look_target_name}' but don't see it here."
         )
-        if other_characters_in_room:
-            chars_text = format_room_characters_for_player_message(other_characters_in_room)
-            if chars_text: message_to_player_parts.append(chars_text)
 
-        final_message = "\n".join(filter(None, message_to_player_parts)).strip()
-        return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=final_message if final_message else None)
-
-
-    # Default "look" (general room look)
-    items_on_ground_orm = crud.crud_room_item.get_items_in_room(context.db, room_id=context.current_room_orm.id)
-    ground_items_text, _ = format_room_items_for_player_message(items_on_ground_orm)
-    if ground_items_text:
-        message_to_player_parts.append(ground_items_text)
-        
-    mobs_in_room_orm = crud.crud_mob.get_mobs_in_room(context.db, room_id=context.current_room_orm.id)
-    mobs_text, _ = format_room_mobs_for_player_message(
-        room_mobs=mobs_in_room_orm, 
-        character=context.active_character
+    # --- GENERAL ROOM LOOK ---
+    dynamic_description = get_dynamic_room_description(room)
+    items_on_ground_orm = crud.crud_room_item.get_items_in_room(db, room_id=room.id)
+    mobs_in_room = crud.crud_mob.get_mobs_in_room(db, room_id=room.id)
+    other_chars = crud.crud_character.get_characters_in_room(
+        db, room_id=room.id, exclude_character_id=character.id
     )
-    if mobs_text:
-        message_to_player_parts.append(mobs_text)
+    npcs_in_room = crud.crud_room.get_npcs_in_room(db, room=room)
+    exits = list((room.exits or {}).keys())
 
-    # <<< NEW: List other characters (excluding self) for general look
-    characters_in_room_orm = crud.crud_character.get_characters_in_room(
-        context.db, 
-        room_id=context.current_room_orm.id, 
-        exclude_character_id=context.active_character.id
-    )
-    if characters_in_room_orm:
-        chars_text = format_room_characters_for_player_message(characters_in_room_orm)
-        if chars_text: message_to_player_parts.append(chars_text)
-        
-    final_message = "\n".join(filter(None, message_to_player_parts)).strip()
-    return schemas.CommandResponse(
-        room_data=context.current_room_schema,
-        message_to_player=final_message if final_message else None # Send only if there's something to say
-    )
+    # Format text parts for the payload
+    mob_lines = []
+    if mobs_in_room:
+        for mob in mobs_in_room:
+            mob_lines.append(f"{get_formatted_mob_name(mob, character)} is here.")
+    mobs_text = "\n".join(mob_lines)
+    
+    chars_text = format_room_characters_for_player_message(other_chars)
+    npcs_text = format_room_npcs_for_player_message(npcs_in_room)
+
+    # Build the structured payload for the client
+    look_payload = {
+        "type": "look_response",
+        "room_name": room.name,
+        "description": "" if character.is_brief_mode else dynamic_description,
+        "exits": exits,
+        "ground_items": [schemas.RoomItemInstanceInDB.from_orm(item).model_dump() for item in items_on_ground_orm],
+        "mob_text": mobs_text,
+        "character_text": chars_text,
+        "npc_text": npcs_text,
+        "room_data": schemas.RoomInDB.from_orm(room).model_dump(exclude_none=True)
+    }
+
+    return schemas.CommandResponse(special_payload=look_payload)
 
 async def handle_move(context: CommandContext) -> schemas.CommandResponse:
     message_to_player: Optional[str] = None 
@@ -180,30 +163,16 @@ async def handle_move(context: CommandContext) -> schemas.CommandResponse:
             }
             await connection_manager.broadcast_to_players(arrive_message_payload, player_ids_in_new_room_others)
         
-        arrival_message_parts: List[str] = []
-        items_in_new_room_orm = crud.crud_room_item.get_items_in_room(context.db, room_id=target_room_orm_for_move.id)
-        ground_items_text, _ = format_room_items_for_player_message(items_in_new_room_orm)
-        if ground_items_text: arrival_message_parts.append(ground_items_text)
-            
-        mobs_in_new_room_orm = crud.crud_mob.get_mobs_in_room(context.db, room_id=target_room_orm_for_move.id)
-        mobs_text, _ = format_room_mobs_for_player_message(
-            room_mobs=mobs_in_new_room_orm, 
-            character=context.active_character
+        new_room_context = CommandContext(
+            db=context.db,
+            active_character=context.active_character,
+            current_room_orm=target_room_orm_for_move,
+            current_room_schema=schemas.RoomInDB.from_orm(target_room_orm_for_move),
+            original_command="look", # We are effectively performing a 'look'
+            command_verb="look",
+            args=[]
         )
-        if mobs_text: arrival_message_parts.append(mobs_text)
-
-        other_characters_in_new_room = crud.crud_character.get_characters_in_room(
-            context.db, room_id=target_room_orm_for_move.id, exclude_character_id=context.active_character.id
-        )
-        if other_characters_in_new_room:
-            chars_text_for_mover = format_room_characters_for_player_message(other_characters_in_new_room)
-            if chars_text_for_mover: arrival_message_parts.append(chars_text_for_mover)
-            
-        final_arrival_message = "\n".join(filter(None, arrival_message_parts)).strip()
-        
-        return schemas.CommandResponse(
-            room_data=new_room_schema, 
-            message_to_player=final_arrival_message if final_arrival_message else None
-        )
+        # Now, call the handle_look logic to get the full payload
+        return await handle_look(new_room_context)
             
     return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message_to_player)

@@ -53,19 +53,21 @@ function CommandInput() {
 
 
         // <<< THIS IS THE OTHER FIX. >>>
-        case 'backpack':        
+        case 'i': // <<< ADD THIS CASE
+        case 'inventory': // <<< MIGHT AS WELL ADD THIS TOO
+        case 'backpack':
         case 'bac':
         case 'ba':
         case 'b':
           setActiveTab('Backpack');
           return;
-        
+
         // <<< ADDED NEW COMMANDS FOR OTHER TABS >>>
         case 'equipment':
         case 'eq':
           setActiveTab('Equipment');
           return;
-          
+
         case 'who':
           setActiveTab('Who');
           return;

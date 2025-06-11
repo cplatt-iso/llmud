@@ -87,3 +87,18 @@
   color: #00ffff; /* A pure, beautiful Cyan */
   font-style: italic;
 }
+
+/* --- SOCIAL COMMAND STYLING --- */
+.terminal-line .char-name {
+  color: var(--color-text-interact); /* A nice bright color for names */
+  font-weight: bold;
+}
+
+.terminal-line .say-message {
+  color: #af89bb; /* A slightly off-white for speech */
+}
+
+.terminal-line .ooc-message {
+  color: #88aadd; /* A blue-ish color for OOC */
+  font-style: italic;
+}

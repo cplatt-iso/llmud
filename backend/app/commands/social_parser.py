@@ -95,10 +95,10 @@ async def handle_say(context: CommandContext) -> schemas.CommandResponse:
     
     # Message to others in the room
     others_message_payload = {
-        "type": "game_event", # Or "chat_message"
-        "message": f"<span class='char-name'>{character_name}</span> says, \"{message_text}\""
+        "type": "game_event",
+        # <<< WRAP THE MESSAGE IN A SPAN WITH A CSS CLASS >>>
+        "message": f"<span class='say-message'><span class='char-name'>{character_name}</span> says, \"{message_text}\"</span>"
     }
-
     player_ids_in_room = [
         char.player_id for char in crud.crud_character.get_characters_in_room(
             context.db, 
@@ -163,8 +163,9 @@ async def handle_ooc(context: CommandContext) -> schemas.CommandResponse:
     # Message for global broadcast
     # Using a distinct style for OOC messages is good.
     ooc_message_payload = {
-        "type": "ooc_message", # A new type for the frontend to potentially style differently
-        "message": f"[OOC] <span class='char-name'>{character_name}</span>: {message_text}"
+        "type": "ooc_message",
+        # <<< WRAP THE MESSAGE IN A SPAN WITH A CSS CLASS >>>
+        "message": f"<span class='ooc-message'>[OOC] <span class='char-name'>{character_name}</span>: {message_text}</span>"
     }
 
     # Get ALL active player_ids from ConnectionManager

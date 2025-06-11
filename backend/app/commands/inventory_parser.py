@@ -324,6 +324,27 @@ async def handle_get(context: CommandContext) -> schemas.CommandResponse:
     if not items_on_ground_orm:
         return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player="There is nothing on the ground here.")
 
+    if item_ref_to_get.lower() == 'all':
+        messages = []
+        items_picked_up = 0
+        for item_instance in items_on_ground_orm:
+            # Re-use the single-item get logic for each item
+            # This is a simplified version; a real one would be a transaction
+            quantity_picked_up = item_instance.quantity
+            item_id_picked_up = item_instance.item_id
+            item_name_picked_up = item_instance.item.name
+
+            crud.crud_room_item.remove_item_from_room(context.db, room_item_instance_id=item_instance.id, quantity_to_remove=quantity_picked_up)
+            crud.crud_character_inventory.add_item_to_character_inventory(context.db, character_obj=context.active_character, item_id=item_id_picked_up, quantity=quantity_picked_up)
+            
+            messages.append(f"You pick up {item_name_picked_up}.")
+            items_picked_up += 1
+        
+        if items_picked_up == 0:
+            return schemas.CommandResponse(message_to_player="There is nothing to get.")
+        else:
+            return schemas.CommandResponse(message_to_player="\n".join(messages))
+        
     # --- REPLICATE DISPLAY LOGIC FOR NUMBER MAPPING (for get) ---
     # This logic mirrors format_room_items_for_player_message to ensure numbers match display
     sorted_ground_items_for_map = sorted(items_on_ground_orm, key=lambda ri: ri.item.name if ri.item else "")

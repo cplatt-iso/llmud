@@ -8,7 +8,7 @@ from .command import CommandRequest, CommandResponse
 from .item import (  # <<< ADDED
     ItemBase, ItemCreate, ItemUpdate, Item, ItemInDB,
     CharacterInventoryItemBase, CharacterInventoryItemCreate, CharacterInventoryItemUpdate,
-    CharacterInventoryItem, CharacterInventoryDisplay, EquipRequest
+    CharacterInventoryItem, CharacterInventoryDisplay, EquipRequest, RoomItemInstanceInDB
 )
 from .room_item import ( 
     RoomItemInstanceBase, RoomItemInstanceCreate, RoomItemInstanceUpdate,

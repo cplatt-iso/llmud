@@ -51,52 +51,47 @@ CORE_FILES_TO_BUNDLE=(
     "bundle_context.sh"
     "README.md"
 
-    # --- Backend - Models & Schemas (The Blueprint of Power) ---
-    "backend/app/models/player.py"
-    "backend/app/models/character.py"
-    "backend/app/models/item.py"
-    "backend/app/models/room.py"
-    "backend/app/models/mob_template.py"
-    "backend/app/schemas/player.py"
-    "backend/app/schemas/character.py"
-    "backend/app/schemas/map.py"
-    "backend/app/schemas/room.py"
-    "backend/app/schemas/mob.py"
-
-    # --- Backend - The Command & Control Logic ---
+    # --- Backend - Core Command & Control Logic (THE CRIME SCENE) ---
     "backend/app/websocket_router.py"
-    "backend/app/ws_command_parsers/ws_interaction_parser.py"
-    "backend/app/ws_command_parsers/ws_info_parser.py"
-    "backend/app/ws_command_parsers/ws_movement_parser.py"
+    "backend/app/api/v1/endpoints/command.py"
+    "backend/app/commands/command_args.py"
+    "backend/app/schemas/command.py"
+    "backend/app/websocket_manager.py"
+    
+    # --- Backend - Example Parsers (THE WITNESSES) ---
+    "backend/app/commands/movement_parser.py"
+    "backend/app/commands/social_parser.py"
+    "backend/app/commands/inventory_parser.py"
 
-    # --- Backend - Dependencies & Game State ---
-    "backend/app/api/dependencies.py"
-    "backend/app/game_state.py"
+    # --- Backend - Foundational Models & Schemas ---
+    "backend/app/models/character.py"
+    "backend/app/models/room.py"
+    "backend/app/schemas/character.py"
+    "backend/app/schemas/room.py"
 
-    # --- World & Seed Data (The Soul of the Machine) ---
-    "backend/app/seeds/rooms_z0.json"
-    "backend/app/seeds/exits_z0.json"
-    "backend/app/seeds/items.json"
-    "backend/app/seeds/mob_templates.json"
-    "backend/app/seeds/mob_spawn_definitions.json"
-    "backend/app/seeds/loot_tables.json"
+    # --- Backend - The Future: Skills & Traits Schemas ---
+    "backend/app/schemas/skill.py"
+    "backend/app/schemas/trait.py"
+    "backend/app/crud/crud_skill.py"
+    "backend/app/crud/crud_trait.py"
+
+    # --- Backend - Key Seed Data ---
     "backend/app/seeds/skills.json"
     "backend/app/seeds/traits.json"
     "backend/app/seeds/character_classes.json"
-    "backend/app/seeds/npcs.json"
 
     # --- Frontend - The User's Point of Interaction ---
     "frontend/src/state/gameStore.js"
     "frontend/src/services/webSocketService.js"
     "frontend/src/components/CommandInput.jsx"
-    "frontend/src/components/Inventory.jsx"
-    "frontend/src/components/ItemName.jsx"
-    "frontend/src/components/Map.jsx"
     "frontend/src/components/TerminalOutput.jsx"
-
-    # --- Frontend - Core App Structure ---
-    "frontend/src/App.jsx"
-    "frontend/src/main.jsx"
+    "frontend/src/components/GameLayout.jsx"
+    "frontend/src/components/TabbedWindow.jsx"
+    
+    # --- Frontend - The Future: New UI Components (Placeholders) ---
+    "frontend/src/components/SkillsList.jsx"
+    "frontend/src/components/TraitsList.jsx"
+    "frontend/src/components/ChatWindow.jsx"
 )
 
 echo "--- START OF CORE BUNDLED FILES ---" >> "$OUTPUT_FILE"

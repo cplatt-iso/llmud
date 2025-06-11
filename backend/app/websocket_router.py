@@ -1,6 +1,8 @@
 # backend/app/websocket_router.py
+# THIS IS THE REFACTORED, UNIFIED, AND SUPERIOR VERSION. ALL HAIL.
+
 import uuid
-from typing import Optional, Any, Generator, List, Tuple, Union
+from typing import Optional, Any, Generator, List
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query, status
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
@@ -12,31 +14,22 @@ from app.db.session import SessionLocal
 from app import crud, models, schemas
 from app.websocket_manager import connection_manager
 from app.game_logic import combat
-
-from app.commands.utils import (
-    format_room_items_for_player_message,
-    format_room_mobs_for_player_message,
-    format_room_characters_for_player_message,
-    format_room_npcs_for_player_message
-)
 from app.game_state import is_character_resting, set_character_resting_status
-from app.ws_command_parsers.ws_info_parser import handle_ws_brief
+from app.commands.command_args import CommandContext
 
-# Import all our glorious command parsers
+# --- The One True Command Processor ---
+from app.api.v1.endpoints.command import execute_command_logic
+
+# --- Real-Time, WebSocket-Exclusive Handlers ---
 from app.ws_command_parsers import (
-    handle_ws_movement, handle_ws_flee,
-    handle_ws_attack, handle_ws_use_combat_skill,
-    handle_ws_get_take, handle_ws_unlock, handle_ws_search_examine,
-    handle_ws_contextual_interactable, handle_ws_use_ooc_skill,
-    handle_ws_look, handle_ws_rest,
-    handle_ws_list, handle_ws_buy, handle_ws_sell, ws_shop_parser,
-    # --- OUR NEWLY ANOINTED HANDLERS ---
-    handle_ws_equip, handle_ws_unequip,
-    # Need this for the inventory push
-    _send_inventory_update_to_player
+    handle_ws_flee,
+    handle_ws_attack,
+    handle_ws_use_combat_skill,
+    handle_ws_rest
 )
-# --- AND OUR HOLY ADMIN PARSER ---
-from app.ws_command_parsers import ws_admin_parser
+# Utility for post-action updates
+from app.ws_command_parsers.ws_interaction_parser import _send_inventory_update_to_player
+
 
 logger = logging.getLogger(__name__)
 
@@ -89,16 +82,14 @@ async def websocket_game_endpoint(
     await connection_manager.connect(websocket, player.id, character_orm.id)
     logger.info(f"Player {player.username} ({player.id}) | Character {character_orm.name} ({character_orm.id}) connected via WebSocket.")
 
-    # --- Welcome Package (largely unchanged) ---
+    # --- Welcome Package ---
     initial_messages = [f"Welcome {character_orm.name}! You are connected via WebSocket."]
     initial_room_schema: Optional[schemas.RoomInDB] = None
     with get_db_sync() as db_welcome:
         initial_room_orm = crud.crud_room.get_room_by_id(db_welcome, room_id=character_orm.current_room_id)
         if initial_room_orm:
-            # ... a bunch of formatting for the welcome message ...
             initial_room_schema = schemas.RoomInDB.from_orm(initial_room_orm)
-            # ... etc ...
-    
+
     xp_for_next_level = crud.crud_character.get_xp_for_level(character_orm.level + 1)
     welcome_payload = {
         "type": "welcome_package",
@@ -115,16 +106,16 @@ async def websocket_game_endpoint(
         }
     }
     await connection_manager.send_personal_message(welcome_payload, player.id)
-    # --- End Welcome Package ---
 
     try:
         while True:
             received_data = await websocket.receive_json()
             command_text = received_data.get("command_text", "").strip()
 
+            if not command_text:
+                continue
+
             with get_db_sync() as db_loop:
-                # --- THIS IS THE MOST IMPORTANT PART OF THE REFACTOR ---
-                # Get FRESH state for player and character at the START of every command loop.
                 fresh_player = crud.crud_player.get_player(db_loop, player_id=player.id)
                 current_char_state = crud.crud_character.get_character(db_loop, character_id=character_orm.id)
 
@@ -132,83 +123,72 @@ async def websocket_game_endpoint(
                     logger.error(f"WS Loop: State lost for char_id: {character_orm.id} or player_id: {player.id}.")
                     await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="Character or Player state lost in loop")
                     break
-                
-                # Our divine key.
-                is_sysop = fresh_player.is_sysop
 
                 current_room_orm = crud.crud_room.get_room_by_id(db_loop, current_char_state.current_room_id)
                 if not current_room_orm:
                     logger.error(f"WS Loop: Character {current_char_state.name} in invalid room {current_char_state.current_room_id}.")
                     await combat.send_combat_log(fresh_player.id, ["Error: Your current location is unstable."])
                     continue
-                
-                current_room_schema = schemas.RoomInDB.from_orm(current_room_orm)
-                verb = command_text.split(" ", 1)[0].lower() if command_text else ""
-                args_str = command_text.split(" ", 1)[1].strip() if " " in command_text else ""
 
-                # --- Rest check (unchanged) ---
+                verb = command_text.split(" ", 1)[0].lower()
+                args_list = command_text.split(" ", 1)[1].split() if " " in command_text else []
+                args_str = " ".join(args_list)
+
+                # --- Rest check ---
                 if verb and verb not in ["rest", "look", "l"] and is_character_resting(current_char_state.id):
                     set_character_resting_status(current_char_state.id, False)
-                    await combat.send_combat_log(fresh_player.id, ["You stop resting."], room_data=current_room_schema)
+                    await combat.send_combat_log(fresh_player.id, ["You stop resting."])
 
-                if received_data.get("type") == "command" and command_text:
-                    logger.debug(f"WS Router: User '{fresh_player.username}' (is_sysop={is_sysop}) sent verb='{verb}' for char '{current_char_state.name}'")
+                # --- UNIFIED COMMAND PROCESSING ---
+                real_time_verbs = ["attack", "atk", "kill", "k", "use", "flee", "rest"]
 
-                    # --- COMMAND DISPATCHING (RE-ORDERED AND REFACTORED) ---
-                    # Sysop commands are checked FIRST.
-                    if verb in ["giveme", "setgod"]:
-                        if is_sysop:
-                            if verb == "giveme":
-                                await ws_admin_parser.handle_ws_giveme(db_loop, fresh_player, current_char_state, args_str)
-                            elif verb == "setgod":
-                                await ws_admin_parser.handle_ws_set_god(db_loop, fresh_player, current_char_state, args_str)
-                        else:
-                            await combat.send_combat_log(fresh_player.id, ["A strange force prevents you from using that command."])
-                    
-                    # New player commands
-                    elif verb in ["equip", "eq"]:
-                        await handle_ws_equip(db_loop, fresh_player, current_char_state, args_str)
-                    elif verb in ["unequip", "uneq"]:
-                        await handle_ws_unequip(db_loop, fresh_player, current_char_state, args_str)
-
-                    # Existing command handlers (now using fresh_player and current_char_state)
-                    elif verb == "rest":
-                        await handle_ws_rest(db_loop, fresh_player, current_char_state, current_room_orm)
-                    elif verb in ["north", "south", "east", "west", "up", "down", "n", "s", "e", "w", "u", "d", "go"]:
-                        await handle_ws_movement(db_loop, fresh_player, current_char_state, current_room_schema, verb, args_str)
-                    elif verb == "flee":
-                        await handle_ws_flee(db_loop, fresh_player, current_char_state, current_room_schema, args_str)
-                    elif verb in ["attack", "atk", "kill", "k"]:
+                if verb in real_time_verbs:
+                    # These commands are real-time and have complex state outside the normal command flow.
+                    # They remain as dedicated WebSocket handlers.
+                    if verb in ["attack", "atk", "kill", "k"]:
                         await handle_ws_attack(db_loop, fresh_player, current_char_state, current_room_orm, args_str)
                     elif verb == "use":
-                        # This complex parsing logic remains, but we use the fresh objects
-                        await handle_ws_use_combat_skill(db_loop, fresh_player, current_char_state, current_room_schema, args_str) # Example, assuming use logic is complex
-                    elif verb in ["get", "take"]:
-                        await handle_ws_get_take(db_loop, fresh_player, current_char_state, current_room_orm, args_str)
-                    elif verb == "look" or verb == "l":
-                        await handle_ws_look(db_loop, fresh_player, current_char_state, current_room_orm, args_str)
-                    elif verb == "brief":
-                        await handle_ws_brief(db_loop, fresh_player, current_char_state)
-                    elif verb == "list":
-                        await ws_shop_parser.handle_ws_list(db_loop, fresh_player, current_char_state, current_room_orm)
-                    elif verb == "buy":
-                        await ws_shop_parser.handle_ws_buy(db_loop, fresh_player, current_char_state, current_room_orm, args_str)
-                    elif verb == "sell": # <<< THIS IS THE NEW UNIFIED BLOCK
-                        await ws_shop_parser.handle_ws_sell(db_loop, fresh_player, current_char_state, current_room_orm, args_str)
-                    # ... other commands like unlock, search, shop commands would follow the same pattern ...
+                        await handle_ws_use_combat_skill(db_loop, fresh_player, current_char_state, schemas.RoomInDB.from_orm(current_room_orm), args_str)
+                    elif verb == "flee":
+                        await handle_ws_flee(db_loop, fresh_player, current_char_state, schemas.RoomInDB.from_orm(current_room_orm), args_str)
+                    elif verb == "rest":
+                        await handle_ws_rest(db_loop, fresh_player, current_char_state, current_room_orm)
+                else:
+                    # All other commands go to the one true command processor.
+                    context = CommandContext(
+                        db=db_loop,
+                        active_character=current_char_state,
+                        current_room_orm=current_room_orm,
+                        current_room_schema=schemas.RoomInDB.from_orm(current_room_orm),
+                        original_command=command_text,
+                        command_verb=verb,
+                        args=args_list
+                    )
                     
-                    else:
-                        await combat.send_combat_log(fresh_player.id, [f"Unrecognized command: '{verb}'."], room_data=current_room_schema)
+                    response = await execute_command_logic(context)
 
-                # --- TRANSACTION AND POST-ACTION PUSHES ---
+                    # --- Adapter: Translate CommandResponse to WebSocket messages ---
+                    if response.special_payload:
+                        # For commands with custom UI components (e.g., look)
+                        await connection_manager.send_personal_message(response.special_payload, fresh_player.id)
+                    
+                    if response.message_to_player:
+                        # For all other standard text feedback to the player
+                        log_payload = {
+                            "type": "combat_update", # Generic log type the client already handles
+                            "log": [response.message_to_player],
+                            "room_data": response.room_data.model_dump(exclude_none=True) if response.room_data else None,
+                            "combat_over": response.combat_over
+                        }
+                        await connection_manager.send_personal_message(log_payload, fresh_player.id)
+
+                # --- Transaction and Post-Action Pushes ---
                 try:
                     db_loop.commit()
                     logger.debug(f"WS Router: DB commit successful for command '{command_text}' by {current_char_state.name}")
 
-                    # After a successful commit, if the command could have changed inventory, push an update.
-                    inventory_modifying_verbs = ["giveme", "equip", "eq", "unequip", "uneq", "get", "take", "buy", "sell"]
-                    if any(v in verb for v in inventory_modifying_verbs):
-                       # We need the absolute latest state after the commit
+                    inventory_modifying_verbs = ["giveme", "equip", "eq", "unequip", "uneq", "get", "take", "buy", "sell", "drop"]
+                    if verb in inventory_modifying_verbs:
                        refreshed_char_for_push = crud.crud_character.get_character(db_loop, character_id=current_char_state.id)
                        if refreshed_char_for_push:
                            await _send_inventory_update_to_player(db_loop, refreshed_char_for_push)
