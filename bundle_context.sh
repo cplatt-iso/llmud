@@ -20,7 +20,7 @@ echo "# --- LLM INSTRUCTION ---" >> "$OUTPUT_FILE"
 echo "# The following is a list of all potentially relevant files in the project." >> "$OUTPUT_FILE"
 echo "# Below this list, a small core set of files has been bundled for initial context." >> "$OUTPUT_FILE"
 echo "# If you need to see the content of any other file from the list to answer a question accurately," >> "$OUTPUT_FILE"
-echo "# please ask for it specifically by its full path as listed." >> "$OUTPUT_FILE"
+echo "# please ask for it specifically by its full path as listed.  DO NOT ASSUME CONTENT EXISTS.  VERIFY FIRST" >> "$OUTPUT_FILE"
 echo "# --- END LLM INSTRUCTION ---" >> "$OUTPUT_FILE"
 echo "" >> "$OUTPUT_FILE"
 
@@ -51,47 +51,23 @@ CORE_FILES_TO_BUNDLE=(
     "bundle_context.sh"
     "README.md"
 
-    # --- Backend - Core Command & Control Logic (THE CRIME SCENE) ---
-    "backend/app/websocket_router.py"
+    # --- THE NEW CRIME SCENE: SHOP & PLAYER LIFECYCLE ---
+    "backend/app/commands/shop_parser.py"       # Primary target for the shop overhaul.
+    "backend/app/models/item.py"                # We need its structure for stat comparison.
+    "backend/app/models/character.py"           # Need to access equipped items and stats.
+    "backend/app/websocket_manager.py"          # The heart of the connection logic. Needs an AFK timestamp.
+    "backend/app/game_logic/world_ticker.py"    # The most likely place to run the AFK check.
+
+    # --- THE WITNESSES: CLIENT-SIDE RENDERING & INTERACTION ---
+    "frontend/src/components/TerminalOutput.jsx" # Needs to learn how to render the new shop listing.
+    "frontend/src/services/webSocketService.js"  # Needs to handle the new shop listing payload.
+    # --- PROPOSED NEW FILES (Ask me to create them) ---
+    # "frontend/src/components/ShopListing.jsx"
+    # "frontend/src/components/StatComparison.jsx"
+
+    # --- Foundational Stuff (Still Relevant) ---
     "backend/app/api/v1/endpoints/command.py"
-    "backend/app/commands/command_args.py"
-    "backend/app/schemas/command.py"
-    "backend/app/websocket_manager.py"
-    
-    # --- Backend - Example Parsers (THE WITNESSES) ---
-    "backend/app/commands/movement_parser.py"
-    "backend/app/commands/social_parser.py"
-    "backend/app/commands/inventory_parser.py"
-
-    # --- Backend - Foundational Models & Schemas ---
-    "backend/app/models/character.py"
-    "backend/app/models/room.py"
-    "backend/app/schemas/character.py"
-    "backend/app/schemas/room.py"
-
-    # --- Backend - The Future: Skills & Traits Schemas ---
-    "backend/app/schemas/skill.py"
-    "backend/app/schemas/trait.py"
-    "backend/app/crud/crud_skill.py"
-    "backend/app/crud/crud_trait.py"
-
-    # --- Backend - Key Seed Data ---
-    "backend/app/seeds/skills.json"
-    "backend/app/seeds/traits.json"
-    "backend/app/seeds/character_classes.json"
-
-    # --- Frontend - The User's Point of Interaction ---
     "frontend/src/state/gameStore.js"
-    "frontend/src/services/webSocketService.js"
-    "frontend/src/components/CommandInput.jsx"
-    "frontend/src/components/TerminalOutput.jsx"
-    "frontend/src/components/GameLayout.jsx"
-    "frontend/src/components/TabbedWindow.jsx"
-    
-    # --- Frontend - The Future: New UI Components (Placeholders) ---
-    "frontend/src/components/SkillsList.jsx"
-    "frontend/src/components/TraitsList.jsx"
-    "frontend/src/components/ChatWindow.jsx"
 )
 
 echo "--- START OF CORE BUNDLED FILES ---" >> "$OUTPUT_FILE"

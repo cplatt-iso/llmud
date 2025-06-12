@@ -1,0 +1,46 @@
+[
+  {
+    "channel_id_tag": "ooc",
+    "display_name": "OOC",
+    "command_aliases": ["ooc", "gossip", "global"],
+    "access_type": "public",
+    "required_permission": null,
+    "style": {
+      "wrapper_class": "chat-public",
+      "channel_color": "cyan",
+      "user_color": "white",
+      "message_color": "default"
+    },
+    "formatter_other": "[<channel_name>] <user_name>: <message>",
+    "formatter_self": "[<channel_name>] You: <message>"
+  },
+  {
+    "channel_id_tag": "god_chat",
+    "display_name": "God Chat",
+    "command_aliases": ["godsay", "divine", "imm"],
+    "access_type": "permissioned",
+    "required_permission": "is_sysop",
+    "style": {
+      "wrapper_class": "chat-admin",
+      "channel_color": "gold",
+      "user_color": "gold",
+      "message_color": "yellow"
+    },
+    "formatter_other": "{<channel_name>} <user_name>: <message>",
+    "formatter_self": "{<channel_name>} You: <message>"
+  },
+  {
+    "channel_id_tag": "tells",
+    "display_name": "Tell",
+    "command_aliases": ["tell", "whisper", "t"],
+    "access_type": "private",
+    "required_permission": null,
+    "style": {
+      "wrapper_class": "chat-private",
+      "user_color": "magenta",
+      "message_color": "magenta"
+    },
+    "formatter_recipient": "<user_name> tells you, \"<message>\"",
+    "formatter_sender": "You tell <target_name>, \"<message>\""
+  }
+]

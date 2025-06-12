@@ -42,3 +42,7 @@ from .npc import (
 from .abilities import (
     AbilityDetail, CharacterAbilitiesResponse
 )
+
+from .chat import (
+    ChatChannel, ChatChannelStyle, ChatMessagePayload
+)

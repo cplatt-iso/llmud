@@ -10,7 +10,8 @@ from app.commands.command_args import CommandContext
 from app.commands import shop_parser
 
 # Import handler modules
-from app.commands import movement_parser, inventory_parser, social_parser, debug_parser, meta_parser, interaction_parser
+from app.commands import chat_parser, movement_parser, inventory_parser, social_parser, debug_parser, meta_parser, interaction_parser
+from app.services.chat_manager import chat_manager
 
 import logging
 logger = logging.getLogger(__name__)
@@ -19,77 +20,122 @@ router = APIRouter()
 
 CommandHandler = Callable[[CommandContext], Awaitable[schemas.CommandResponse]]
 
-COMMAND_REGISTRY: Dict[str, CommandHandler] = {
-    # ... your entire glorious registry remains unchanged ...
-    "look": movement_parser.handle_look,
-    "l": movement_parser.handle_look,
-    "north": movement_parser.handle_move, "n": movement_parser.handle_move,
-    "south": movement_parser.handle_move, "s": movement_parser.handle_move,
-    "east": movement_parser.handle_move, "e": movement_parser.handle_move,
-    "west": movement_parser.handle_move, "w": movement_parser.handle_move,
-    "up": movement_parser.handle_move, "u": movement_parser.handle_move,
-    "down": movement_parser.handle_move, "d": movement_parser.handle_move,
-    "go": movement_parser.handle_move,
-    "inventory": inventory_parser.handle_inventory, "i": inventory_parser.handle_inventory,
-    "equip": inventory_parser.handle_equip, "eq": inventory_parser.handle_equip,
-    "unequip": inventory_parser.handle_unequip, "uneq": inventory_parser.handle_unequip,
-    "drop": inventory_parser.handle_drop,
-    "get": inventory_parser.handle_get, "take": inventory_parser.handle_get,
-    "unlock": interaction_parser.handle_unlock,
-    "search": interaction_parser.handle_search, "examine": interaction_parser.handle_search,
-    "ex": interaction_parser.handle_search, "exa": interaction_parser.handle_search,
-    "say": social_parser.handle_say, "'": social_parser.handle_say,
-    "emote": social_parser.handle_emote, ":": social_parser.handle_emote,
-    "ooc": social_parser.handle_ooc,
-    "fart": social_parser.handle_fart,
-    "giveme": debug_parser.handle_giveme, # Note: We will need a way to check for sysop in the context
-    "spawnmob": debug_parser.handle_spawnmob,
-    "set_hp": debug_parser.handle_set_hp,
-    "mod_xp": debug_parser.handle_mod_xp,
-    "set_level": debug_parser.handle_set_level,
-    "setmoney": debug_parser.handle_set_money,
-    "addmoney": debug_parser.handle_add_money,
-    "score": meta_parser.handle_score, "sc": meta_parser.handle_score,
-    "skills": meta_parser.handle_skills, "sk": meta_parser.handle_skills,
-    "traits": meta_parser.handle_traits, "tr": meta_parser.handle_traits,
-    "status": meta_parser.handle_score, "st": meta_parser.handle_score,
-    "help": meta_parser.handle_help, "?": meta_parser.handle_help,
-    "list": shop_parser.handle_list,
-    "buy": shop_parser.handle_buy,
-    "sell": shop_parser.handle_sell,
-}
+COMMAND_REGISTRY: Dict[str, CommandHandler] = {}
 
+
+# <<< THE FUNCTION DEFINITION YOU RIGHTFULLY POINTED OUT WAS MISSING FROM MY EXPLANATION >>>
+def build_command_registry():
+    """
+    Dynamically builds the command registry at startup.
+    This function populates the COMMAND_REGISTRY with both static commands
+    and dynamic chat commands loaded from the chat_channels.json file.
+    """
+    global COMMAND_REGISTRY
+    
+    # 1. Add all static, non-chat commands to the registry.
+    static_commands = {
+        # Movement and Perception
+        "look": movement_parser.handle_look, "l": movement_parser.handle_look,
+        "north": movement_parser.handle_move, "n": movement_parser.handle_move,
+        "south": movement_parser.handle_move, "s": movement_parser.handle_move,
+        "east": movement_parser.handle_move, "e": movement_parser.handle_move,
+        "west": movement_parser.handle_move, "w": movement_parser.handle_move,
+        "up": movement_parser.handle_move, "u": movement_parser.handle_move,
+        "down": movement_parser.handle_move, "d": movement_parser.handle_move,
+        "go": movement_parser.handle_move,
+
+        # Inventory Management
+        "inventory": inventory_parser.handle_inventory, "i": inventory_parser.handle_inventory,
+        "equip": inventory_parser.handle_equip, "eq": inventory_parser.handle_equip,
+        "unequip": inventory_parser.handle_unequip, "uneq": inventory_parser.handle_unequip,
+        "drop": inventory_parser.handle_drop,
+        "get": inventory_parser.handle_get, "take": inventory_parser.handle_get,
+
+        # Interactions
+        "unlock": interaction_parser.handle_unlock,
+        "search": interaction_parser.handle_search, "examine": interaction_parser.handle_search,
+        "ex": interaction_parser.handle_search, "exa": interaction_parser.handle_search,
+
+        # Local Social Commands (Room-based)
+        "say": social_parser.handle_say, "'": social_parser.handle_say,
+        "emote": social_parser.handle_emote, ":": social_parser.handle_emote,
+        "fart": social_parser.handle_fart,
+
+        # Debug
+        "giveme": debug_parser.handle_giveme,
+        "spawnmob": debug_parser.handle_spawnmob,
+        "set_hp": debug_parser.handle_set_hp,
+        "mod_xp": debug_parser.handle_mod_xp,
+        "set_level": debug_parser.handle_set_level,
+        "setmoney": debug_parser.handle_set_money,
+        "addmoney": debug_parser.handle_add_money,
+
+        # Meta
+        "score": meta_parser.handle_score, "sc": meta_parser.handle_score,
+        "skills": meta_parser.handle_skills, "sk": meta_parser.handle_skills,
+        "traits": meta_parser.handle_traits, "tr": meta_parser.handle_traits,
+        "status": meta_parser.handle_score, "st": meta_parser.handle_score,
+        "help": meta_parser.handle_help, "?": meta_parser.handle_help,
+
+        # Shop commands
+        "list": shop_parser.handle_list,
+        "buy": shop_parser.handle_buy,
+        "sell": shop_parser.handle_sell,
+    }
+    COMMAND_REGISTRY.update(static_commands)
+
+    # 2. Add all dynamic chat commands from the ChatManager.
+    for command_alias in chat_manager.command_to_channel_map.keys():
+        COMMAND_REGISTRY[command_alias.lower()] = chat_parser.handle_chat_command
+    
+    logger.info(f"Command registry built with {len(COMMAND_REGISTRY)} total commands.")
+
+build_command_registry()
 
 # <<< NEW CORE LOGIC FUNCTION >>>
 async def execute_command_logic(context: CommandContext) -> schemas.CommandResponse:
-    """The one true command processing function."""
-    
-    # --- Check for Sysop commands and permissions ---
-    sysop_commands = ["giveme", "spawnmob", "set_hp", "mod_xp", "set_level", "setmoney", "addmoney", "setgod"]
-    if context.command_verb in sysop_commands:
+    """The one true command processing function, now with consolidated permission checks."""
+
+    # --- Permission Check for STATIC Debug/Sysop Commands ---
+    # The new chat system handles permissions for dynamic channels like 'godsay' on its own.
+    # We only need to protect the old-school, hardcoded debug commands here.
+    static_sysop_commands = ["giveme", "spawnmob", "set_hp", "mod_xp", "set_level", "setmoney", "addmoney", "setgod"]
+    if context.command_verb in static_sysop_commands:
+        # Check if the character's owner has the 'is_sysop' flag.
         is_sysop = hasattr(context.active_character, 'owner') and context.active_character.owner.is_sysop
         if not is_sysop:
             return schemas.CommandResponse(message_to_player="A strange force prevents you from using that command.")
 
-    # 1. Check standard command registry
+    # 1. Check the dynamically-built command registry.
     handler = COMMAND_REGISTRY.get(context.command_verb)
     if handler:
         return await handler(context)
 
-    # 2. Check for interactable action verbs
-    # (This logic is complex and can remain here for now)
+    # 2. Check for interactable action verbs as a fallback.
+    # This logic would be fully implemented here. For now, it's a placeholder.
     if context.current_room_orm.interactables:
-        # ... logic for contextual interactables ...
-        pass # For brevity, skipping the full block, but it would go here.
+        target_interactable_name = " ".join(context.args).lower()
+        for interactable_dict in context.current_room_orm.interactables:
+            try:
+                # This is where you would put the full logic to match the verb and target
+                # with an interactable object's action_verb and name/id_tag.
+                # If a match is found, you would call the interaction parser.
+                # e.g., return await interaction_parser.handle_contextual_interactable_action(context, matched_interactable)
+                pass # Placeholder for full implementation
+            except Exception as e:
+                # Log error if interactable data is malformed
+                logger.error(f"Could not parse interactable for contextual command: {e}")
+                continue
 
-    # 3. Handle real-time only commands
+    # 3. Handle commands that are exclusively for real-time WebSocket interaction.
+    # This prevents them from being accidentally processed via other means.
     real_time_verbs = ["attack", "atk", "kill", "k", "use", "flee", "rest"]
     if context.command_verb in real_time_verbs:
         return schemas.CommandResponse(
             message_to_player=f"Actions like '{context.command_verb}' are handled in real-time. (This is a WebSocket-only command)"
         )
 
-    # 4. Default fallback
+    # 4. If no handler is found after all checks, return the default unknown command message.
     return schemas.CommandResponse(
         message_to_player=f"I don't understand the command: '{context.original_command}'. Type 'help' or '?'."
     )

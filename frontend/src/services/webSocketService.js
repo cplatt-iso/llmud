@@ -10,17 +10,19 @@ const { getState, setState } = useGameStore;
 let socket = null;
 
 const createLogEntry = (type, data) => ({
-  id: uuidv4(), // Switched to uuidv4 for better uniqueness
+  id: uuidv4(),
   type: type,
   data: data,
 });
 
+// THIS IS THE CORRECTED FUNCTION BLOCK
 const handleMessage = (event) => {
     try {
         const serverData = JSON.parse(event.data);
         console.log("WS RCV:", serverData);
 
-        const { addLogLine, addChatLine } = useGameStore.getState();
+        // <<< THE FIX: Get the functions from the store at the time of execution.
+        const { addLogLine, addMessage } = getState();
 
         switch (serverData.type) {
             case "welcome_package":
@@ -42,7 +44,6 @@ const handleMessage = (event) => {
                     }
                     if (serverData.room_data) {
                         state.currentRoomId = serverData.room_data.id;
-                        // Initial map load on welcome
                         getState().fetchMapData(serverData.room_data.z);
                     }
                 });
@@ -55,13 +56,11 @@ const handleMessage = (event) => {
                         state.logLines.push(...newLogEntries);
                     }
                     if (serverData.character_vitals) {
-                         // This is repetitive, but vital for updates during combat
                         Object.assign(state.vitals, serverData.character_vitals);
                         if(serverData.character_vitals.level) state.characterLevel = serverData.character_vitals.level;
                     }
                     if (serverData.room_data) {
                         state.currentRoomId = serverData.room_data.id;
-                        // Check if Z level changed, requiring a new map fetch
                         const currentZ = state.mapData ? state.mapData.z_level : null;
                         if (currentZ !== null && currentZ !== serverData.room_data.z) {
                             getState().fetchMapData(serverData.room_data.z);
@@ -72,12 +71,7 @@ const handleMessage = (event) => {
 
             case "look_response":
                 setState(state => {
-                    // This is our special structured log object
                     state.logLines.push(createLogEntry('look', serverData)); 
-                    
-                    // <<< FIX FOR MAP AMNESIA >>>
-                    // The look_response payload contains the definitive new room state.
-                    // Use it to update the currentRoomId and check for map changes.
                     if (serverData.room_data) {
                         state.currentRoomId = serverData.room_data.id;
                         const currentZ = state.mapData ? state.mapData.z_level : null;
@@ -101,20 +95,28 @@ const handleMessage = (event) => {
                 });
                 break;
 
-            // <<< FIX FOR SILENT NPCS AND OTHER ROOM MESSAGES >>>
             case "game_event":
+            // THIS CASE IS FOR NPC SPEECH, MOB MOVEMENTS, ETC.
+            // IT CORRECTLY USES addLogLine TO ONLY GO TO THE TERMINAL.
+                if(serverData.message) addLogLine(serverData.message, 'html');
+                break;
+            
+            // This case should no longer be used by the backend for chat,
+            // but we'll leave it in as a fallback to prevent crashes.
             case "ooc_message":
-                if (serverData.message) {
-                    addChatLine(serverData.message); // This will add to both logs
+                 if(serverData.message) addLogLine(serverData.message, 'html');
+                 break;
+                 
+            // <<< THIS IS THE NEW, CORRECT CASE FOR OUR STRUCTURED CHAT >>>
+            case "chat_message":
+                if (serverData.payload) {
+                    addMessage(serverData.payload);
                 }
                 break;
-
+ 
             default:
                 console.warn("Unhandled WS message type:", serverData.type, serverData);
-                setState(state => {
-                    const msg = `<span class="system-message-inline">Unhandled event: ${serverData.type}</span>`;
-                    state.logLines.push(createLogEntry('html', msg));
-                });
+                addLogLine(`<span class="system-message-inline">Unhandled event: ${serverData.type}</span>`, 'html');
                 break;
         }
 
@@ -126,17 +128,15 @@ const handleMessage = (event) => {
 const handleClose = (event) => {
     console.log("WebSocket connection closed:", event.code, event.reason);
     socket = null;
-    setState(state => {
-        const closeMessage = `! Game server connection closed. (Code: ${event.code} ${event.reason || ''})`.trim();
-        state.logLines.push(createLogEntry('html', `<span class="system-message-inline">${closeMessage}</span>`));
-    });
+    const { addLogLine } = getState();
+    const closeMessage = `! Game server connection closed. (Code: ${event.code} ${event.reason || ''})`.trim();
+    addLogLine(`<span class="system-message-inline">${closeMessage}</span>`, 'html');
 };
 
 const handleError = (event) => {
     console.error("WebSocket error observed:", event);
-    setState(state => {
-        state.logLines.push(createLogEntry('html', '<span class="system-message-inline">! WebSocket connection error.</span>'));
-    });
+    const { addLogLine } = getState();
+    addLogLine('<span class="system-message-inline">! WebSocket connection error.</span>', 'html');
 };
 
 export const webSocketService = {
@@ -174,16 +174,13 @@ export const webSocketService = {
             socket.send(JSON.stringify(payload));
         } else {
             console.error("Cannot send WS message: Not connected.");
-            setState(state => {
-                const msg = '<span class="system-message-inline">! Cannot send command: Not connected.</span>';
-                state.logLines.push(createLogEntry('html', msg));
-            });
+            const { addLogLine } = getState();
+            addLogLine('<span class="system-message-inline">! Cannot send command: Not connected.</span>', 'html');
         }
     },
     
-    addClientLog: (type, data) => {
-        setState(state => {
-            state.logLines.push(createLogEntry(type, data));
-        })
+    addClientEcho: (command) => {
+        const { addLogLine } = getState();
+        addLogLine(`> ${command}`, 'html');
     }
 };

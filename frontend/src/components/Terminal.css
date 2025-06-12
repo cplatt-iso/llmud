@@ -102,3 +102,17 @@
   color: #88aadd; /* A blue-ish color for OOC */
   font-style: italic;
 }
+.chat-public {
+  /* You can add special styling for all public messages here */
+}
+
+.chat-admin {
+  background-color: rgba(255, 215, 0, 0.05);
+  border-left: 2px solid gold;
+  padding-left: 8px;
+  margin-left: -10px;
+}
+
+.chat-private {
+  font-style: italic;
+}

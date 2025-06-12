@@ -1,32 +1,34 @@
 // frontend/src/components/ChatWindow.jsx
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import useGameStore from '../state/gameStore';
+import ChatMessage from './ChatMessage'; // <<< IMPORT THE RENDERER
 
 const ChatWindow = () => {
-  const chatLines = useGameStore((state) => state.chatLines);
+  const logLines = useGameStore((state) => state.logLines);
   const activeTab = useGameStore((state) => state.activeTab);
   const chatOutputRef = useRef(null);
 
+  // <<< USEMEMO TO EFFICIENTLY FILTER FOR CHAT MESSAGES >>>
+  const chatMessages = useMemo(() => 
+    logLines.filter(line => line.type === 'chat'), 
+    [logLines]
+  );
+
   useEffect(() => {
-    // We only scroll if this tab is active and the ref is attached
     if (activeTab === 'Chat' && chatOutputRef.current) {
       const element = chatOutputRef.current;
       element.scrollTop = element.scrollHeight;
     }
-  }, [chatLines, activeTab]); // Re-run when new lines are added to the chat
+  }, [chatMessages, activeTab]);
 
   return (
     <div id="chat-output" className="terminal-output" ref={chatOutputRef}>
-      {chatLines.map((line) => (
-        <div
-          key={line.id}
-          className="terminal-line"
-          dangerouslySetInnerHTML={{ __html: line.data }}
-        />
+      {chatMessages.map((line) => (
+        <ChatMessage key={line.id} data={line.data} />
       ))}
-      {chatLines.length === 0 && (
+      {chatMessages.length === 0 && (
         <div className="placeholder-content">
-          No global messages yet. Type 'ooc -message-' to start a conversation.
+          No global messages yet. Type 'ooc &lt;message&gt;' to start a conversation.
         </div>
       )}
     </div>
