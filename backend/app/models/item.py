@@ -2,8 +2,8 @@
 import uuid
 from typing import Optional, Dict, Any
 
-from sqlalchemy import Column, String, Text, Float, Integer, Boolean # Keep Column for __tablename__ etc.
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
+from sqlalchemy import Column, String, Text, Float, JSON, Integer, Boolean # Keep Column for __tablename__ etc.
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.base_class import Base
@@ -24,7 +24,7 @@ class Item(Base):
     rarity: Mapped[str] = mapped_column(String(50), nullable=False, default="common", index=True)
     slot: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, comment="e.g., head, torso, main_hand, off_hand, ring, consumable, utility")
     
-    properties: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True, comment="e.g., {'damage': '1d6', 'armor_class': 5, 'modifier': {'strength': 1}}")
+    properties: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True, comment="e.g., {'damage': '1d6', 'armor_class': 5, 'modifier': {'strength': 1}}")
     
     weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     value: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="Monetary value for shops")

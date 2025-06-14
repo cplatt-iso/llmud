@@ -1,18 +1,18 @@
-# backend/app/game_logic/combat/combat_utils.py (THE FINAL, COMPLETE VERSION)
+# backend/app/game_logic/combat/combat_utils.py
+
 import logging
 import random
 import uuid
 import json
 import os
-from datetime import datetime, timezone # <<< ADDED DATETIME IMPORTS
+from datetime import datetime, timezone
 from typing import List, Optional, Any, Dict, Tuple
 
 from sqlalchemy.orm import Session
 
 from app import schemas, models, crud
-from app.websocket_manager import connection_manager as ws_manager
-from app.game_state import mob_group_death_timestamps # <<< IMPORT OUR NEW TIMER DICTIONARY
-from app.commands.utils import get_formatted_mob_name
+from app.game_state import mob_group_death_timestamps
+from app.commands.utils import get_formatted_mob_name, get_opposite_direction
 
 logger = logging.getLogger(__name__)
 
@@ -36,16 +36,56 @@ def _load_loot_tables_from_json() -> Dict[str, Any]:
 
 LOADED_LOOT_TABLES = _load_loot_tables_from_json()
 
-
 # --- Constants and Maps ---
 direction_map = {"n": "north", "s": "south", "e": "east", "w": "west", "u": "up", "d": "down"}
 
-OPPOSITE_DIRECTIONS_MAP = {
-    "north": "south", "south": "north", "east": "west", "west": "east",
-    "up": "down", "down": "up",
-    "northeast": "southwest", "southwest": "northeast",
-    "northwest": "southeast", "southeast": "northwest"
-}
+# --- THE ONE TRUE BROADCAST FUNCTION ---
+async def broadcast_to_room_participants(
+    db: Session,
+    room_id: uuid.UUID,
+    message_text: str,
+    message_type: str = "game_event",
+    exclude_player_id: Optional[uuid.UUID] = None
+):
+    """
+    The one and only function to broadcast a message to players in a room.
+    Uses the efficient room_service to get player IDs.
+    """
+    # --- THE FIX IS HERE: LOCAL IMPORT TO BREAK THE CIRCLE ---
+    from app.services.room_service import get_player_ids_in_room
+    from app.websocket_manager import connection_manager as ws_manager
+    
+    exclude_ids = [exclude_player_id] if exclude_player_id else []
+    player_ids_to_notify = get_player_ids_in_room(db, room_id, exclude_player_ids=exclude_ids)
+            
+    if player_ids_to_notify:
+        payload = {"type": message_type, "message": message_text}
+        await ws_manager.broadcast_to_players(payload, player_ids_to_notify)
+
+
+# --- THE FIXED COMBAT LOG FUNCTION ---
+async def send_combat_log(
+    player_id: uuid.UUID,
+    messages: List[str],
+    combat_over: bool = False, # <<< RENAMED from combat_ended to combat_over for consistency
+    room_data: Optional[schemas.RoomInDB] = None,
+    character_vitals: Optional[Dict[str, Any]] = None,
+    transient: bool = False
+):
+    """Sends a structured combat log message to a single player."""
+    from app.websocket_manager import connection_manager as ws_manager # Local import
+    if not messages and not combat_over and not room_data and not character_vitals:
+        return
+    
+    payload = {
+        "type": "combat_update",
+        "log": messages,
+        "combat_over": combat_over, # <<< USE THE CORRECT PARAMETER NAME HERE
+        "room_data": room_data.model_dump(exclude_none=True) if room_data else None,
+        "character_vitals": character_vitals,
+        "is_transient_log": transient
+    }
+    await ws_manager.send_personal_message(payload, player_id)
 
 
 async def handle_mob_death_loot_and_cleanup(
@@ -55,17 +95,20 @@ async def handle_mob_death_loot_and_cleanup(
     log_messages_list: List[str],
     player_id: uuid.UUID,
     current_room_id_for_broadcast: uuid.UUID
-) -> models.Character:
+) -> Tuple[models.Character, bool, List[Tuple[models.Item, int]]]: # MODIFIED return type
     mob_template = killed_mob_instance.mob_template
-    character_after_loot = character
+    character_after_loot = character # Start with the character passed in
     mob_name_formatted = get_formatted_mob_name(killed_mob_instance, character)
+
+    autoloot_occurred_for_items = False
+    autolooted_item_details: List[Tuple[models.Item, int]] = []
 
     logger.debug(f"Handling death of {mob_template.name if mob_template else 'Unknown Mob'}")
 
     if not mob_template:
         logger.warning(f"No mob_template for killed_mob_instance {killed_mob_instance.id}")
         crud.crud_mob.despawn_mob_from_room(db, killed_mob_instance.id)
-        return character_after_loot
+        return character_after_loot, autoloot_occurred_for_items, autolooted_item_details
 
     # --- XP Award ---
     if mob_template.xp_value > 0:
@@ -73,7 +116,7 @@ async def handle_mob_death_loot_and_cleanup(
             db, character_after_loot.id, mob_template.xp_value
         )
         if updated_char_for_xp:
-            character_after_loot = updated_char_for_xp
+            character_after_loot = updated_char_for_xp # Update character_after_loot
         log_messages_list.extend(xp_messages)
 
     # --- Currency Drop ---
@@ -93,7 +136,7 @@ async def handle_mob_death_loot_and_cleanup(
             db, character_after_loot.id, platinum_dropped, gold_dropped, silver_dropped, copper_dropped
         )
         if updated_char_for_currency:
-             character_after_loot = updated_char_for_currency
+             character_after_loot = updated_char_for_currency # Update character_after_loot
         
         drop_messages_parts = []
         if platinum_dropped > 0: drop_messages_parts.append(f"{platinum_dropped}p")
@@ -103,10 +146,10 @@ async def handle_mob_death_loot_and_cleanup(
         
         if drop_messages_parts:
          log_messages_list.append(f"The {mob_name_formatted} drops: {', '.join(drop_messages_parts)}.")
-         log_messages_list.append(currency_message)
+         log_messages_list.append(currency_message) # This is the "You now have..." message
 
-    # --- Item Loot Drop ---
-    items_dropped_this_kill_details: List[str] = []
+    # --- Item Loot ---
+    items_dropped_to_ground_details: List[str] = []
     if mob_template.loot_table_tags:
         for loot_tag in mob_template.loot_table_tags:
             if loot_tag in LOADED_LOOT_TABLES:
@@ -116,108 +159,81 @@ async def handle_mob_death_loot_and_cleanup(
                         item_template_to_drop = crud.crud_item.get_item_by_name(db, name=drop_entry.get('item_ref'))
                         if item_template_to_drop:
                             quantity_to_drop = random.randint(drop_entry.get('min_qty', 1), drop_entry.get('max_qty', 1))
-                            added_room_item, add_msg = crud.crud_room_item.add_item_to_room(
-                                db=db, room_id=current_room_id_for_broadcast,
-                                item_id=item_template_to_drop.id, quantity=quantity_to_drop
-                            )
-                            if added_room_item:
-                                items_dropped_this_kill_details.append(f"{quantity_to_drop}x {item_template_to_drop.name}")
-        if items_dropped_this_kill_details:
-            log_messages_list.append(f"The {mob_name_formatted} also drops: {', '.join(items_dropped_this_kill_details)} on the ground.")
+                            
+                            # Autoloot logic
+                            if character_after_loot.autoloot_enabled:
+                                inv_entry, add_msg = crud.crud_character_inventory.add_item_to_character_inventory(
+                                    db,
+                                    character_obj=character_after_loot, # Pass the ORM object
+                                    item_id=item_template_to_drop.id,
+                                    quantity=quantity_to_drop
+                                )
+                                if inv_entry:
+                                    log_messages_list.append(f"You autoloot: {item_template_to_drop.name}" + (f" (x{quantity_to_drop})" if quantity_to_drop > 1 else "") + ".")
+                                    autolooted_item_details.append((item_template_to_drop, quantity_to_drop))
+                                    autoloot_occurred_for_items = True
+                                else:
+                                    # Autoloot failed (e.g., full inventory), drop to room
+                                    added_room_item, _ = crud.crud_room_item.add_item_to_room(
+                                        db=db, room_id=current_room_id_for_broadcast,
+                                        item_id=item_template_to_drop.id, quantity=quantity_to_drop
+                                    )
+                                    if added_room_item:
+                                        items_dropped_to_ground_details.append(f"{quantity_to_drop}x {item_template_to_drop.name}")
+                                    log_messages_list.append(f"{item_template_to_drop.name}" + (f" (x{quantity_to_drop})" if quantity_to_drop > 1 else "") + f" drops to the ground (autoloot failed: {add_msg}).")
+                            else:
+                                # Autoloot disabled, drop to room
+                                added_room_item, _ = crud.crud_room_item.add_item_to_room(
+                                    db=db, room_id=current_room_id_for_broadcast,
+                                    item_id=item_template_to_drop.id, quantity=quantity_to_drop
+                                )
+                                if added_room_item:
+                                    items_dropped_to_ground_details.append(f"{quantity_to_drop}x {item_template_to_drop.name}")
+                                    
+        if items_dropped_to_ground_details: # Only log if items actually hit the ground
+            ground_drop_message = f"The {mob_name_formatted} also drops: {', '.join(items_dropped_to_ground_details)} on the ground."
+            log_messages_list.append(ground_drop_message)
             await broadcast_to_room_participants(
                 db, current_room_id_for_broadcast,
-                f"The {mob_name_formatted} drops {', '.join(items_dropped_this_kill_details)}!",
+                f"The {mob_name_formatted} drops {', '.join(items_dropped_to_ground_details)}!",
                 exclude_player_id=player_id
             )
 
-    # --- START THE FUCKING RESPAWN TIMER ---
+    # --- Respawn Timer Logic ---
     if killed_mob_instance.spawn_definition_id:
         living_siblings_count = db.query(models.RoomMobInstance.id).filter(
             models.RoomMobInstance.spawn_definition_id == killed_mob_instance.spawn_definition_id,
             models.RoomMobInstance.current_health > 0,
-            models.RoomMobInstance.id != killed_mob_instance.id
+            models.RoomMobInstance.id != killed_mob_instance.id # Exclude the currently killed mob
         ).count()
-
         spawn_def = crud.crud_mob_spawn_definition.get_definition(db, definition_id=killed_mob_instance.spawn_definition_id)
-        
         if spawn_def and living_siblings_count < spawn_def.quantity_min:
+            # Check if a respawn timer isn't already set for this group from a previous kill in the same tick/short interval
             if killed_mob_instance.spawn_definition_id not in mob_group_death_timestamps:
-                logger.info(f"DEATH_HANDLER: Mob group '{spawn_def.definition_name}' dropped below min ({living_siblings_count} < {spawn_def.quantity_min}). Starting respawn timer.")
+                logger.info(f"DEATH_HANDLER: Mob group '{spawn_def.definition_name}' (ID: {spawn_def.id}) dropped below min ({living_siblings_count} < {spawn_def.quantity_min}). Starting respawn timer.")
                 mob_group_death_timestamps[killed_mob_instance.spawn_definition_id] = datetime.now(timezone.utc)
+            else:
+                logger.debug(f"DEATH_HANDLER: Mob group '{spawn_def.definition_name}' (ID: {spawn_def.id}) already has a respawn timer pending.")
+
 
     # --- Despawn Mob ---
     logger.debug(f"Despawning mob instance {killed_mob_instance.id} for {mob_template.name}.")
-    crud.crud_mob.despawn_mob_from_room(db, killed_mob_instance.id)
+    crud.crud_mob.despawn_mob_from_room(db, killed_mob_instance.id) # This commits internally
 
-    return character_after_loot
-
-
-# --- The rest of the functions are unchanged but included for completeness ---
-
-def get_opposite_direction(direction: str) -> str:
-    if not direction:
-        return "an unknown direction"
-    value = OPPOSITE_DIRECTIONS_MAP.get(direction.lower())
-    if value is None:
-        return "somewhere"
-    if isinstance(value, dict):
-        return str(value.get("name", "an undefined direction"))
-    return str(value)
-
-async def send_combat_log(
-    player_id: uuid.UUID,
-    messages: List[str],
-    combat_ended: bool = False,
-    room_data: Optional[schemas.RoomInDB] = None,
-    character_vitals: Optional[Dict[str, Any]] = None,
-    transient: bool = False
-):
-    if not messages and not combat_ended and not room_data and not character_vitals:
-        return
-    
-    payload = {
-        "type": "combat_update",
-        "log": messages,
-        "combat_over": combat_ended,
-        "room_data": room_data.model_dump(exclude_none=True) if room_data else None,
-        "character_vitals": character_vitals,
-        "is_transient_log": transient
-    }
-    await ws_manager.send_personal_message(payload, player_id)
-
-async def broadcast_to_room_participants(
-    db: Session,
-    room_id: uuid.UUID,
-    message_text: str,
-    message_type: str = "game_event",
-    exclude_player_id: Optional[uuid.UUID] = None
-):
-    excluded_character_id: Optional[uuid.UUID] = None
-    if exclude_player_id:
-        excluded_character_id = ws_manager.get_character_id(exclude_player_id)
-
-    characters_to_notify = crud.crud_character.get_characters_in_room(
-        db,
-        room_id=room_id,
-        exclude_character_id=excluded_character_id
-    )
-    
-    player_ids_to_send_to = [
-        char.player_id for char in characters_to_notify
-        if ws_manager.is_player_connected(char.player_id) and (exclude_player_id is None or char.player_id != exclude_player_id)
-    ]
-            
-    if player_ids_to_send_to:
-        payload = {"type": message_type, "message": message_text}
-        await ws_manager.broadcast_to_players(payload, player_ids_to_send_to)
+    return character_after_loot, autoloot_occurred_for_items, autolooted_item_details
 
 async def broadcast_combat_event(db: Session, room_id: uuid.UUID, acting_player_id: uuid.UUID, message: str):
-    player_ids_to_notify = [
-        char.player_id for char in crud.crud_character.get_characters_in_room(db, room_id=room_id)
-        if ws_manager.is_player_connected(char.player_id) and char.player_id != acting_player_id
-    ]
-    if player_ids_to_notify:
-        await ws_manager.broadcast_to_players({"type": "game_event", "message": message}, player_ids_to_notify)
+    """
+    A backward-compatibility shim. This function now simply calls the new
+    standard broadcast function with the correct parameters.
+    """
+    logger.debug(f"Legacy call to broadcast_combat_event, redirecting to broadcast_to_room_participants.")
+    await broadcast_to_room_participants(
+        db=db,
+        room_id=room_id,
+        message_text=message,
+        exclude_player_id=acting_player_id
+    )
 
 async def perform_server_side_move(
     db: Session,

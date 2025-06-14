@@ -15,58 +15,48 @@ const createLogEntry = (type, data) => ({
   data: data,
 });
 
-// THIS IS THE CORRECTED FUNCTION BLOCK
 const handleMessage = (event) => {
     try {
         const serverData = JSON.parse(event.data);
         console.log("WS RCV:", serverData);
 
-        // <<< THE FIX: Get the functions from the store at the time of execution.
-        const { addLogLine, addMessage } = getState();
+        // Get all the actions we might need from the store.
+        const { addLogLine, addMessage, setVitals } = getState();
 
         switch (serverData.type) {
             case "welcome_package":
-                setState((state) => {
-                    if (serverData.log && serverData.log.length > 0) {
-                        const newLogEntries = serverData.log.map(line => createLogEntry('html', line));
-                        state.logLines.push(...newLogEntries);
-                    }
-                    if (serverData.character_vitals) {
-                        state.vitals.hp.current = serverData.character_vitals.current_hp;
-                        state.vitals.hp.max = serverData.character_vitals.max_hp;
-                        state.vitals.mp.current = serverData.character_vitals.current_mp;
-                        state.vitals.mp.max = serverData.character_vitals.max_mp;
-                        state.vitals.xp.current = serverData.character_vitals.current_xp;
-                        if (serverData.character_vitals.next_level_xp !== undefined) {
-                            state.vitals.xp.max = serverData.character_vitals.next_level_xp;
-                        }
-                        state.characterLevel = serverData.character_vitals.level;
-                    }
-                    if (serverData.room_data) {
-                        state.currentRoomId = serverData.room_data.id;
-                        getState().fetchMapData(serverData.room_data.z);
-                    }
-                });
+                // Handle log lines and map data separately...
+                if (serverData.log && serverData.log.length > 0) {
+                    const newLogEntries = serverData.log.map(line => createLogEntry('html', line));
+                    setState(state => { state.logLines.push(...newLogEntries); });
+                }
+                if (serverData.room_data) {
+                    setState(state => { state.currentRoomId = serverData.room_data.id; });
+                    getState().fetchMapData(serverData.room_data.z);
+                }
+                // ...THEN call the single source of truth for vitals.
+                if (serverData.character_vitals) {
+                    setVitals(serverData.character_vitals);
+                }
                 break;
 
             case "combat_update":
-                setState((state) => {
-                    if (serverData.log && serverData.log.length > 0) {
-                        const newLogEntries = serverData.log.map(line => createLogEntry('html', line));
-                        state.logLines.push(...newLogEntries);
-                    }
-                    if (serverData.character_vitals) {
-                        Object.assign(state.vitals, serverData.character_vitals);
-                        if(serverData.character_vitals.level) state.characterLevel = serverData.character_vitals.level;
-                    }
-                    if (serverData.room_data) {
-                        state.currentRoomId = serverData.room_data.id;
-                        const currentZ = state.mapData ? state.mapData.z_level : null;
-                        if (currentZ !== null && currentZ !== serverData.room_data.z) {
-                            getState().fetchMapData(serverData.room_data.z);
-                        }
-                    }
-                });
+                // Handle log lines and map data separately...
+                if (serverData.log && serverData.log.length > 0) {
+                    const newLogEntries = serverData.log.map(line => createLogEntry('html', line));
+                    setState(state => { state.logLines.push(...newLogEntries); });
+                }
+                if (serverData.room_data) {
+                     setState(state => { state.currentRoomId = serverData.room_data.id; });
+                     const currentZ = getState().mapData ? getState().mapData.z_level : null;
+                     if (currentZ !== null && currentZ !== serverData.room_data.z) {
+                         getState().fetchMapData(serverData.room_data.z);
+                     }
+                }
+                // ...THEN call the single source of truth for vitals.
+                if (serverData.character_vitals) {
+                    setVitals(serverData.character_vitals);
+                }
                 break;
 
             case "look_response":
@@ -83,10 +73,8 @@ const handleMessage = (event) => {
                 break;
 
             case "vitals_update":
-                setState((state) => {
-                    Object.assign(state.vitals, serverData);
-                    if(serverData.level) state.characterLevel = serverData.level;
-                });
+                // No wrappers. No bullshit. Just call the action.
+                setVitals(serverData);
                 break;
             
             case "inventory_update":
@@ -96,18 +84,13 @@ const handleMessage = (event) => {
                 break;
 
             case "game_event":
-            // THIS CASE IS FOR NPC SPEECH, MOB MOVEMENTS, ETC.
-            // IT CORRECTLY USES addLogLine TO ONLY GO TO THE TERMINAL.
                 if(serverData.message) addLogLine(serverData.message, 'html');
                 break;
             
-            // This case should no longer be used by the backend for chat,
-            // but we'll leave it in as a fallback to prevent crashes.
             case "ooc_message":
                  if(serverData.message) addLogLine(serverData.message, 'html');
                  break;
                  
-            // <<< THIS IS THE NEW, CORRECT CASE FOR OUR STRUCTURED CHAT >>>
             case "chat_message":
                 if (serverData.payload) {
                     addMessage(serverData.payload);

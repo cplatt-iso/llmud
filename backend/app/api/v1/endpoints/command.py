@@ -7,10 +7,10 @@ from app import schemas, models, crud
 from app.db.session import get_db
 from app.api.dependencies import get_current_active_character
 from app.commands.command_args import CommandContext
-from app.commands import shop_parser
-
-# Import handler modules
-from app.commands import chat_parser, movement_parser, inventory_parser, social_parser, debug_parser, meta_parser, interaction_parser
+from app.commands import (
+    movement_parser, inventory_parser, interaction_parser, social_parser,
+    debug_parser, meta_parser, shop_parser, chat_parser # Ensure meta_parser is imported
+)
 from app.services.chat_manager import chat_manager
 
 import logging
@@ -74,8 +74,9 @@ def build_command_registry():
         "score": meta_parser.handle_score, "sc": meta_parser.handle_score,
         "skills": meta_parser.handle_skills, "sk": meta_parser.handle_skills,
         "traits": meta_parser.handle_traits, "tr": meta_parser.handle_traits,
-        "status": meta_parser.handle_score, "st": meta_parser.handle_score,
+        "status": meta_parser.handle_score, "st": meta_parser.handle_score, # status is an alias for score
         "help": meta_parser.handle_help, "?": meta_parser.handle_help,
+        "autoloot": meta_parser.handle_autoloot, # New command
 
         # Shop commands
         "list": shop_parser.handle_list,

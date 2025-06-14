@@ -3,7 +3,11 @@ import random
 from app import schemas, models, crud # app.
 from .command_args import CommandContext # app.commands.command_args
 from app.websocket_manager import connection_manager
+from app import crud
+from datetime import date
+import logging
 
+logger = logging.getLogger(__name__)
 
 async def handle_fart(context: CommandContext) -> schemas.CommandResponse:
     character_name = context.active_character.name
@@ -96,19 +100,55 @@ async def handle_say(context: CommandContext) -> schemas.CommandResponse:
     # Message to others in the room
     others_message_payload = {
         "type": "game_event",
-        # <<< WRAP THE MESSAGE IN A SPAN WITH A CSS CLASS >>>
         "message": f"<span class='say-message'><span class='char-name'>{character_name}</span> says, \"{message_text}\"</span>"
     }
-    player_ids_in_room = [
+    player_ids_in_room_for_say = [ # Renamed to avoid conflict
         char.player_id for char in crud.crud_character.get_characters_in_room(
             context.db, 
             room_id=context.active_character.current_room_id, 
-            exclude_character_id=context.active_character.id # Exclude self from broadcast
+            exclude_character_id=context.active_character.id
         ) if connection_manager.is_player_connected(char.player_id)
     ]
 
-    if player_ids_in_room:
-        await connection_manager.broadcast_to_players(others_message_payload, player_ids_in_room)
+    if player_ids_in_room_for_say:
+        await connection_manager.broadcast_to_players(others_message_payload, player_ids_in_room_for_say)
+
+    # --- New logic for "what is your token usage" ---
+    normalized_message = message_text.lower().strip()
+    # Simple check for now, could be more robust (e.g., "Bjorne, what is your token usage")
+    if normalized_message == "what is your token usage":
+        npcs_in_room = crud.crud_room.get_npcs_in_room(context.db, room=context.current_room_orm)
+        if npcs_in_room:
+            # For simplicity, let the first NPC in the room respond.
+            # You could add logic to target a specific NPC if the player names them.
+            target_npc = npcs_in_room[0] 
+            
+            # Ensure the NPC data is fresh, especially last_token_reset_date
+            db_target_npc = crud.crud_npc.get_npc_template_by_tag(context.db, target_npc.unique_name_tag)
+            if db_target_npc:
+                tokens_today_display = db_target_npc.tokens_used_today if db_target_npc.last_token_reset_date == date.today() else 0
+                
+                npc_response_text = (
+                    f"{db_target_npc.name} leans in and whispers, \"So far, I've used {db_target_npc.total_tokens_used} tokens in total. "
+                    f"Today, it's been {tokens_today_display} tokens.\""
+                )
+                
+                npc_response_payload = {
+                    "type": "game_event", # Or a custom type like "npc_whisper"
+                    "message": f"<span class='npc-say-message whisper'>{npc_response_text}</span>" # Added 'whisper' class for potential styling
+                }
+
+                # Broadcast NPC's response to everyone in the room
+                all_player_ids_in_room = [
+                    char.player_id for char in crud.crud_character.get_characters_in_room(
+                        context.db, 
+                        room_id=context.active_character.current_room_id
+                    ) if connection_manager.is_player_connected(char.player_id)
+                ]
+                if all_player_ids_in_room:
+                    await connection_manager.broadcast_to_players(npc_response_payload, all_player_ids_in_room)
+            else:
+                logger.warning(f"Could not find NPC {target_npc.unique_name_tag} in DB to report token usage.")
 
     return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=self_message)
 

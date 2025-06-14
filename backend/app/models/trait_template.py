@@ -2,8 +2,8 @@
 import uuid
 from typing import Optional, Dict, Any, List # <<< MAKE SURE List IS IMPORTED FROM typing
 
-from sqlalchemy import String, Text
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
+from sqlalchemy import String, Text, JSON
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base_class import Base
@@ -20,10 +20,10 @@ class TraitTemplate(Base):
     trait_type: Mapped[str] = mapped_column(String(50), default="PASSIVE", nullable=False, 
                                             comment="Usually 'PASSIVE', but could be 'SOCIAL', 'BACKGROUND', etc.")
     
-    effects_data: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default=lambda: {})
+    effects_data: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False, default=lambda: {})
 
     # If this trait is mutually exclusive with others
-    mutually_exclusive_with: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: []) # type: ignore # Added default
+    mutually_exclusive_with: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True, default=lambda: []) # type: ignore # Added default
 
     def __repr__(self) -> str:
         return f"<TraitTemplate(id={self.id}, trait_id_tag='{self.trait_id_tag}', name='{self.name}')>"

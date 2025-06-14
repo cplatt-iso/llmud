@@ -11,3 +11,4 @@ from . import crud_character_class
 from . import crud_skill
 from . import crud_trait
 from . import crud_mob_spawn_definition
+from . import crud_npc  # <<< ADDED

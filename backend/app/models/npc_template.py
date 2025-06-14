@@ -1,9 +1,10 @@
 # backend/app/models/npc_template.py
 import uuid
 from typing import Optional, Dict, Any, List
+from datetime import date
 
-from sqlalchemy import String, Text
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
+from sqlalchemy import String, Text, JSON, Boolean, Date, Integer
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base_class import Base
@@ -19,13 +20,18 @@ class NpcTemplate(Base):
     npc_type: Mapped[str] = mapped_column(String(50), index=True, nullable=False, comment="e.g., merchant, quest_giver, guard")
     
     # For LLM integration
-    personality_prompt: Mapped[Optional[str]] = mapped_column(Text)
+    personality_prompt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
     # For simple, non-LLM dialogue
-    dialogue_lines_static: Mapped[Optional[List[str]]] = mapped_column(JSONB)
+    dialogue_lines_static: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
     
     # For merchants
-    shop_inventory: Mapped[Optional[List[str]]] = mapped_column(JSONB, comment="List of item names or tags the NPC sells")
+    shop_inventory: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True, comment="List of item_template names")
+
+    # New fields for token tracking
+    total_tokens_used: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    last_token_reset_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    tokens_used_today: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
 
     def __repr__(self) -> str:
         return f"<NpcTemplate(id={self.id}, name='{self.name}', type='{self.npc_type}')>"

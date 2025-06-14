@@ -9,7 +9,7 @@ from app import schemas, models, crud
 from app.schemas.common_structures import ExitDetail 
 from .command_args import CommandContext
 import random
-from app.websocket_manager import connection_manager 
+from app import websocket_manager # MODIFIED IMPORT
 
 async def handle_unlock(context: CommandContext) -> schemas.CommandResponse:
     if not context.args:
@@ -111,10 +111,10 @@ async def handle_unlock(context: CommandContext) -> schemas.CommandResponse:
             player_ids_in_room = [
                 char.player_id for char in crud.crud_character.get_characters_in_room(
                     context.db, room_id=current_room_orm.id, exclude_character_id=context.active_character.id
-                ) if connection_manager.is_player_connected(char.player_id)
+                ) if websocket_manager.connection_manager.is_player_connected(char.player_id)
             ]
             if player_ids_in_room:
-                await connection_manager.broadcast_to_players({"type": "game_event", "message": broadcast_message}, player_ids_in_room)
+                await websocket_manager.connection_manager.broadcast_to_players({"type": "game_event", "message": broadcast_message}, player_ids_in_room)
 
             return schemas.CommandResponse(
                 room_data=schemas.RoomInDB.from_orm(current_room_orm),
@@ -276,10 +276,10 @@ async def handle_contextual_interactable_action(
                             player_ids_in_current_room = [
                                 char.player_id for char in crud.crud_character.get_characters_in_room(
                                     context.db, room_id=current_room_orm.id, exclude_character_id=context.active_character.id
-                                ) if connection_manager.is_player_connected(char.player_id)
+                                ) if websocket_manager.connection_manager.is_player_connected(char.player_id)
                             ]
                             if player_ids_in_current_room:
-                                await connection_manager.broadcast_to_players({"type": "game_event", "message": broadcast_msg_text}, player_ids_in_current_room)
+                                await websocket_manager.connection_manager.broadcast_to_players({"type": "game_event", "message": broadcast_msg_text}, player_ids_in_current_room)
                         else:
                             message_to_player = f"You interact with the {interactable.name}, but it seems disconnected or already in the desired state."
 
@@ -294,10 +294,10 @@ async def handle_contextual_interactable_action(
         player_ids_in_room = [
             char.player_id for char in crud.crud_character.get_characters_in_room(
                 context.db, room_id=context.current_room_orm.id, exclude_character_id=context.active_character.id
-            ) if connection_manager.is_player_connected(char.player_id)
+            ) if websocket_manager.connection_manager.is_player_connected(char.player_id)
         ]
         if player_ids_in_room and broadcast_msg_text:
-            await connection_manager.broadcast_to_players({"type": "game_event", "message": broadcast_msg_text}, player_ids_in_room)
+            await websocket_manager.connection_manager.broadcast_to_players({"type": "game_event", "message": broadcast_msg_text}, player_ids_in_room)
         
         # If this custom event changes room state (e.g. description, interactable visibility)
         # then response_room_schema should be updated and room_state_changed_for_response set to True.

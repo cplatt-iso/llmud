@@ -73,7 +73,23 @@ const useGameStore = create(
       get().fetchMapData();
     },
 
-    setVitals: (vitalsUpdate) => set((state) => { Object.assign(state.vitals, vitalsUpdate); if (vitalsUpdate.level) state.characterLevel = vitalsUpdate.level; }),
+    setVitals: (vitalsUpdate) => {
+      set((state) => {
+        if (vitalsUpdate.current_hp !== undefined) state.vitals.hp.current = vitalsUpdate.current_hp;
+        if (vitalsUpdate.max_hp !== undefined) state.vitals.hp.max = vitalsUpdate.max_hp;
+        if (vitalsUpdate.current_mp !== undefined) state.vitals.mp.current = vitalsUpdate.current_mp;
+        if (vitalsUpdate.max_mp !== undefined) state.vitals.mp.max = vitalsUpdate.max_mp;
+        if (vitalsUpdate.current_xp !== undefined) state.vitals.xp.current = vitalsUpdate.current_xp;
+        if (vitalsUpdate.next_level_xp !== undefined) state.vitals.xp.max = vitalsUpdate.next_level_xp;
+        if (vitalsUpdate.platinum !== undefined) state.vitals.platinum = vitalsUpdate.platinum;
+        if (vitalsUpdate.gold !== undefined) state.vitals.gold = vitalsUpdate.gold;
+        if (vitalsUpdate.silver !== undefined) state.vitals.silver = vitalsUpdate.silver;
+        if (vitalsUpdate.copper !== undefined) state.vitals.copper = vitalsUpdate.copper;
+
+        // And we still check for level updates
+        if (vitalsUpdate.level !== undefined) state.characterLevel = vitalsUpdate.level;
+      });
+    },
     setInventory: (inventoryData) => set({ inventory: inventoryData }),
     setActiveTab: (tabName) => {
       if (tabName === 'Chat') {

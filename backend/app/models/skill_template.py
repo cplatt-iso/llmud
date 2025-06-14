@@ -2,8 +2,8 @@
 import uuid
 from typing import Optional, Dict, Any, List
 
-from sqlalchemy import String, Text, Integer
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
+from sqlalchemy import String, Text, Integer, JSON
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base_class import Base
@@ -30,11 +30,11 @@ class SkillTemplate(Base):
     # COMBAT_ACTIVE: {"mana_cost": 5, "damage": {"dice": "1d6", "bonus_stat": "strength", "type": "physical"}, "status_effect_chance": {"effect_id": "stunned", "duration_rounds": 1, "chance_percent": 25}}
     # UTILITY_OOC (Pick Lock): {"target_subtype": "lock", "difficulty_check_attr": "dexterity", "base_dc": 15, "consumes_item_tag": "lockpick_set", "success_message": "The lock clicks open!", "failure_message": "You fumble with the lock."}
     # COMBAT_PASSIVE: {"stat_bonuses": {"attack_bonus": 1}, "conditional_trigger": "on_crit_hit"}
-    effects_data: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default=lambda: {})
+    effects_data: Mapped[Dict[str, Any]] = mapped_column(JSON, nullable=False, default=lambda: {})
 
     # Requirements to learn/use the skill. Can be checked during level up or skill use.
     # Example: {"min_level": 3, "required_stats": {"intelligence": 12}, "requires_learned_skill": "basic_spellcasting_id", "requires_class_tag": "Mage"}
-    requirements_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    requirements_data: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
     # For skills that might have ranks or tiers (future use)
     rank: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=1)

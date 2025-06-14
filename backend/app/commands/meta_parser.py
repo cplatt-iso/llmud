@@ -3,6 +3,36 @@ from typing import List
 from app import schemas, models, crud # <<< ADDED models
 from .command_args import CommandContext 
 
+async def handle_autoloot(context: CommandContext) -> schemas.CommandResponse:
+    """Toggles the autoloot setting for the character."""
+    character = context.active_character
+    
+    # Ensure we have the ORM object if active_character is a schema
+    # This depends on how CommandContext populates active_character.
+    # Assuming active_character is an ORM model instance that can be directly modified.
+    # If it's a Pydantic schema, you'd fetch the ORM model first.
+    # For this example, let's assume it's an ORM instance.
+    
+    character_orm = crud.crud_character.get_character(context.db, character_id=character.id)
+    if not character_orm:
+        # This should ideally not happen if context.active_character is valid
+        return schemas.CommandResponse(
+            room_data=context.current_room_schema,
+            message_to_player="Error: Could not find your character data."
+        )
+
+    character_orm.autoloot_enabled = not character_orm.autoloot_enabled
+    context.db.add(character_orm)
+    context.db.commit()
+    # No need to refresh context.active_character here as the command response doesn't depend on it,
+    # but the change is in the DB. The character_orm instance is up-to-date.
+
+    status = "enabled" if character_orm.autoloot_enabled else "disabled"
+    return schemas.CommandResponse(
+        room_data=context.current_room_schema,
+        message_to_player=f"Autoloot is now {status}."
+    )
+
 async def handle_help(context: CommandContext) -> schemas.CommandResponse:
     categories = {
         "General": [

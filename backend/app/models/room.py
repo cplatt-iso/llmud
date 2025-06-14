@@ -3,8 +3,8 @@ import uuid
 from typing import Optional, Dict, List, TYPE_CHECKING, Any
 from enum import Enum as PyEnum
 
-from sqlalchemy import Column, Integer, String, Text, Enum as SQLEnum
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
+from sqlalchemy import Column, Integer, String, Text, JSON, Enum as SQLEnum
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.base_class import Base
@@ -44,17 +44,17 @@ class Room(Base):
     )
 
     exits: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        JSONB,
+        JSON,
         nullable=True,
         default=lambda: {}
     )
     interactables: Mapped[Optional[List[Dict[str, Any]]]] = mapped_column(
-        JSONB,
+        JSON,
         nullable=True,
         default=lambda: []
     )
     npc_placements: Mapped[Optional[List[str]]] = mapped_column(
-        JSONB,
+        JSON,
         nullable=True,
         comment="List of unique_name_tags for NPC templates to be placed in this room."
     )

@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session, attributes
 
 from app import crud, models, schemas
 from app.game_logic import combat 
-from app.commands.utils import resolve_room_item_target, get_dynamic_room_description # IMPORTED get_dynamic_room_description
+from app.commands.utils import resolve_room_item_target, get_dynamic_room_description 
 from app.commands.command_args import CommandContext 
 from app.commands import interaction_parser as http_interaction_parser 
-from app.websocket_manager import connection_manager 
+from app import websocket_manager # MODIFIED IMPORT
 from app.schemas.common_structures import ExitDetail, InteractableDetail 
 
 logger = logging.getLogger(__name__) # Added logger
@@ -51,9 +51,11 @@ async def _send_inventory_update_to_player(db: Session, character: models.Charac
         "type": "inventory_update",
         "inventory_data": inventory_display_data.model_dump(exclude_none=True)
     }
-
-    await connection_manager.send_personal_message(payload, character.player_id)
-    logger.debug(f"Inventory update payload sent to player_id {character.player_id}")
+    if character.player_id:
+        # Access connection_manager via the imported module
+        await websocket_manager.connection_manager.send_personal_message(payload, character.player_id)
+    else:
+        logger.warning(f"Character {character.name} ({character.id}) has no player_id. Cannot send inventory update.")
     
 async def handle_ws_equip(
     db: Session,

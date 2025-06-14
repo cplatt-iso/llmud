@@ -1,5 +1,5 @@
 --- SCRIPT START --- Creating bundle: project_context_bundle.txt ---
-Timestamp: Wed Jun 11 08:57:36 PM UTC 2025
+Timestamp: Thu Jun 12 01:54:52 AM UTC 2025
 
 # --- LLM INSTRUCTION ---
 # The following is a list of all potentially relevant files in the project.
@@ -739,16 +739,20 @@ class Character(Base):
 --- START OF FILE backend/app/websocket_manager.py ---
 # backend/app/websocket_manager.py
 import uuid
-import logging # <<<< MAKE SURE LOGGING IS IMPORTED
+import logging
+import time
 from typing import Dict, List, Optional
 from fastapi import WebSocket
 from fastapi.encoders import jsonable_encoder
 
 # We need access to the database to find out where characters are.
 from app.db.session import SessionLocal
-from app import crud
+from app import crud, models, schemas
+from app.game_logic.combat.combat_state_manager import end_combat_for_character
+from app.game_state import is_character_resting, set_character_resting_status
+from app.services.room_service import get_player_ids_in_room
 
-logger = logging.getLogger(__name__) # <<<< GET A LOGGER
+logger = logging.getLogger(__name__) 
 
 class ConnectionManager:
     def __init__(self):
@@ -758,11 +762,13 @@ class ConnectionManager:
         self.player_active_characters: Dict[uuid.UUID, uuid.UUID] = {}
         # character_id -> room_id mapping (CACHE)
         self.character_locations: Dict[uuid.UUID, uuid.UUID] = {}
+        self.player_last_seen: Dict[uuid.UUID, float] = {}
 
     async def connect(self, websocket: WebSocket, player_id: uuid.UUID, character_id: uuid.UUID):
         await websocket.accept()
         self.active_player_connections[player_id] = websocket
         self.player_active_characters[player_id] = character_id
+        self.player_last_seen[player_id] = time.time()
         
         with SessionLocal() as db:
             character = crud.crud_character.get_character(db, character_id=character_id)
@@ -770,6 +776,10 @@ class ConnectionManager:
                 self.character_locations[character_id] = character.current_room_id
         
         logger.info(f"Player {player_id} (Character {character_id}) connected via WebSocket.")
+
+    def update_last_seen(self, player_id: uuid.UUID):
+        if player_id in self.player_last_seen:
+            self.player_last_seen[player_id] = time.time()
 
     def disconnect(self, player_id: uuid.UUID):
         character_id = self.player_active_characters.get(player_id)
@@ -779,6 +789,8 @@ class ConnectionManager:
             del self.active_player_connections[player_id]
         if player_id in self.player_active_characters:
             del self.player_active_characters[player_id]
+        if player_id in self.player_last_seen:
+            del self.player_last_seen[player_id]
         
         logger.info(f"Player {player_id} disconnected from WebSocket.")
 
@@ -833,6 +845,60 @@ class ConnectionManager:
     def get_all_active_player_ids(self) -> List[uuid.UUID]:
         return list(self.active_player_connections.keys())
 
+    async def full_player_disconnect(self, player_id: uuid.UUID, reason_key: str = "connection_lost"):
+        """
+        Orchestrates the complete removal of a player and their character from the active game world.
+        This is the function to call for timeouts, logouts, or connection drops.
+        """
+        logger.info(f"Initiating full disconnect for player {player_id}, reason: {reason_key}.")
+        character_id = self.get_character_id(player_id)
+        
+        if not character_id:
+            logger.warning(f"Cannot perform full disconnect for player {player_id}, no active character found.")
+            # Still run shallow disconnect to be safe
+            self.disconnect(player_id)
+            return
+
+        with SessionLocal() as db:
+            character = crud.crud_character.get_character(db, character_id=character_id)
+            if not character:
+                logger.error(f"Cannot find character {character_id} in DB during disconnect.")
+                self.disconnect(player_id)
+                return
+
+            # 1. Clean up game state (Combat, Resting)
+            end_combat_for_character(character.id, reason=f"disconnect_{reason_key}")
+            if is_character_resting(character.id):
+                set_character_resting_status(character.id, False)
+
+            # 2. Announce departure to the room
+            reason_messages = {
+                "timeout": "fades away after a long period of inactivity.",
+                "logout": "has left the realm.",
+                "connection_lost": "has lost their connection."
+            }
+            message = f"<span class='char-name'>{character.name}</span> {reason_messages.get(reason_key, 'vanishes.')}"
+            
+            # Get players in the room (excluding the one disconnecting)
+            player_ids_in_room = get_player_ids_in_room(db, character.current_room_id, exclude_player_ids=[player_id])
+            if player_ids_in_room:
+                await self.broadcast_to_players(
+                    {"type": "game_event", "message": message},
+                    player_ids_in_room
+                )
+
+        # 3. Close the WebSocket connection if it's still open
+        websocket = self.active_player_connections.get(player_id)
+        if websocket:
+            try:
+                await websocket.close(code=1000, reason=reason_key)
+            except Exception as e:
+                logger.warning(f"Exception while closing WebSocket for player {player_id}: {e}")
+
+        # 4. Perform the shallow disconnect to clean up manager state
+        self.disconnect(player_id)
+        logger.info(f"Full disconnect for player {player_id} complete.")
+
 # Global instance
 connection_manager = ConnectionManager()
 --- END OF FILE backend/app/websocket_manager.py ---
@@ -840,6 +906,7 @@ connection_manager = ConnectionManager()
 --- START OF FILE backend/app/game_logic/world_ticker.py ---
 # backend/app/game_logic/world_ticker.py
 import asyncio
+import logging
 import time 
 from typing import Callable, Iterator, List, Awaitable, Dict, Any, Optional # Added Optional
 from sqlalchemy.orm import Session
@@ -853,12 +920,32 @@ from app.game_logic.mob_respawner import manage_mob_populations_task
 from app.game_logic.mob_ai_ticker import process_roaming_mobs_task, process_aggressive_mobs_task
 from app.game_logic.player_vital_regenerator import regenerate_player_vitals_task 
 
+from app.websocket_manager import connection_manager as ws_manager
+
+logger = logging.getLogger(__name__)
+
 # --- Configuration ---
 WORLD_TICK_INTERVAL_SECONDS = 10.0
+PLAYER_AFK_TIMEOUT_SECONDS = 900.0 # 15 minutes
 
 # --- Task Registry ---
 world_tick_tasks: Dict[str, Callable[[Session], Awaitable[None]]] = {}
 
+async def check_afk_players_task(db: Session):
+    """
+    Scans for players who have been idle for too long and kicks them.
+    This function does NOT need the db session, but we accept it to match the task signature.
+    """
+    current_time = time.time()
+    # Iterate over a copy of the items to avoid runtime errors if the dict changes
+    idle_players = [
+        player_id for player_id, last_seen in list(ws_manager.player_last_seen.items())
+        if current_time - last_seen > PLAYER_AFK_TIMEOUT_SECONDS
+    ]
+
+    for player_id in idle_players:
+        logger.info(f"Player {player_id} exceeded AFK timeout. Initiating disconnect.")
+        await ws_manager.full_player_disconnect(player_id, reason_key="timeout")
 
 @contextmanager
 def db_session_for_world_tick() -> Iterator[Session]: 
@@ -885,6 +972,7 @@ def _initialize_and_register_all_world_tasks():
     register_world_tick_task("roaming_mob_processor", process_roaming_mobs_task) # <<< NEW TASK
     register_world_tick_task("aggressive_mob_processor", process_aggressive_mobs_task) # <<< NEW TASK
     register_world_tick_task("player_vital_regenerator", regenerate_player_vitals_task)
+    register_world_tick_task("afk_player_checker", check_afk_players_task) 
     
     print(f"World Ticker: All tasks registered. Active tasks: {list(world_tick_tasks.keys())}")
 

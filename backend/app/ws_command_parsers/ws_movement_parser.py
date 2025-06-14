@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, attributes
 
 from app import crud, models, schemas
 from app.game_logic import combat
-from app.websocket_manager import connection_manager
+from app import websocket_manager # MODIFIED IMPORT
 from app.schemas.common_structures import ExitDetail
 
 # We need the formatters to build our own look message
@@ -15,7 +15,8 @@ from app.commands.utils import (
     format_room_items_for_player_message,
     format_room_mobs_for_player_message,
     format_room_characters_for_player_message,
-    format_room_npcs_for_player_message
+    format_room_npcs_for_player_message,
+    get_opposite_direction
 )
 from app.ws_command_parsers.ws_info_parser import _format_mobs_for_display
 
@@ -100,7 +101,7 @@ async def attempt_player_move(
                 current_room_orm_before_move.exits = source_exits # Assign back the modified dictionary
                 attributes.flag_modified(current_room_orm_before_move, "exits")
             
-            opposite_direction = combat.get_opposite_direction(target_direction_canonical)
+            opposite_direction = get_opposite_direction(target_direction_canonical)
             # Ensure target_room_orm_for_move.exits is not None before creating dict
             target_exits = dict(target_room_orm_for_move.exits or {})
             if opposite_direction and opposite_direction in target_exits: # Check if key exists
@@ -119,13 +120,14 @@ async def attempt_player_move(
     if moved_successfully and target_room_orm_for_move:
         old_room_id = character_state.current_room_id
         crud.crud_character.update_character_room(db, character_id=character_state.id, new_room_id=target_room_orm_for_move.id)
-        connection_manager.update_character_location(character_state.id, target_room_orm_for_move.id)
+        # MODIFIED USAGE
+        websocket_manager.connection_manager.update_character_location(character_state.id, target_room_orm_for_move.id)
         
         # Broadcasts are unchanged
         leave_msg = f"<span class='char-name'>{character_state.name}</span> leaves, heading {target_direction_canonical}."
         await combat.broadcast_to_room_participants(db, old_room_id, leave_msg, exclude_player_id=player.id)
         
-        arrive_msg = f"<span class='char-name'>{character_state.name}</span> arrives from the {combat.get_opposite_direction(target_direction_canonical)}."
+        arrive_msg = f"<span class='char-name'>{character_state.name}</span> arrives from the {get_opposite_direction(target_direction_canonical)}."
         await combat.broadcast_to_room_participants(db, target_room_orm_for_move.id, arrive_msg, exclude_player_id=player.id)
 
         # Build the payload ourselves instead of calling handle_ws_look

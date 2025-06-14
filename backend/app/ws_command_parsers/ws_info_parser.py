@@ -14,7 +14,7 @@ from app.commands.utils import (
 )
 from app.game_state import is_character_resting, set_character_resting_status
 from app.schemas.common_structures import ExitDetail 
-from app.websocket_manager import connection_manager as ws_manager
+from app import websocket_manager # MODIFIED IMPORT
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ async def handle_ws_look(
 
     # --- STEP 3: SEND THE PAYLOAD ---
     # We use send_personal_message directly instead of the combat log wrapper
-    await ws_manager.send_personal_message(look_payload, player.id)
+    await websocket_manager.connection_manager.send_personal_message(look_payload, player.id)
 
 async def handle_ws_brief(db: Session, player: models.Player, character: models.Character):
     character.is_brief_mode = not character.is_brief_mode

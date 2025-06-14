@@ -395,6 +395,23 @@ def roll_dice(dice_str: str):
     total_roll = sum(random.randint(1, dice_sides) for _ in range(num_dice))
     return total_roll + modifier
 
+OPPOSITE_DIRECTIONS_MAP = {
+    "north": "south", "south": "north", "east": "west", "west": "east",
+    "up": "down", "down": "up",
+    "northeast": "southwest", "southwest": "northeast",
+    "northwest": "southeast", "southeast": "northwest"
+}
+
+def get_opposite_direction(direction: str) -> str:
+    """Returns the opposite cardinal direction for a given direction string."""
+    if not direction:
+        return "an unknown direction"
+    value = OPPOSITE_DIRECTIONS_MAP.get(direction.lower())
+    if value is None:
+        return "somewhere"
+    if isinstance(value, dict): # This case is for future-proofing, not currently used
+        return str(value.get("name", "an undefined direction"))
+    return str(value)
 
 def resolve_mob_target(
     target_ref: str,

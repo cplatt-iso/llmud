@@ -3,8 +3,8 @@ import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any, TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, DateTime, func, String, Boolean 
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
+from sqlalchemy import ForeignKey, Integer, JSON, DateTime, func, String, Boolean 
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.base_class import Base
@@ -32,7 +32,7 @@ class RoomMobInstance(Base):
     ) 
 
     current_health: Mapped[int] = mapped_column(Integer, nullable=False)
-    instance_properties_override: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    instance_properties_override: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
     spawned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     last_action_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 

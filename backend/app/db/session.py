@@ -1,47 +1,64 @@
 # backend/app/db/session.py
 import time
+import logging
+from typing import Generator
 from sqlalchemy import create_engine, exc
 from sqlalchemy.orm import sessionmaker
 from ..core.config import settings
 
+# Logger for this module
+logger = logging.getLogger(__name__)
+
 if settings.DATABASE_URL is None:
     raise ValueError("DATABASE_URL is not set in the environment or configuration.")
+
+# The engine is now just a placeholder. It will be created and assigned during app startup.
+engine = None
+# The SessionLocal factory is created now, but it is not bound to any engine yet.
+SessionLocal = sessionmaker(autocommit=False, autoflush=False)
 
 MAX_RETRIES = 10
 RETRY_DELAY = 5 # seconds
 
 def create_db_engine_with_retries():
+    """
+    This function no longer assigns to a global variable. It just creates,
+    tests, and returns a new database engine.
+    """
     for attempt in range(MAX_RETRIES):
         try:
             assert settings.DATABASE_URL is not None, "DATABASE_URL cannot be None"
-            engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
-            # Try to establish a connection to check if DB is ready
-            with engine.connect() as connection:
-                print("Database connection successful.")
-                return engine
+            created_engine = create_engine(str(settings.DATABASE_URL), pool_pre_ping=True)
+            with created_engine.connect() as connection:
+                logger.info("Database connection successful during creation.")
+                return created_engine
         except exc.OperationalError as e:
-            print(f"Database connection attempt {attempt + 1}/{MAX_RETRIES} failed: {e}")
+            logger.warning(f"Database connection attempt {attempt + 1}/{MAX_RETRIES} failed: {e}")
             if attempt < MAX_RETRIES - 1:
-                print(f"Retrying in {RETRY_DELAY} seconds...")
+                logger.warning(f"Retrying in {RETRY_DELAY} seconds...")
                 time.sleep(RETRY_DELAY)
             else:
-                print("Max retries reached. Could not connect to the database.")
+                logger.error("Max retries reached. Could not connect to the database.")
                 raise
-    # This line should ideally not be reached if MAX_RETRIES > 0
-    # but as a fallback or if MAX_RETRIES is 0:
-    raise exc.OperationalError("Could not connect to database after multiple retries or no retries configured.", params=None, orig=None) # type: ignore
+
+    # This line should ideally not be reached, but as a fallback:
+    # --- FIX IS HERE ---
+    # This simpler raise statement accomplishes the same goal without upsetting Pylance.
+    raise exc.OperationalError("Could not connect to database after multiple retries.")
 
 
-engine = create_db_engine_with_retries()
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-def get_db():
+def get_db() -> Generator:
     """
     FastAPI dependency that provides a database session.
-    It ensures the session is closed after the request is finished.
+    It now checks if the engine has been initialized and binds the engine
+    to the session on-the-fly.
     """
-    db = SessionLocal()
+    global engine
+    if engine is None:
+        raise RuntimeError("Database engine has not been initialized. The application lifespan manager may have failed.")
+    
+    # We create a new session and bind it to our globally managed engine
+    db = SessionLocal(bind=engine)
     try:
         yield db
     finally:

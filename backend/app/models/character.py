@@ -2,8 +2,8 @@
 import uuid
 from typing import Any, Dict, Optional, List, TYPE_CHECKING
 
-from sqlalchemy import Boolean, Column, String, ForeignKey, Integer
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
+from sqlalchemy import JSON, Column, Integer, String, Boolean, ForeignKey, Enum, Text # Ensure Boolean is imported
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app import models
 
@@ -26,7 +26,7 @@ class Character(Base):
 
     player_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("players.id"), nullable=False, index=True)
     god_level: Mapped[int] = mapped_column(Integer, default=0, nullable=False, comment="0 for mortals, 1-10 for gods")
-    titles: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: [], comment="e.g., ['The Godslayer', 'Cheesewheel Enthusiast']")
+    titles: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True, default=lambda: [], comment="e.g., ['The Godslayer', 'Cheesewheel Enthusiast']")
     current_room_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("rooms.id"), nullable=False, index=True)
     is_brief_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # --- Class Template Link ---
@@ -60,8 +60,8 @@ class Character(Base):
     experience_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # --- Skills & Traits ---
-    learned_skills: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: [])
-    learned_traits: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: [])
+    learned_skills: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True, default=lambda: [])
+    learned_traits: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True, default=lambda: [])
 
     # --- Basic Combat Stats (Placeholders until derived from gear/attributes) ---
     base_ac: Mapped[int] = mapped_column(Integer, default=10, nullable=False, comment="Base Armor Class")
@@ -74,6 +74,13 @@ class Character(Base):
     silver_coins: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     copper_coins: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
+    # --- Skill and Trait Points ---
+    skill_points: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    trait_points: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+
+    autoloot_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+
+    # Relationships
     inventory_items: Mapped[List["CharacterInventoryItem"]] = relationship(
         back_populates="character",
         cascade="all, delete-orphan"

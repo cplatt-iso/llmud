@@ -18,8 +18,7 @@ from .combat_utils import (
     send_combat_log,
     broadcast_combat_event, # Renamed from _broadcast_combat_event
     broadcast_to_room_participants, # Renamed from _broadcast_to_room_participants
-    perform_server_side_move, # Renamed from _perform_server_side_move
-    get_opposite_direction,
+    perform_server_side_move, # Renamed from _perform_server_side_move    
     direction_map # Shared direction map
 )
 

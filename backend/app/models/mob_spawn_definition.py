@@ -3,8 +3,8 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List, TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, DateTime, func, String, Boolean 
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
+from sqlalchemy import ForeignKey, Integer, JSON, DateTime, func, String, Boolean 
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.base_class import Base
@@ -43,7 +43,7 @@ class MobSpawnDefinition(Base):
     next_respawn_check_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True, index=True,
                                                                    comment="Next time the ticker should evaluate this spawner.")
 
-    roaming_behavior: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True,
+    roaming_behavior: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True,
                                                                     comment="e.g., {'type': 'random_adjacent', 'move_chance_percent': 25, 'max_distance_from_spawn': 5}")
     
     # Relationships

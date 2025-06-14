@@ -2,7 +2,7 @@
 import uuid
 from typing import Optional, Dict, Any, List # Added List
 
-from sqlalchemy import Boolean, String, Text, Integer, Float # Keep Column, Add Float
+from sqlalchemy import Boolean, String, Text, JSON, Integer, Float # Keep Column, Add Float
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -32,19 +32,19 @@ class MobTemplate(Base):
     
     
     # loot_table_ref: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, comment="Placeholder for loot table reference") # Replaced by loot_table_tags
-    loot_table_tags: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: []) # <<< MODIFIED (JSONB for list of strings)
+    loot_table_tags: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True, default=lambda: []) # <<< MODIFIED (JSONB for list of strings)
     
     currency_drop: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        JSONB, 
+        JSON, 
         nullable=True,
         comment="Defines currency drop. E.g., {'c_min':0, ...}"
     ) # Default can be set by Pydantic model if not provided in JSON
     
-    dialogue_lines: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: []) # <<< MODIFIED
-    faction_tags: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: []) # <<< MODIFIED
-    special_abilities: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: []) # <<< MODIFIED
+    dialogue_lines: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True, default=lambda: []) # <<< MODIFIED
+    faction_tags: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True, default=lambda: []) # <<< MODIFIED
+    special_abilities: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True, default=lambda: []) # <<< MODIFIED
     
-    properties: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True, default=lambda: {})
+    properties: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True, default=lambda: {})
     
     # aggression_type: Mapped[Optional[str]] = mapped_column(String(50), default="NEUTRAL", nullable=True, index=True, comment="e.g., NEUTRAL, AGGRESSIVE_ON_SIGHT, AGGRESSIVE_IF_APPROACHED") 
     # Decided to remove this, as aggro_radius and faction logic should cover it.

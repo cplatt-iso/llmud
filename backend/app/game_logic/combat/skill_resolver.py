@@ -24,39 +24,35 @@ async def resolve_skill_effect(
 ) -> Tuple[List[str], bool, Optional[models.Character]]:
     skill_log: List[str] = []
     action_taken = False 
-    character_after_skill = character 
+    character_after_skill = character # Start with the initial character object
     char_combat_stats = character.calculate_combat_stats()
 
     mana_cost = skill_template.effects_data.get("mana_cost", 0)
     if character.current_mana < mana_cost and skill_template.skill_type != "PASSIVE":
         skill_log.append(f"You don't have enough mana to use {skill_template.name} (needs {mana_cost}, have {character.current_mana}).")
-        return skill_log, False, character_after_skill # Return original character, no mana spent
+        return skill_log, False, character_after_skill 
 
-    # --- Target and Mana Logic ---
-    target_mob_instance: Optional[models.RoomMobInstance] = None # Initialize to None
+    target_mob_instance: Optional[models.RoomMobInstance] = None 
 
     if skill_template.skill_type == "COMBAT_ACTIVE":
-        # General validation for ENEMY_MOB target type if applicable
         if skill_template.target_type == "ENEMY_MOB":
             if isinstance(target_entity, models.RoomMobInstance) and target_entity.current_health > 0:
                 target_mob_instance = target_entity
             else:
                 skill_log.append(f"Your target for {skill_template.name} is invalid or already defeated.")
-                return skill_log, False, character_after_skill # Return original character
+                return skill_log, False, character_after_skill 
 
-        # Pay Mana Cost for COMBAT_ACTIVE (if target valid or skill is self-targeted/no specific mob target needed yet)
         if mana_cost > 0:
+            # Apply mana cost to character_after_skill, which is a direct reference to character at this point
             character_after_skill.current_mana -= mana_cost 
             skill_log.append(f"You spend {mana_cost} mana.")
         action_taken = True
 
-        # --- Specific COMBAT_ACTIVE Skill Logic ---
         if skill_template.skill_id_tag == "basic_punch":
-            if skill_template.target_type != "ENEMY_MOB" or not target_mob_instance: # Explicit check for this skill
+            if skill_template.target_type != "ENEMY_MOB" or not target_mob_instance: 
                 skill_log.append(f"'Basic Punch' requires a valid enemy mob target.")
-                return skill_log, True, character_after_skill # Mana spent, but action failed
-            mob_name_formatted = get_formatted_mob_name(target_mob_instance, character)
-            # Now target_mob_instance is guaranteed to be a valid RoomMobInstance
+                return skill_log, True, character_after_skill 
+            mob_name_formatted = get_formatted_mob_name(target_mob_instance, character_after_skill) # Use character_after_skill
             mob_ac = target_mob_instance.mob_template.base_defense if target_mob_instance.mob_template.base_defense is not None else 10
             punch_char_ref = character_after_skill 
             punch_combat_stats = punch_char_ref.calculate_combat_stats()
@@ -79,9 +75,11 @@ async def resolve_skill_effect(
                     skill_log.append(f"<span class='combat-death'>The {mob_name_formatted} DIES! Good punch, champ.</span>")
                     await broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
                                                   f"The {mob_name_formatted} DIES!")
-                    character_after_skill = await handle_mob_death_loot_and_cleanup(
+                    # Correctly unpack the result from handle_mob_death_loot_and_cleanup
+                    char_obj_after_loot, _, _ = await handle_mob_death_loot_and_cleanup(
                         db, character_after_skill, updated_mob, skill_log, player_id, current_room_id_for_broadcast
                     )
+                    character_after_skill = char_obj_after_loot # Assign the character object
                 elif updated_mob:
                      skill_log.append(f"  {mob_name_formatted} HP: <span class='combat-hp'>{updated_mob.current_health}/{updated_mob.base_health}</span>.")
             else: 
@@ -90,9 +88,9 @@ async def resolve_skill_effect(
                                               f"<span class='char-name'>{punch_char_ref.name}</span> MISSES the {mob_name_formatted} with a punch.")
 
         elif skill_template.skill_id_tag == "power_attack_melee":
-            if skill_template.target_type != "ENEMY_MOB" or not target_mob_instance: # Explicit check
+            if skill_template.target_type != "ENEMY_MOB" or not target_mob_instance: 
                 skill_log.append(f"'Power Attack' requires a valid enemy mob target.")
-                return skill_log, True, character_after_skill # Mana spent, action failed
+                return skill_log, True, character_after_skill 
 
             pa_char_ref = character_after_skill
             pa_combat_stats = pa_char_ref.calculate_combat_stats()
@@ -117,9 +115,11 @@ async def resolve_skill_effect(
                     skill_log.append(f"<span class='combat-death'>The {target_mob_instance.mob_template.name} is OBLITERATED by the Power Attack!</span>")
                     await broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
                                                   f"The <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span> DIES from a mighty blow!")
-                    character_after_skill = await handle_mob_death_loot_and_cleanup(
+                    # Correctly unpack the result from handle_mob_death_loot_and_cleanup
+                    char_obj_after_loot, _, _ = await handle_mob_death_loot_and_cleanup(
                         db, character_after_skill, updated_mob, skill_log, player_id, current_room_id_for_broadcast
                     )
+                    character_after_skill = char_obj_after_loot # Assign the character object
                 elif updated_mob:
                      skill_log.append(f"  {target_mob_instance.mob_template.name} HP: <span class='combat-hp'>{updated_mob.current_health}/{target_mob_instance.mob_template.base_health}</span>.")
             else: 
@@ -128,20 +128,18 @@ async def resolve_skill_effect(
                                               f"<span class='char-name'>{pa_char_ref.name}</span> misses a Power Attack on <span class='inv-item-name'>{target_mob_instance.mob_template.name}</span>.")
         
         elif skill_template.skill_id_tag == "minor_heal_active":
-            # This skill might target SELF or FRIENDLY_CHAR
             heal_char_ref = character_after_skill 
-            actual_target_char = heal_char_ref # Default to self
+            actual_target_char = heal_char_ref 
             
             if skill_template.target_type == "FRIENDLY_CHAR_OR_SELF":
-                if isinstance(target_entity, models.Character): # and target_entity.id != heal_char_ref.id: (allow self-target via entity)
-                    # TODO: Add logic to check if target_entity is friendly / in same party / in range
+                if isinstance(target_entity, models.Character): 
                     actual_target_char = target_entity 
-                elif target_entity is None or target_entity == "self": # Explicit self target or no target given
+                elif target_entity is None or target_entity == "self": 
                      actual_target_char = heal_char_ref
                 else:
                     skill_log.append(f"Invalid target for Minor Heal. Must be self or a friendly character.")
-                    return skill_log, True, character_after_skill # Mana spent, action failed
-            else: # Should not happen if skill definition is correct
+                    return skill_log, True, character_after_skill 
+            else: 
                 skill_log.append(f"Minor Heal has unexpected target_type: {skill_template.target_type}")
                 return skill_log, True, character_after_skill
 
@@ -159,15 +157,16 @@ async def resolve_skill_effect(
             if actual_target_char.id != heal_char_ref.id:
                  await broadcast_combat_event(db, current_room_id_for_broadcast, player_id,
                                              f"<span class='char-name'>{heal_char_ref.name}</span> heals <span class='char-name'>{actual_target_char.name}</span>.")
-            # If actual_target_char was modified and it's not character_after_skill, it needs to be added to session too
-            if actual_target_char.id != character_after_skill.id:
-                db.add(actual_target_char)
+            if actual_target_char.id != character_after_skill.id: # If healing another character
+                db.add(actual_target_char) # Ensure the other character's changes are staged
+            elif healed_for > 0 : # If healing self and HP actually changed
+                # character_after_skill (which is actual_target_char here) is already the main character object being tracked
+                pass
 
-        # ... (other COMBAT_ACTIVE skills, each ensuring its own target validity) ...
+
         else:
             skill_log.append(f"The combat skill '{skill_template.name}' is not fully implemented for the target type '{skill_template.target_type}'.")
 
-    # ... (UTILITY_OOC and PASSIVE sections as before, they manage their own target_entity or lack thereof) ...
     elif skill_template.skill_type == "UTILITY_OOC":
         if mana_cost > 0:
             character_after_skill.current_mana -= mana_cost
@@ -175,10 +174,9 @@ async def resolve_skill_effect(
         action_taken = True
 
         if skill_template.target_type == "DOOR":
-            # ... (pick_lock_basic logic as before, it validates target_entity is a string (direction)) ...
             if not isinstance(target_entity, str):
                 skill_log.append("You must specify a direction for this skill (e.g., 'use pick_lock north').")
-                return skill_log, True, character_after_skill # Mana spent, action failed
+                return skill_log, True, character_after_skill 
             
             target_direction = target_entity.lower() 
             current_room_orm = crud.crud_room.get_room_by_id(db, room_id=current_room_id_for_broadcast)
@@ -202,20 +200,14 @@ async def resolve_skill_effect(
 
             if not exit_detail.is_locked:
                 skill_log.append(f"The way {target_direction} is already unlocked.")
-                action_taken = False # No real action/failure if already unlocked
-                # Don't refund mana if it was already spent, but it was a "no-op"
+                action_taken = False 
                 return skill_log, action_taken, character_after_skill 
             
             skill_can_pick_this_lock = False
-            if not exit_detail.skill_to_pick: # Check if skill_to_pick is defined at all
+            if not exit_detail.skill_to_pick: 
                 skill_log.append(f"The lock on the {target_direction} exit doesn't seem to require a specific skill, or its lock data is malformed.")
-                # Or, if no skill_to_pick means it *cannot* be picked by skill, this is a failure.
-                # Depending on game logic:
-                # skill_log.append(f"This lock cannot be picked with your current skills.")
-                return skill_log, True, character_after_skill # Mana spent, action failed due to lock type
+                return skill_log, True, character_after_skill 
             
-            # Now we know exit_detail.skill_to_pick is not None
-            skill_can_pick_this_lock = False
             if exit_detail.skill_to_pick.skill_id_tag == skill_template.skill_id_tag:
                 skill_can_pick_this_lock = True
             
@@ -225,7 +217,6 @@ async def resolve_skill_effect(
 
             required_item_tag = skill_template.effects_data.get("requires_item_tag_equipped_or_inventory")
             if required_item_tag:
-                # Ensure crud.crud_character_inventory.character_has_item_with_tag is implemented
                 has_required_item = crud.crud_character_inventory.character_has_item_with_tag(db, character_id=character_after_skill.id, item_tag=required_item_tag)
                 if not has_required_item:
                     item_name_for_msg = required_item_tag.replace("_", " ").title()
@@ -244,7 +235,7 @@ async def resolve_skill_effect(
                 updated_exits_for_orm[target_direction] = exit_detail.model_dump(mode='json')
                 current_room_orm.exits = updated_exits_for_orm
                 attributes.flag_modified(current_room_orm, "exits")
-                db.add(current_room_orm) # Stage room change
+                db.add(current_room_orm) 
 
                 skill_log.append(f"<span class='success-message'>Success!</span> With a satisfying *click*, you pick the lock to the {target_direction} (Roll: {roll} vs DC: {required_dc}).")
                 await broadcast_to_room_participants(
@@ -257,7 +248,6 @@ async def resolve_skill_effect(
 
         elif skill_template.target_type == "SELF":
             skill_log.append(f"You use {skill_template.name} on yourself. (Effect needs specific implementation for {skill_template.skill_id_tag})")
-            # Example: crud.crud_status_effect.add_status_effect(db, character_after_skill, skill_template.effects_data.get("status_effect_apply"))
 
         else:
             skill_log.append(f"The OOC utility skill '{skill_template.name}' has an unhandled target type: {skill_template.target_type}.")
@@ -271,8 +261,13 @@ async def resolve_skill_effect(
         action_taken = False
 
     # Stage the character if their mana (or other direct attributes like health from healing) changed.
-    if character_after_skill.current_mana != character.current_mana or \
-       character_after_skill.current_health != character.current_health:
-        db.add(character_after_skill)
+    # Ensure character_after_skill is indeed a Character object before accessing attributes.
+    if isinstance(character_after_skill, models.Character):
+        if character_after_skill.current_mana != character.current_mana or \
+           character_after_skill.current_health != character.current_health:
+            db.add(character_after_skill)
+    elif character_after_skill is not None: # It's not a Character, but it's also not None (unexpected type)
+        logger.error(f"resolve_skill_effect: character_after_skill is of unexpected type {type(character_after_skill)} before final return.")
+
 
     return skill_log, action_taken, character_after_skill

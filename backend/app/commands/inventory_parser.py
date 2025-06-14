@@ -84,7 +84,7 @@ async def handle_equip(context: CommandContext) -> schemas.CommandResponse:
     unequipped_items_orm: List[models.CharacterInventoryItem] = [
         item for item in char_inventory_items_orm if not item.equipped and item.item
     ]
-
+    
     aggregated_backpack_for_map: Dict[str, List[models.CharacterInventoryItem]] = {}
     for inv_item_orm in unequipped_items_orm:
         item_name = inv_item_orm.item.name
@@ -106,11 +106,40 @@ async def handle_equip(context: CommandContext) -> schemas.CommandResponse:
         ref_num = int(item_ref_str)
         found_inv_item_entry = temp_backpack_map_by_display_number.get(ref_num)
     except ValueError:
-        matching_instances = aggregated_backpack_for_map.get(item_ref_str.lower())
-        if matching_instances:
-            found_inv_item_entry = matching_instances[0]
-            if len(matching_instances) > 1 and found_inv_item_entry.item:
-                preliminary_message = f"(You have multiple unequipped '{found_inv_item_entry.item.name}'. Equipping one.)\n"
+        # Not a number, try to match by name (exact then partial)
+        # 1. Try for an exact (case-insensitive) name match first
+        exact_match_key_found: Optional[str] = None
+        for item_name_in_map_keys in aggregated_backpack_for_map.keys():
+            if item_name_in_map_keys.lower() == item_ref_str.lower():
+                exact_match_key_found = item_name_in_map_keys
+                break
+        
+        if exact_match_key_found:
+            instances_of_exact_match = aggregated_backpack_for_map[exact_match_key_found]
+            if instances_of_exact_match:
+                found_inv_item_entry = instances_of_exact_match[0] # Pick the first stack/instance
+                if len(instances_of_exact_match) > 1 and found_inv_item_entry.item:
+                    preliminary_message = f"(You have multiple unequipped stacks of '{found_inv_item_entry.item.name}'. Equipping one.)\n"
+        else:
+            # 2. If no exact match, try for partial (case-insensitive) name match
+            first_instance_from_each_partially_matching_name: List[models.CharacterInventoryItem] = []
+            
+            # Sort keys from aggregated_backpack_for_map for deterministic behavior
+            # The `sorted_item_names` variable is already available and sorted.
+            for item_name_key in sorted_item_names: # Use pre-sorted keys
+                if item_ref_str.lower() in item_name_key.lower(): # item_name_key is original case
+                    instances_list = aggregated_backpack_for_map[item_name_key]
+                    if instances_list:
+                        first_instance_from_each_partially_matching_name.append(instances_list[0])
+            
+            if len(first_instance_from_each_partially_matching_name) == 1:
+                found_inv_item_entry = first_instance_from_each_partially_matching_name[0]
+            elif len(first_instance_from_each_partially_matching_name) > 1:
+                found_inv_item_entry = first_instance_from_each_partially_matching_name[0] # Pick the first one
+                
+                distinct_matched_item_names = sorted(list(set(inst.item.name for inst in first_instance_from_each_partially_matching_name if inst.item)))
+                if found_inv_item_entry.item: # Ensure item exists before accessing name
+                    preliminary_message = f"(Multiple items like '{item_ref_str}' found: {', '.join(distinct_matched_item_names)}. Equipping '{found_inv_item_entry.item.name}'.)\n"
 
     # --- Final equip logic and response (from old version, this is crucial) ---
     if found_inv_item_entry and found_inv_item_entry.item:
@@ -127,14 +156,14 @@ async def handle_equip(context: CommandContext) -> schemas.CommandResponse:
 
         if equipped_item_orm and "Staged equipping" in crud_message:
             message_to_player = (preliminary_message or "") + f"You equip the {found_inv_item_entry.item.name}."
-            context.db.commit() # This is the money shot
+            # context.db.commit() # Commit is handled by the calling endpoint wrapper
         else:
             message_to_player = (preliminary_message or "") + crud_message
             logger.warning(f"[HANDLER_EQUIP] Equip failed for '{found_inv_item_entry.item.name}': {crud_message}")
     else:
         message_to_player = f"You don't have an unequipped item matching '{item_ref_str}'."
         logger.info(f"[HANDLER_EQUIP] Item not found for ref: '{item_ref_str}'")
-
+    
     return schemas.CommandResponse(
         room_data=context.current_room_schema,
         message_to_player=message_to_player

@@ -26,6 +26,13 @@
   margin-bottom: -2px; /* Pull it down to cover the container border */
 }
 
+/* Style for the hotkey character */
+.tab-hotkey {
+  text-decoration: underline;
+  font-weight: bold;
+}
+
+
 @keyframes pulse-glow {
   0% {
     box-shadow: 0 0 5px #ffab00, inset 0 0 3px #ffab00;
