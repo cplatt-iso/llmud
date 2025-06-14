@@ -85,10 +85,22 @@ export const apiService = {
         if (!response.ok) throw new Error('Failed to fetch abilities');
         return response.json();
     },
-    createCharacter: (characterData, token) => { // ADD THIS FUNCTION
+    createCharacter: (characterData, token) => {
         return fetchData('/character/create', {
             method: 'POST',
             body: characterData
+        }, token);
+    },
+    equipItem: (inventoryItemEntryId, targetSlotKey, token) => {
+        return fetchData(`/inventory/equip/${inventoryItemEntryId}`, {
+            method: 'POST',
+            body: { target_slot: targetSlotKey }
+        }, token);
+    },
+    unequipItem: (inventoryItemEntryId, token) => {
+        return fetchData(`/inventory/unequip/${inventoryItemEntryId}`, {
+            method: 'POST', // Backend endpoint is POST
+            // No body needed for this unequip endpoint
         }, token);
     },
     fetchWhoList: async (token) => {

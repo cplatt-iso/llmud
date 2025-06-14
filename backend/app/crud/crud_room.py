@@ -1,10 +1,10 @@
 # backend/app/crud/crud_room.py
 import json
-import os 
-import uuid
-import logging 
-from typing import Optional, Dict, List, Any, Tuple 
-from sqlalchemy.orm import Session, attributes 
+import os
+import uuid # Ensure uuid is imported
+import logging # Add this line
+from typing import Optional, List, Dict, Any, Tuple # Ensure necessary typing imports
+from sqlalchemy.orm import Session, selectinload, joinedload, attributes
 
 from .. import models, schemas, crud 
 from ..schemas.common_structures import ExitDetail, ExitSkillToPickDetail # Ensure these are imported
@@ -27,7 +27,16 @@ def _load_seed_data(filename: str) -> List[Dict[str, Any]]:
         return []
 
 def get_room_by_id(db: Session, room_id: uuid.UUID) -> Optional[models.Room]:
-    return db.query(models.Room).filter(models.Room.id == room_id).first()
+    """
+    Retrieves a room by its ID, eagerly loading related entities
+    like items on ground and mobs. NPCs are resolved by the Pydantic schema
+    from the 'npc_placements' field.
+    """
+    return db.query(models.Room).options(
+        selectinload(models.Room.items_on_ground).selectinload(models.RoomItemInstance.item), # MODIFIED HERE
+        selectinload(models.Room.mobs_in_room).selectinload(models.RoomMobInstance.mob_template)
+        # The line for npcs_in_room was correctly removed.
+    ).filter(models.Room.id == room_id).first()
 
 def get_rooms_by_z_level(db: Session, *, z_level: int) -> List[models.Room]:
     return db.query(models.Room).filter(models.Room.z == z_level).all()

@@ -1,0 +1,100 @@
+.equipment-screen-container {
+  display: flex;
+  height: 100%;
+  padding: 10px;
+  gap: 15px;
+  color: var(--color-text-normal);
+  background-color: var(--color-background-dark);
+  overflow-y: auto; /* Allow scrolling if content overflows */
+}
+
+.equipment-screen-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-style: italic;
+  color: var(--color-text-muted);
+}
+
+.equipped-slots-panel,
+.equippable-items-panel {
+  flex: 1;
+  background-color: var(--color-background-medium);
+  border: 1px solid var(--color-border-medium);
+  padding: 15px;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto; /* Allow internal scrolling if needed */
+}
+
+.panel-header {
+  color: var(--color-text-accent);
+  margin-top: 0;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.equipment-slot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 5px;
+  border-bottom: 1px solid var(--color-border-light);
+  min-height: 30px; /* Ensure consistent height */
+}
+
+.equipment-slot:last-child {
+  border-bottom: none;
+}
+
+.slot-label {
+  color: var(--color-text-muted);
+  font-weight: bold;
+  margin-right: 10px;
+  flex-shrink: 0; /* Prevent label from shrinking */
+}
+
+.slot-item-display {
+  text-align: right;
+  flex-grow: 1;
+}
+
+.slot-empty {
+  color: #666;
+  font-style: italic;
+}
+
+.equippable-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.equippable-item {
+  padding: 8px;
+  background-color: var(--color-background-light);
+  border: 1px solid var(--color-border-light);
+  border-radius: 3px;
+  cursor: grab; /* Hint for draggable items later */
+}
+
+.equippable-item:hover {
+  background-color: var(--color-background-hover);
+  border-color: var(--color-border-medium-dark);
+}
+
+.item-quantity {
+  color: #aaa;
+  font-style: italic;
+  font-size: 0.9em;
+  margin-left: 5px;
+}
+
+.items-empty-message {
+  color: #666;
+  font-style: italic;
+  padding: 10px;
+}

@@ -8,7 +8,8 @@ import Inventory from './Inventory';
 import SkillsList from './SkillsList';
 import TraitsList from './TraitsList';
 import ChatWindow from './ChatWindow';
-import WhoList from './WhoList'; // Import the new component
+import WhoList from './WhoList';
+import EquipmentScreen from './EquipmentScreen'; // Import the new component
 
 // No CSS import here if GameLayout handles it.
 
@@ -37,9 +38,10 @@ const TabContent = () => {
         return <ChatWindow />;
       case 'Score':
         return <ScoreSheet />;
-      case 'Backpack':
-      case 'Equipment':
+      case 'Backpack': // 'Backpack' tab will still use the old Inventory component
         return <Inventory />;
+      case 'Equipment': // 'Equipment' tab uses the new EquipmentScreen
+        return <EquipmentScreen />;
       case 'Skills/Spells':
         return <SkillsList />;
       case 'Traits':
