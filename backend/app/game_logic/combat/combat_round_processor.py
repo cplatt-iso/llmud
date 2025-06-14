@@ -7,8 +7,9 @@ from typing import List, Optional, Tuple, Union, Dict, Any
 from sqlalchemy.orm import Session, attributes
 
 from app import crud, models, schemas
-from app.commands.utils import roll_dice, get_formatted_mob_name
+from app.commands.utils import roll_dice, get_formatted_mob_name, get_dynamic_room_description
 from .combat_utils import handle_mob_death_loot_and_cleanup # Existing import
+from app import websocket_manager # MODIFIED IMPORT: Import the module
 
 # combat sub-package imports
 from .combat_state_manager import (
@@ -16,10 +17,11 @@ from .combat_state_manager import (
     end_combat_for_character
 )
 from .skill_resolver import resolve_skill_effect
+
 from .combat_utils import (
     send_combat_log, 
     perform_server_side_move, direction_map,
-    broadcast_to_room_participants 
+    broadcast_to_room_participants    
 )
 from app.ws_command_parsers.ws_interaction_parser import _send_inventory_update_to_player
 
@@ -349,12 +351,24 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
         "silver": character.silver_coins, "copper": character.copper_coins
     }
     
-    room_data_to_send = None
-    if final_room_for_payload_orm and room_of_action_orm and final_room_for_payload_orm.id != room_of_action_orm.id: 
-         room_data_to_send = schemas.RoomInDB.from_orm(final_room_for_payload_orm)
+    final_room_schema_for_response = None
+    if final_room_for_payload_orm:
+        final_dynamic_desc = get_dynamic_room_description(final_room_for_payload_orm)
+        final_room_dict = schemas.RoomInDB.from_orm(final_room_for_payload_orm).model_dump()
+        final_room_dict["description"] = final_dynamic_desc
+        final_room_schema_for_response = schemas.RoomInDB(**final_room_dict)
 
     await send_combat_log(
-        player_id, round_log, combat_over=combat_resolved_this_round, 
-        room_data=room_data_to_send, 
+        player_id, 
+        round_log, 
+        room_data=final_room_schema_for_response, 
         character_vitals=final_vitals_payload
     )
+    
+    # If XP or level could have changed, notify clients to update their Who list
+    if any("XP gained" in log_entry for log_entry in round_log) or \
+       any("You have reached Level" in log_entry for log_entry in round_log):
+        await websocket_manager.connection_manager.broadcast({"type": "who_list_updated"}) # MODIFIED USAGE
+        logger.info(f"Combat round for char {character_id} resulted in XP/level change. Broadcasted who_list_updated.")
+
+    logger.info(f"Combat round processed for character {character_id}. Total log entries: {len(round_log)}")

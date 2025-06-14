@@ -46,3 +46,6 @@ from .abilities import (
 from .chat import (
     ChatChannel, ChatChannelStyle, ChatMessagePayload
 )
+
+from .who import (WhoListEntry, CharacterBasicInfo
+)

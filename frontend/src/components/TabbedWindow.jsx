@@ -8,6 +8,7 @@ import Inventory from './Inventory';
 import SkillsList from './SkillsList';
 import TraitsList from './TraitsList';
 import ChatWindow from './ChatWindow';
+import WhoList from './WhoList'; // Import the new component
 
 // No CSS import here if GameLayout handles it.
 
@@ -43,6 +44,8 @@ const TabContent = () => {
         return <SkillsList />;
       case 'Traits':
         return <TraitsList />;
+      case 'Who': // Add case for Who tab
+        return <WhoList />;
       default:
         return <div className="placeholder-content">The '{activeTab}' tab is under construction. Now fuck off.</div>;
     }

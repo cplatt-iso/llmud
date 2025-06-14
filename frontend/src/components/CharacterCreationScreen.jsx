@@ -64,16 +64,15 @@ function CharacterCreationScreen() {
         setError('');
         try {
             const characterData = { name, class_name: selectedClass };
-            await apiService.createCharacter(characterData, token);
+            // Assuming apiService.createCharacter exists and is similar to other apiService calls
+            await apiService.createCharacter(characterData, token); 
             
-            // Important: Clear the old character list so it re-fetches on the selection screen.
-            useGameStore.getState().setCharacterList([]);
-            
-            // This sets the sessionState back to 'CHAR_SELECT'.
+            useGameStore.getState().setCharacterList([]); 
             finishCharacterCreation();
 
         } catch (err) {
-            setError(err.data?.detail || 'An error occurred during character creation.');
+            console.error("Full error object during character creation:", err); // ADD THIS LINE
+            setError(err.data?.detail || err.message || 'An error occurred during character creation.'); // Modified to also try err.message
         } finally {
             setIsSubmitting(false);
         }

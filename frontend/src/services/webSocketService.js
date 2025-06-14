@@ -21,7 +21,7 @@ const handleMessage = (event) => {
         console.log("WS RCV:", serverData);
 
         // Get all the actions we might need from the store.
-        const { addLogLine, addMessage, setVitals } = getState();
+        const { addLogLine, addMessage, setVitals, fetchWhoList } = getState(); // Add fetchWhoList
 
         switch (serverData.type) {
             case "welcome_package":
@@ -95,6 +95,11 @@ const handleMessage = (event) => {
                 if (serverData.payload) {
                     addMessage(serverData.payload);
                 }
+                break;
+            
+            case "who_list_updated": // New case
+                console.log("WS: Received who_list_updated, fetching new list.");
+                fetchWhoList();
                 break;
  
             default:

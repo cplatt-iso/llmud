@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Body, Request
 from sqlalchemy.orm import Session
 import uuid
-from typing import Any, List
+from typing import List, Any # Ensure List and Any are imported
 
 from .... import schemas, crud, models
 from ....db.session import get_db
@@ -10,6 +10,7 @@ from ....db.session import get_db
 from ....api.dependencies import get_current_player, get_current_active_character
 from ....game_state import active_game_sessions # <<< ADDED THIS IMPORT
 from app.schemas.abilities import CharacterAbilitiesResponse
+from app.websocket_manager import connection_manager # Import connection_manager
 
 import logging
 
@@ -156,3 +157,30 @@ async def get_player_abilities(
     """
     abilities_data = crud.crud_character.get_character_abilities(db, character=current_char)
     return CharacterAbilitiesResponse(**abilities_data)
+
+@router.get("/who_list", response_model=List[schemas.WhoListEntry])
+def get_who_list(
+    db: Session = Depends(get_db),
+    # current_player: models.Player = Depends(get_current_player) # Optional: secure if needed, but who list is often public
+) -> Any:
+    """
+    Retrieve a list of all currently online characters.
+    """
+    online_character_ids = list(connection_manager.player_active_characters.values())
+    
+    who_list_entries: List[schemas.WhoListEntry] = []
+    for char_id in online_character_ids:
+        character = crud.crud_character.get_character(db, character_id=char_id)
+        if character:
+            who_list_entries.append(
+                schemas.WhoListEntry(
+                    name=character.name,
+                    class_name=character.class_name,
+                    level=character.level,
+                    experience_points=character.experience_points
+                )
+            )
+            
+    # Sort by name for consistent display
+    who_list_entries.sort(key=lambda x: x.name.lower())
+    return who_list_entries

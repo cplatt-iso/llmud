@@ -35,6 +35,10 @@ class ConnectionManager:
             character = crud.crud_character.get_character(db, character_id=character_id)
             if character:
                 self.character_locations[character_id] = character.current_room_id
+        
+        # Broadcast that the who list might have changed
+        await self.broadcast({"type": "who_list_updated"})
+        logger.info(f"Player {player_id} (Char: {character_id}) connected. Broadcasted who_list_updated.")
 
     def update_last_seen(self, player_id: uuid.UUID):
         self.player_last_seen[player_id] = time.time()
@@ -134,9 +138,14 @@ class ConnectionManager:
         logger.info(f"Initiating full disconnect for player {player_id} due to: {reason_key}")
         character_id = self.get_character_id(player_id)
         
+        original_room_id_for_broadcast: Optional[uuid.UUID] = None
+
         if not character_id:
             logger.warning(f"Cannot perform full disconnect for player {player_id}: No active character found.")
             self.disconnect(player_id) # Perform shallow disconnect anyway
+            # Broadcast who list update even if character details are murky, as a player did disconnect
+            await self.broadcast({"type": "who_list_updated"})
+            logger.info(f"Player {player_id} (no char_id found) disconnected. Broadcasted who_list_updated.")
             return
 
         with SessionLocal() as db: # Use context manager for session
@@ -144,7 +153,12 @@ class ConnectionManager:
             if not character:
                 logger.warning(f"Cannot perform full disconnect for player {player_id}, char_id {character_id}: Character not found in DB.")
                 self.disconnect(player_id) # Perform shallow disconnect
+                # Broadcast who list update
+                await self.broadcast({"type": "who_list_updated"})
+                logger.info(f"Player {player_id} (char_id {character_id} not in DB) disconnected. Broadcasted who_list_updated.")
                 return
+            
+            original_room_id_for_broadcast = character.current_room_id
 
             # 1. Handle game state changes (combat, resting)
             end_combat_for_character(character.id, reason=f"disconnect_{reason_key}")
@@ -177,7 +191,10 @@ class ConnectionManager:
         
         # 4. Perform the shallow disconnect to clean up manager state
         self.disconnect(player_id)
-        logger.info(f"Full disconnect for player {player_id} complete.")
+        
+        # 5. Broadcast that the who list might have changed AFTER cleaning up internal state
+        await self.broadcast({"type": "who_list_updated"})
+        logger.info(f"Full disconnect for player {player_id} complete. Broadcasted who_list_updated.")
 
 # Global instance
 connection_manager = ConnectionManager()

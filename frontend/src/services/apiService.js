@@ -54,26 +54,49 @@ export const apiService = {
     fetchClassTemplates: (token) => {
         return fetchData('/character-class/templates', {}, token);
     },
-    fetchCharacterDetails: (token) => {
-        return fetchData('/character/me/active', {}, token);
+    fetchCharacterDetails: async (token) => {
+        const response = await fetch(`${API_BASE_URL}/character/me/active`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to fetch character details');
+        return response.json();
     },
-    fetchInventory: (token) => {
-        return fetchData('/character/me/inventory', {}, token);
+    fetchInventory: async (token) => {
+        const response = await fetch(`${API_BASE_URL}/inventory/mine`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to fetch inventory');
+        return response.json();
     },
     selectCharacterOnBackend: (characterId, token) => {
         return fetchData(`/character/${characterId}/select`, { method: 'POST' }, token);
     },
-    fetchMapData: (token) => {
-        // This endpoint might need to be adjusted if it needs a z-level or other params
-        return fetchData('/map/level_data', {}, token);
+    fetchMapData: async (token) => {
+        const response = await fetch(`${API_BASE_URL}/map/level_data`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to fetch map data');
+        return response.json();
     },
-    createCharacter: (characterData, token) => {
+    fetchAbilities: async (token) => {
+        const response = await fetch(`${API_BASE_URL}/character/me/abilities`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to fetch abilities');
+        return response.json();
+    },
+    createCharacter: (characterData, token) => { // ADD THIS FUNCTION
         return fetchData('/character/create', {
             method: 'POST',
-            body: characterData // e.g., { name: 'Grog', class_name: 'Barbarian' }
+            body: characterData
         }, token);
     },
-    fetchAbilities: (token) => {
-        return fetchData('/character/me/abilities', {}, token);
+    fetchWhoList: async (token) => {
+        const response = await fetch(`${API_BASE_URL}/character/who_list`, {
+            // No token needed if it's a public endpoint, otherwise add:
+            // headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to fetch who list');
+        return response.json();
     },
 };

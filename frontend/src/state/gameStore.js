@@ -28,7 +28,7 @@ const initialState = {
   characterStats: null,
   inventory: null,
   abilities: null,
-  whoListData: null,
+  whoListData: null, // Added for Who List
 };
 
 const useGameStore = create(
@@ -100,6 +100,7 @@ const useGameStore = create(
       if (tabName === 'Score' && !state.characterStats) state.fetchScoreSheet();
       if ((tabName === 'Backpack' || tabName === 'Equipment') && !state.inventory) state.fetchInventory();
       if ((tabName === 'Skills/Spells' || tabName === 'Traits') && !state.abilities) state.fetchAbilities();
+      if (tabName === 'Who' && !state.whoListData) state.fetchWhoList(); // Fetch Who List
     },
 
     fetchAbilities: async () => {
@@ -151,7 +152,15 @@ const useGameStore = create(
     },
 
     fetchWhoList: async () => {
-      get().addLogLine("! 'Who' command not yet implemented.");
+      // const token = get().token; // Needed if endpoint is secured
+      // if (!token && endpoint_is_secured) return;
+      try {
+        const whoData = await apiService.fetchWhoList(/*token*/);
+        set({ whoListData: whoData });
+      } catch (error) {
+        console.error("Failed to fetch who list:", error);
+        get().addLogLine("! Could not retrieve who list.");
+      }
     },
 
     logout: () => {
