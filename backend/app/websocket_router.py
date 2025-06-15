@@ -20,7 +20,8 @@ from app.ws_command_parsers import (
     handle_ws_flee,
     handle_ws_attack,
     handle_ws_use_combat_skill,
-    handle_ws_rest
+    handle_ws_rest,
+    handle_ws_movement
 )
 from app.ws_command_parsers.ws_interaction_parser import _send_inventory_update_to_player
 
@@ -125,17 +126,26 @@ async def websocket_game_endpoint(
                     set_character_resting_status(current_char_state.id, False)
                     await combat.send_combat_log(fresh_player.id, ["You stop resting."])
 
-                real_time_verbs = ["attack", "atk", "kill", "k", "use", "flee", "rest"]
-                if verb in real_time_verbs:
-                    if verb in ["attack", "atk", "kill", "k"]:
+                combat_verbs = {"attack", "atk", "kill", "k", "use", "flee"}
+                movement_verbs = {"n", "north", "s", "south", "e", "east", "w", "west", "u", "up", "d", "down", "go"}
+                state_verbs = {"rest"}
+
+                if verb in combat_verbs:
+                    if verb in {"attack", "atk", "kill", "k"}:
                         await handle_ws_attack(db_loop, fresh_player, current_char_state, current_room_orm, args_str)
                     elif verb == "use":
                         await handle_ws_use_combat_skill(db_loop, fresh_player, current_char_state, schemas.RoomInDB.from_orm(current_room_orm), args_str)
                     elif verb == "flee":
                         await handle_ws_flee(db_loop, fresh_player, current_char_state, schemas.RoomInDB.from_orm(current_room_orm), args_str)
-                    elif verb == "rest":
+                
+                elif verb in movement_verbs: # <<< THE HOLY GRAIL
+                    await handle_ws_movement(db_loop, fresh_player, current_char_state, schemas.RoomInDB.from_orm(current_room_orm), verb, args_str)
+                
+                elif verb in state_verbs:
+                    if verb == "rest":
                         await handle_ws_rest(db_loop, fresh_player, current_char_state, current_room_orm)
-                else:
+
+                else: # Fallback to the HTTP-style command processor for everything else (look, say, inv, etc.)
                     context = CommandContext(
                         db=db_loop,
                         active_character=current_char_state,

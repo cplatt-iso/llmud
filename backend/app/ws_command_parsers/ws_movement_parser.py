@@ -73,13 +73,10 @@ async def attempt_player_move(
         logger.error(f"Character {character_state.name} is in an invalid room ID {character_state.current_room_id}")
         await combat.send_combat_log(player.id, ["Error: Your current location is undefined."]); return
     
-    # ... (the lock/key checking logic is the same as the last version, which worked)
-    # Ensure current_room_orm_before_move.exits is not None before calling .get()
     current_exits = current_room_orm_before_move.exits or {}
     exit_data_dict = current_exits.get(target_direction_canonical)
 
     if not exit_data_dict:
-        # Prepare room_data for the failure message
         current_room_schema_for_fail = schemas.RoomInDB.from_orm(current_room_orm_before_move)
         await combat.send_combat_log(player.id, ["You can't go that way."], room_data=current_room_schema_for_fail); return
     
@@ -90,33 +87,55 @@ async def attempt_player_move(
          message_to_player_on_fail = "The path ahead seems to vanish into nothingness."
     elif not exit_detail_model.is_locked:
         moved_successfully = True
-    else:
+    else: # Exit is locked
+        logger.error("!!!!!!!!!! [MOVE_ATTEMPT] CRITICAL_DEBUG: ENTERED 'EXIT IS LOCKED' BLOCK !!!!!!!!!!") # <--- ADD THIS VERY OBVIOUS LOG
         key_tag = exit_detail_model.key_item_tag_opens
-        if key_tag and crud.crud_character_inventory.character_has_item_with_tag(db, character_state.id, key_tag):
-            # Unlock logic...
-            # Ensure current_room_orm_before_move.exits is not None before creating dict
-            source_exits = dict(current_room_orm_before_move.exits or {})
-            if target_direction_canonical in source_exits: # Check if key exists before modifying
-                source_exits[target_direction_canonical]['is_locked'] = False
-                current_room_orm_before_move.exits = source_exits # Assign back the modified dictionary
-                attributes.flag_modified(current_room_orm_before_move, "exits")
-            
-            opposite_direction = get_opposite_direction(target_direction_canonical)
-            # Ensure target_room_orm_for_move.exits is not None before creating dict
-            target_exits = dict(target_room_orm_for_move.exits or {})
-            if opposite_direction and opposite_direction in target_exits: # Check if key exists
-                target_exits[opposite_direction]['is_locked'] = False
-                target_room_orm_for_move.exits = target_exits # Assign back
-                attributes.flag_modified(target_room_orm_for_move, "exits")
-                db.add(target_room_orm_for_move) # Add to session if modified
+        # This is the first of your existing debug logs, ensure it's still here or re-add if removed
+        logger.debug(f"[MOVE_ATTEMPT] Character: {character_state.name} ({character_state.id}) trying to move {target_direction_canonical}.")
+        logger.debug(f"[MOVE_ATTEMPT] Door is locked. Requires key_tag: '{key_tag}'. Lock ID: '{exit_detail_model.lock_id_tag}'.")
 
-            db.add(current_room_orm_before_move) # Add to session if modified
-            await combat.send_combat_log(player.id, ["<span class='system-message-inline'>You unlock the way forward.</span>"])
-            moved_successfully = True
-        else:
+        if key_tag:
+            has_key = crud.crud_character_inventory.character_has_item_with_tag(db, character_state.id, key_tag)
+            logger.debug(f"[MOVE_ATTEMPT] Result of character_has_item_with_tag(key_tag='{key_tag}'): {has_key}")
+
+            if has_key:
+                logger.info(f"[MOVE_ATTEMPT] Character {character_state.name} HAS key '{key_tag}'. Unlocking door '{exit_detail_model.lock_id_tag}'.")
+                # Unlock logic...
+                source_exits = dict(current_room_orm_before_move.exits or {})
+                if target_direction_canonical in source_exits: 
+                    source_exits[target_direction_canonical]['is_locked'] = False
+                    current_room_orm_before_move.exits = source_exits 
+                    attributes.flag_modified(current_room_orm_before_move, "exits")
+                
+                opposite_direction = get_opposite_direction(target_direction_canonical)
+                target_exits = dict(target_room_orm_for_move.exits or {})
+                if opposite_direction and opposite_direction in target_exits: 
+                    target_exits[opposite_direction]['is_locked'] = False
+                    target_room_orm_for_move.exits = target_exits 
+                    attributes.flag_modified(target_room_orm_for_move, "exits")
+                    db.add(target_room_orm_for_move) 
+
+                db.add(current_room_orm_before_move) 
+                await combat.send_combat_log(player.id, ["<span class='system-message-inline'>You unlock the way forward.</span>"])
+                logger.debug(f"[MOVE_ATTEMPT] Setting moved_successfully = True for {character_state.name} with key '{key_tag}'.")
+                moved_successfully = True
+            else: # Key required but not found
+                logger.warning(f"[MOVE_ATTEMPT] Character {character_state.name} DOES NOT have required key_tag '{key_tag}'. Movement blocked.")
+                # Log all item tags the character possesses for detailed debugging
+                all_char_inv_items = crud.crud_character_inventory.get_character_inventory(db, character_id=character_state.id)
+                possessed_tags = set()
+                if all_char_inv_items:
+                    for inv_item in all_char_inv_items:
+                        if inv_item.item and inv_item.item.properties and isinstance(inv_item.item.properties, dict):
+                            item_specific_tag = inv_item.item.properties.get("item_tag")
+                            if item_specific_tag:
+                                possessed_tags.add(item_specific_tag)
+                logger.debug(f"[MOVE_ATTEMPT] Character {character_state.name} currently possesses item_tags (from DB): {possessed_tags}")
+                message_to_player_on_fail = exit_detail_model.description_when_locked or "That way is locked."
+        else: # Door is locked but no key_tag defined
+            logger.warning(f"[MOVE_ATTEMPT] Door is locked but no key_tag defined for lock_id '{exit_detail_model.lock_id_tag}'. Movement blocked.")
             message_to_player_on_fail = exit_detail_model.description_when_locked or "That way is locked."
 
-    # --- THIS IS THE NEW PAYLOAD LOGIC ---
     if moved_successfully and target_room_orm_for_move:
         old_room_id = character_state.current_room_id
         crud.crud_character.update_character_room(db, character_id=character_state.id, new_room_id=target_room_orm_for_move.id)

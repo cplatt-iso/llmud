@@ -20,12 +20,15 @@ def get_character_inventory(db: Session, character_id: uuid.UUID) -> List[models
     ).filter(models.CharacterInventoryItem.character_id == character_id).all()
 
 def character_has_item_with_tag(db: Session, character_id: uuid.UUID, item_tag: str) -> bool:
+    """Checks if a character has an item with a specific 'item_tag' in its properties."""
     count = db.query(models.CharacterInventoryItem.id).join(
         models.Item, models.CharacterInventoryItem.item_id == models.Item.id
     ).filter(
         models.CharacterInventoryItem.character_id == character_id,
-        models.Item.properties["item_tag"].astext == item_tag
+        # This is the correct way to query a text value from a JSONB key
+        models.Item.properties['item_tag'].as_string() == item_tag
     ).count()
+    logger.debug(f"Checked for item_tag '{item_tag}' for char {character_id}. Found: {count > 0}") # Good to add a log here
     return count > 0
 
 def add_item_to_character_inventory(
