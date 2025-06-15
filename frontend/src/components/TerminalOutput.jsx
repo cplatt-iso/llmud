@@ -1,7 +1,8 @@
 // frontend/src/components/TerminalOutput.jsx
 import React from 'react';
 import LookResult from './LookResult';
-import ChatMessage from './ChatMessage'; // Import the new renderer
+import ChatMessage from './ChatMessage';
+import ShopListing from './ShopListing'; 
 
 // React.forwardRef is essential for the parent component (TabbedWindow)
 // to get a reference to the scrolling div and manage the scroll position.
@@ -27,6 +28,14 @@ const TerminalOutput = React.forwardRef(function TerminalOutput({ logLines }, re
           case 'chat':
             return <ChatMessage key={key} data={line.data} />;
 
+          // --- STEP 2: ADD THE GODDAMN CASE FOR THE SHOP ---
+          case 'shop_listing':
+            return (
+              <div key={key} className="terminal-line shop-listing-wrapper">
+                <ShopListing data={line.data} />
+              </div>
+            );
+            
           // For everything else ('html' type or any legacy strings),
           // render it as raw HTML. This is our default fallback.
           case 'html':

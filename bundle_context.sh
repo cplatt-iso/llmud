@@ -51,23 +51,36 @@ CORE_FILES_TO_BUNDLE=(
     "bundle_context.sh"
     "README.md"
 
-    # --- THE NEW CRIME SCENE: SHOP & PLAYER LIFECYCLE ---
-    "backend/app/commands/shop_parser.py"       # Primary target for the shop overhaul.
-    "backend/app/models/item.py"                # We need its structure for stat comparison.
-    "backend/app/models/character.py"           # Need to access equipped items and stats.
-    "backend/app/websocket_manager.py"          # The heart of the connection logic. Needs an AFK timestamp.
-    "backend/app/game_logic/world_ticker.py"    # The most likely place to run the AFK check.
+    # --- OPERATION: SITUATIONAL AWARENESS & STATUS AFFLICTION ---
+    
+    # --- BACKEND: THE COMBAT BRAIN ---
+    # The heart of the combat loop. This is where we'll gather the data for our new payload.
+    "backend/app/game_logic/combat/combat_round_processor.py"
+    
+    # Manages the active_combats dictionary. We need this to know who's fighting.
+    "backend/app/game_logic/combat/combat_state_manager.py"
 
-    # --- THE WITNESSES: CLIENT-SIDE RENDERING & INTERACTION ---
-    "frontend/src/components/TerminalOutput.jsx" # Needs to learn how to render the new shop listing.
-    "frontend/src/services/webSocketService.js"  # Needs to handle the new shop listing payload.
-    # --- PROPOSED NEW FILES (Ask me to create them) ---
-    # "frontend/src/components/ShopListing.jsx"
-    # "frontend/src/components/StatComparison.jsx"
+    # The models for the combatants. We may need to add a status_effects column here later.
+    "backend/app/models/character.py"
+    "backend/app/models/room_mob_instance.py"
+    "backend/app/models/mob_template.py" # Need this to get max HP.
 
-    # --- Foundational Stuff (Still Relevant) ---
-    "backend/app/api/v1/endpoints/command.py"
+    # --- FRONTEND: THE EYES ---
+    # The main layout. We need to add our new CombatMonitor component here.
+    "frontend/src/components/GameLayout.jsx"
+
+    # The main state manager. We'll add a new 'combatState' object here.
     "frontend/src/state/gameStore.js"
+    
+    # The WebSocket handler. It needs to learn how to process our new 'combat_state_update' payload.
+    "frontend/src/services/webSocketService.js"
+
+    # The Map component. Our new component will live next to it, so we need to see how it's styled and placed.
+    "frontend/src/components/Map.jsx"
+
+    # --- PROPOSED NEW FILES (Ask me to create them) ---
+    # "frontend/src/components/CombatMonitor.jsx"
+    # "frontend/src/components/CombatMonitor.css"
 )
 
 echo "--- START OF CORE BUNDLED FILES ---" >> "$OUTPUT_FILE"

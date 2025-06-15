@@ -21,7 +21,13 @@ from app.ws_command_parsers import (
     handle_ws_attack,
     handle_ws_use_combat_skill,
     handle_ws_rest,
-    handle_ws_movement
+    handle_ws_movement,
+    handle_ws_unlock,
+    handle_ws_use_item,
+    handle_ws_buy,
+    handle_ws_sell,
+    handle_ws_list,
+    handle_ws_use_item_or_skill
 )
 from app.ws_command_parsers.ws_interaction_parser import _send_inventory_update_to_player
 
@@ -89,7 +95,8 @@ async def websocket_game_endpoint(
             "level": character_orm.level,
             "platinum": character_orm.platinum_coins, "gold": character_orm.gold_coins,
             "silver": character_orm.silver_coins, "copper": character_orm.copper_coins
-        }
+        },
+        "hotbar": character_orm.hotbar or {str(i): None for i in range(1, 11)}
     }
     await connection_manager.send_personal_message(welcome_payload, player.id)
 
@@ -126,24 +133,41 @@ async def websocket_game_endpoint(
                     set_character_resting_status(current_char_state.id, False)
                     await combat.send_combat_log(fresh_player.id, ["You stop resting."])
 
-                combat_verbs = {"attack", "atk", "kill", "k", "use", "flee"}
+                combat_verbs = {"attack", "atk", "kill", "k", "flee"}
                 movement_verbs = {"n", "north", "s", "south", "e", "east", "w", "west", "u", "up", "d", "down", "go"}
                 state_verbs = {"rest"}
+                # interaction_verbs = {"use", "quaff", "drink"}
+                shop_verbs = {"list","buy","sell"}
 
-                if verb in combat_verbs:
+                if verb == "use":
+                    # The 'use' command is special. Let a dedicated handler figure it out.
+                    await handle_ws_use_item_or_skill(db_loop, fresh_player, current_char_state, args_str)
+
+                elif verb in combat_verbs:
+                    # Logic for other combat verbs remains
                     if verb in {"attack", "atk", "kill", "k"}:
                         await handle_ws_attack(db_loop, fresh_player, current_char_state, current_room_orm, args_str)
-                    elif verb == "use":
-                        await handle_ws_use_combat_skill(db_loop, fresh_player, current_char_state, schemas.RoomInDB.from_orm(current_room_orm), args_str)
                     elif verb == "flee":
                         await handle_ws_flee(db_loop, fresh_player, current_char_state, schemas.RoomInDB.from_orm(current_room_orm), args_str)
                 
-                elif verb in movement_verbs: # <<< THE HOLY GRAIL
+                elif verb in movement_verbs:
                     await handle_ws_movement(db_loop, fresh_player, current_char_state, schemas.RoomInDB.from_orm(current_room_orm), verb, args_str)
                 
                 elif verb in state_verbs:
                     if verb == "rest":
                         await handle_ws_rest(db_loop, fresh_player, current_char_state, current_room_orm)
+                
+                elif verb in shop_verbs:
+                   if verb == "list":
+                        await handle_ws_list(db_loop, fresh_player, current_char_state, current_room_orm)
+                   elif verb == "buy":
+                        await handle_ws_buy(db_loop, fresh_player, current_char_state, current_room_orm, args_str)
+                   elif verb == "sell":
+                        await handle_ws_sell(db_loop, fresh_player, current_char_state, current_room_orm, args_str) 
+
+                elif verb == "unlock":
+                    # Handle the 'unlock' command
+                    await handle_ws_unlock(db_loop, fresh_player, current_char_state, current_room_orm, args_str)                  
 
                 else: # Fallback to the HTTP-style command processor for everything else (look, say, inv, etc.)
                     context = CommandContext(

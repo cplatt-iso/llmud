@@ -11,3 +11,16 @@
 .item-quantity { color: #aaa; font-style: italic; }
 .inventory-empty-message { color: #666; font-style: italic; grid-column: 1 / -1; }
 .currency-footer .currency-display { display: flex; justify-content: space-around; }
+
+.inventory-item.is-usable {
+  cursor: pointer;
+  color: #aaffaa; /* A pleasant green for usable items */
+  text-shadow: 0 0 5px #00ff00;
+}
+
+.inventory-item.is-usable:hover {
+  background-color: rgba(100, 255, 100, 0.1);
+  border-left: 2px solid #aaffaa;
+  padding-left: 3px; /* Adjust to keep alignment nice */
+  margin-left: -5px; /* Adjust to keep alignment nice */
+}

@@ -81,7 +81,7 @@ async def resolve_skill_effect(
                     )
                     character_after_skill = char_obj_after_loot # Assign the character object
                 elif updated_mob:
-                     skill_log.append(f"  {mob_name_formatted} HP: <span class='combat-hp'>{updated_mob.current_health}/{updated_mob.base_health}</span>.")
+                     skill_log.append(f"  {mob_name_formatted} HP: <span class='combat-hp'>{updated_mob.current_health}/{updated_mob.mob_template.base_health}</span>.")
             else: 
                 skill_log.append(f"<span class='char-name'>{punch_char_ref.name}</span> <span class='combat-miss'>MISSES</span> the {mob_name_formatted} with a punch.")
                 await broadcast_combat_event(db, current_room_id_for_broadcast, player_id,

@@ -7,6 +7,7 @@ class AbilityDetail(BaseModel):
     description: str
     level_required: int
     has_learned: bool
+    skill_id_tag: str
 
 class CharacterAbilitiesResponse(BaseModel):
     skills: List[AbilityDetail]

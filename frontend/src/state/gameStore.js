@@ -29,6 +29,7 @@ const initialState = {
   inventory: null,
   abilities: null,
   whoListData: null, // Added for Who List
+  hotbar: {},
 };
 
 const useGameStore = create(
@@ -125,6 +126,19 @@ const useGameStore = create(
         console.error("Failed to fetch score sheet:", error);
         get().addLogLine("! Could not retrieve character score sheet.");
       }
+    },
+    setHotbar: (hotbarData) => {
+      set({ hotbar: hotbarData });
+    },
+    setHotbarSlot: (slotId, data) => {
+      set(state => {
+        state.hotbar[slotId] = data;
+      });
+    },
+    clearHotbarSlot: (slotId) => {
+      set(state => {
+        state.hotbar[slotId] = null;
+      });
     },
 
     fetchInventory: async () => {

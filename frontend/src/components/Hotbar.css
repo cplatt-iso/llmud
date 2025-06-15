@@ -1,0 +1,45 @@
+/* Create frontend/src/components/Hotbar.css */
+.hotbar-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 0;
+    width: 100%;
+}
+
+.hotbar-slot {
+    flex-grow: 1;
+    height: 40px;
+    border: 1px solid #444;
+    background-color: #1a1a1a;
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 12px;
+    color: #aaa;
+    cursor: pointer;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    padding: 0 4px;
+}
+
+.hotbar-slot:hover {
+    border-color: #888;
+    background-color: #2a2a2a;
+}
+
+.slot-number {
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    font-size: 10px;
+    color: #666;
+}
+
+.slot-content {
+    color: #00aaaa;
+    font-weight: bold;
+}

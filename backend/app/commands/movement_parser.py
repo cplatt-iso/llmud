@@ -13,9 +13,7 @@ from app.commands.utils import (
     get_formatted_mob_name,
     get_opposite_direction
 )
-from app.websocket_manager import connection_manager
 from app.schemas.common_structures import ExitDetail 
-from app.services.room_service import get_player_ids_in_room
 
 async def handle_look(context: CommandContext) -> schemas.CommandResponse:
     # This function is fine and remains unchanged.
@@ -104,43 +102,43 @@ async def handle_move(context: CommandContext) -> schemas.CommandResponse:
         message_to_player = "You can't go that way."
 
     if moved and target_room_orm_for_move:
-        # --- UPDATE THE DATABASE (This is the last thing this function does directly) ---
+        old_room_id_for_broadcast = context.active_character.current_room_id # Capture before update
+
         crud.crud_character.update_character_room(
             context.db, character_id=context.active_character.id, new_room_id=target_room_orm_for_move.id
         )
-
-        # --- THE OLD CACHE UPDATE IS GONE ---
-        # connection_manager.update_character_location(...) <--- DELETED
-
-        # Broadcast "leaves" message to the old room
-        player_ids_in_old_room = get_player_ids_in_room(context.db, old_room_id, exclude_player_ids=[context.active_character.player_id])
-        if player_ids_in_old_room:
-            leave_message_payload = { "type": "game_event", "message": f"<span class='char-name'>{character_name_for_broadcast}</span> leaves, heading {target_direction}." }
-            await connection_manager.broadcast_to_players(leave_message_payload, player_ids_in_old_room)
-
-        # Broadcast "arrives" message to the new room
-        player_ids_in_new_room_others = get_player_ids_in_room(context.db, target_room_orm_for_move.id, exclude_player_ids=[context.active_character.player_id])
-        if player_ids_in_new_room_others:
-            opposite_direction = get_opposite_direction(target_direction)
-            arrive_message_payload = { "type": "game_event", "message": f"<span class='char-name'>{character_name_for_broadcast}</span> arrives from the {opposite_direction}." }
-            await connection_manager.broadcast_to_players(arrive_message_payload, player_ids_in_new_room_others)
         
-        # Now, create a new context to perform a 'look' in the new room
+        # Prepare data for the caller to handle broadcasts
+        # The caller (ws_movement_parser) will fetch player IDs and broadcast
+        
         new_room_context = CommandContext(
             db=context.db,
-            active_character=context.active_character,
+            active_character=context.active_character, # Character ORM is now in the new room
             current_room_orm=target_room_orm_for_move,
             current_room_schema=schemas.RoomInDB.from_orm(target_room_orm_for_move),
             original_command="look", command_verb="look", args=[]
         )
         
-        response = await handle_look(new_room_context)
+        look_response_part = await handle_look(new_room_context) # This returns a CommandResponse
 
-        # --- ATTACH THE LOCATION UPDATE INFO TO THE FINAL RESPONSE ---
-        response.location_update = schemas.LocationUpdate(
-            character_id=context.active_character.id,
-            new_room_id=target_room_orm_for_move.id
+        # Combine responses or add more structured data
+        # For now, let's assume look_response_part.special_payload contains the look data
+        # We also need to signal that a move happened and provide room IDs for broadcasts.
+        
+        # Modify CommandResponse to potentially include more structured info if needed,
+        # or rely on the caller (ws_movement_parser) to have this context.
+        # For simplicity, ws_movement_parser already knows old_room_id and target_room_orm_for_move.id
+
+        return schemas.CommandResponse(
+            special_payload=look_response_part.special_payload, # This is the look data for the new room
+            message_to_player=message_to_player, # If any direct message for the mover
+            # Add custom fields to CommandResponse if you want to pass old_room_id, new_room_id explicitly
+            # For example: move_details={"old_room_id": old_room_id_for_broadcast, "new_room_id": target_room_orm_for_move.id}
+            # Or, ws_movement_parser can just use the variables it already has.
+            location_update=schemas.LocationUpdate( # This is good for cache updates
+                character_id=context.active_character.id,
+                new_room_id=target_room_orm_for_move.id
+            )
         )
-        return response
             
     return schemas.CommandResponse(message_to_player=message_to_player)

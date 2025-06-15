@@ -43,7 +43,10 @@ We've dragged this beast kicking and screaming through several layers of digital
     *   Movement (N, S, E, W, U, D) via WebSocket, respects locked doors.
     *   `look` command (room details, items, mobs, other players) via WebSocket.
     *   Item system: `ItemTemplate` (from `items.json` seed), `RoomItemInstance` (items on ground), `CharacterInventoryItem` (player inventory).
-    *   **Basic Equipment & Combat Stats:** Equipping/unequipping items (e.g., weapons, armor via HTTP commands for now). Combat stats (AC, attack bonus, damage) dynamically calculated based on attributes and equipped weapon/armor. Unarmed combat defaults.
+    *   **Basic Equipment & Combat Stats:** Equipping/unequipping items (e.g., weapons, armor via HTTP commands for now). Combat stats (AC, attack bonus, damage) 
+*   **Modern UI Conveniences:**
+    *   **Draggable Hotbar:** A 10-slot hotbar allows players to drag-and-drop skills and consumable items for quick access via mouse click or number keys (1-0).
+    dynamically calculated based on attributes and equipped weapon/armor. Unarmed combat defaults.
     *   **Combat System (WebSocket):** Real-time, server-side. Player attacks, mob attacks, skill usage. Target resolution (mobs by name/number, exits by direction). Death & respawn (player to 0,0,0). XP awards and currency drops from mobs (for basic attacks and skill kills). Combat logs/echoes to player and room.
     *   **Skills System:** Characters learn skills from `CharacterClassTemplate`. `use <skill> [target]` command (WebSocket).
         *   `basic_punch`, `power_attack_melee` implemented.
@@ -60,22 +63,16 @@ We've dragged this beast kicking and screaming through several layers of digital
     *   `fetchAndDrawMap` only makes an API call if the map for the target Z-level isn't already cached.
     *   Movement within a cached Z-level primarily uses `redrawMapForCurrentRoom` with fresh room data from WebSocket for title/highlight, avoiding full map re-fetches.
 
-## Next Phase: Flesh out the damn world - Gear, Loot, and More Seeds!
+## Next Phase: Operation Situational Awareness & Status Affliction
 
-The map is less of an abstract nightmare, and the core gameplay loop is... loopy. Now we need to make the interactions richer and the world feel less empty.
+The core loop is solid, but combat still feels like flying blind. The next evolution is to provide the player with critical real-time information and introduce deeper, more tactical gameplay systems.
 
-*   **Full Equipment System:** Define all equipment slots. Implement robust `equip` and `unequip` logic. Ensure stats update correctly.
-*   **Mob Loot Tables:** Mobs need to drop more than just coins. Define loot tables (specific items, random items from categories, chances).
-*   **Seed More Content (Externalize ALL THE THINGS):**
-    *   `mob_templates.json`
-    *   `character_classes.json`
-    *   `skills.json`
-    *   `traits.json`
-    *   `mob_spawn_definitions.json`
-    *   Update corresponding CRUD seeders to load from these JSONs.
-*   **Seed Initial Equipment:** Place starting gear on character creation or in initial rooms.
+*   **The Threat Assessment Display (Combat Target Window):** A new UI panel will be added under the map. During combat, this panel will display a dynamic list of all engaged enemies, complete with their health bars. This will provide at-a-glance information and allow players to switch targets by clicking on the desired mob.
 
-This will involve a lot of backend work (models, CRUD, game logic) and careful JSON schema design for the seed files.
+*   **The Status Effect Engine (Buffs & Debuffs):** We will build the foundational backend and frontend systems for status effects. This includes:
+    *   Modifying database models to store active effects (e.g., poisons, stat buffs, damage shields) and their durations on both players and mobs.
+    *   Creating a new server-side ticker to process these effects each round.
+    *   Designing UI elements to display active effects on the player and their target.
 
 ---
 Remember to run `bundle_context.sh` from the project root to generate `project_context_bundle.txt` if you're handing this off or taking a break.

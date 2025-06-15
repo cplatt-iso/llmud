@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from .endpoints import room, command, user, character, inventory, map, character_class # This imports the router from endpoints/room.py
+from .endpoints import room, command, user, character, inventory, map, character_class, hotbar # This imports the router from endpoints/room.py
 
 # This router will be included with a prefix like /api by main.py
 # So paths here are relative to that.
@@ -14,3 +14,4 @@ api_router.include_router(character.router, prefix="/character", tags=["Characte
 api_router.include_router(inventory.router, prefix="/inventory", tags=["Inventory"])
 api_router.include_router(map.router, prefix="/map", tags=["Map"])
 api_router.include_router(character_class.router, prefix="/character-class", tags=["Character Classes"])
+api_router.include_router(hotbar.router, prefix="/character/me", tags=["Hotbar"]) 

@@ -10,9 +10,9 @@ const { getState, setState } = useGameStore;
 let socket = null;
 
 const createLogEntry = (type, data) => ({
-  id: uuidv4(),
-  type: type,
-  data: data,
+    id: uuidv4(),
+    type: type,
+    data: data,
 });
 
 const handleMessage = (event) => {
@@ -21,7 +21,7 @@ const handleMessage = (event) => {
         console.log("WS RCV:", serverData);
 
         // Get all the actions we might need from the store.
-        const { addLogLine, addMessage, setVitals, fetchWhoList } = getState(); // Add fetchWhoList
+        const { addLogLine, addMessage, setVitals, fetchWhoList, setHotbar } = getState(); // Add fetchWhoList
 
         switch (serverData.type) {
             case "welcome_package":
@@ -38,6 +38,9 @@ const handleMessage = (event) => {
                 if (serverData.character_vitals) {
                     setVitals(serverData.character_vitals);
                 }
+                if (serverData.hotbar) {
+                    setHotbar(serverData.hotbar);
+                }
                 break;
 
             case "combat_update":
@@ -47,11 +50,11 @@ const handleMessage = (event) => {
                     setState(state => { state.logLines.push(...newLogEntries); });
                 }
                 if (serverData.room_data) {
-                     setState(state => { state.currentRoomId = serverData.room_data.id; });
-                     const currentZ = getState().mapData ? getState().mapData.z_level : null;
-                     if (currentZ !== null && currentZ !== serverData.room_data.z) {
-                         getState().fetchMapData(serverData.room_data.z);
-                     }
+                    setState(state => { state.currentRoomId = serverData.room_data.id; });
+                    const currentZ = getState().mapData ? getState().mapData.z_level : null;
+                    if (currentZ !== null && currentZ !== serverData.room_data.z) {
+                        getState().fetchMapData(serverData.room_data.z);
+                    }
                 }
                 // ...THEN call the single source of truth for vitals.
                 if (serverData.character_vitals) {
@@ -61,12 +64,12 @@ const handleMessage = (event) => {
 
             case "look_response":
                 setState(state => {
-                    state.logLines.push(createLogEntry('look', serverData)); 
+                    state.logLines.push(createLogEntry('look', serverData));
                     if (serverData.room_data) {
                         state.currentRoomId = serverData.room_data.id;
                         const currentZ = state.mapData ? state.mapData.z_level : null;
                         if (currentZ === null || currentZ !== serverData.room_data.z) {
-                             getState().fetchMapData(serverData.room_data.z);
+                            getState().fetchMapData(serverData.room_data.z);
                         }
                     }
                 });
@@ -76,7 +79,7 @@ const handleMessage = (event) => {
                 // No wrappers. No bullshit. Just call the action.
                 setVitals(serverData);
                 break;
-            
+
             case "inventory_update":
                 setState(state => {
                     state.inventory = serverData.inventory_data;
@@ -84,24 +87,30 @@ const handleMessage = (event) => {
                 break;
 
             case "game_event":
-                if(serverData.message) addLogLine(serverData.message, 'html');
+                if (serverData.message) addLogLine(serverData.message, 'html');
                 break;
-            
+
             case "ooc_message":
-                 if(serverData.message) addLogLine(serverData.message, 'html');
-                 break;
-                 
+                if (serverData.message) addLogLine(serverData.message, 'html');
+                break;
+
             case "chat_message":
                 if (serverData.payload) {
                     addMessage(serverData.payload);
                 }
                 break;
-            
+
             case "who_list_updated": // New case
                 console.log("WS: Received who_list_updated, fetching new list.");
                 fetchWhoList();
                 break;
- 
+
+            case "shop_listing":
+                setState(state => {
+                    state.logLines.push(createLogEntry('shop_listing', serverData));
+                });
+                break;
+
             default:
                 console.warn("Unhandled WS message type:", serverData.type, serverData);
                 addLogLine(`<span class="system-message-inline">Unhandled event: ${serverData.type}</span>`, 'html');
@@ -143,7 +152,7 @@ export const webSocketService = {
         }
 
         const wsUrl = `${WS_PROTOCOL}//${WS_HOST}/ws?token=${token}&character_id=${characterId}`;
-        
+
         socket = new WebSocket(wsUrl);
         socket.onopen = () => console.log("WebSocket connection established.");
         socket.onmessage = handleMessage;
@@ -166,7 +175,7 @@ export const webSocketService = {
             addLogLine('<span class="system-message-inline">! Cannot send command: Not connected.</span>', 'html');
         }
     },
-    
+
     addClientEcho: (command) => {
         const { addLogLine } = getState();
         addLogLine(`> ${command}`, 'html');

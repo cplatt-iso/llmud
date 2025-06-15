@@ -1,5 +1,5 @@
 --- SCRIPT START --- Creating bundle: project_context_bundle.txt ---
-Timestamp: Thu Jun 12 01:54:52 AM UTC 2025
+Timestamp: Sun Jun 15 03:37:31 AM UTC 2025
 
 # --- LLM INSTRUCTION ---
 # The following is a list of all potentially relevant files in the project.
@@ -103,6 +103,7 @@ backend/app/schemas/room_item.py
 backend/app/schemas/room.py
 backend/app/schemas/skill.py
 backend/app/schemas/trait.py
+backend/app/schemas/who.py
 backend/app/seeds/character_classes.json
 backend/app/seeds/chat_channels.json
 backend/app/seeds/exits_z0.json
@@ -134,6 +135,7 @@ frontend/src/components/CharacterCreationScreen.css
 frontend/src/components/CharacterInfoBar.css
 frontend/src/components/CharacterSelectionScreen.css
 frontend/src/components/ChatWindow.css
+frontend/src/components/EquipmentScreen.css
 frontend/src/components/GroundItems.css
 frontend/src/components/Inventory.css
 frontend/src/components/ItemName.css
@@ -146,6 +148,7 @@ frontend/src/components/TabBar.css
 frontend/src/components/TabbedWindow.css
 frontend/src/components/Terminal.css
 frontend/src/components/VitalsMonitor.css
+frontend/src/components/WhoList.css
 frontend/src/index.css
 frontend/src/index.html
 frontend/src/services/apiService.js
@@ -209,23 +212,47 @@ CORE_FILES_TO_BUNDLE=(
     "bundle_context.sh"
     "README.md"
 
-    # --- THE NEW CRIME SCENE: SHOP & PLAYER LIFECYCLE ---
-    "backend/app/commands/shop_parser.py"       # Primary target for the shop overhaul.
-    "backend/app/models/item.py"                # We need its structure for stat comparison.
-    "backend/app/models/character.py"           # Need to access equipped items and stats.
-    "backend/app/websocket_manager.py"          # The heart of the connection logic. Needs an AFK timestamp.
-    "backend/app/game_logic/world_ticker.py"    # The most likely place to run the AFK check.
+    # --- OPERATION: LIQUID COURAGE (USE ITEM LOGIC) ---
+    
+    # --- BACKEND: THE BRAIN ---
+    # The main entry point for all WS commands. We need to teach it 'use', 'quaff', etc.
+    "backend/app/websocket_router.py"
+    
+    # This is the most likely place for the new `handle_ws_use_item` function to live.
+    # If it's empty or doesn't exist, that's fine, it tells me where to build.
+    "backend/app/ws_command_parsers/ws_interaction_parser.py"
 
-    # --- THE WITNESSES: CLIENT-SIDE RENDERING & INTERACTION ---
-    "frontend/src/components/TerminalOutput.jsx" # Needs to learn how to render the new shop listing.
-    "frontend/src/services/webSocketService.js"  # Needs to handle the new shop listing payload.
-    # --- PROPOSED NEW FILES (Ask me to create them) ---
-    # "frontend/src/components/ShopListing.jsx"
-    # "frontend/src/components/StatComparison.jsx"
+    # If the above is a ghost town, this is my fallback for seeing how you handle interactions.
+    "backend/app/commands/interaction_parser.py"
 
-    # --- Foundational Stuff (Still Relevant) ---
-    "backend/app/api/v1/endpoints/command.py"
+    # I need to see how consumable effects are defined in the database.
+    # The 'Basic Healing Draught' in items.json is my primary clue.
+    "backend/app/models/item.py"
+    "backend/app/schemas/item.py" 
+
+    # I need to know how inventory is structured in the DB, especially if you changed it.
+    "backend/app/models/character_inventory_item.py"
+    "backend/app/schemas/inventory.py"
+
+    # --- FRONTEND: THE BODY ---
+    # The central state management. How is `inventory` and `equipment` stored?
     "frontend/src/state/gameStore.js"
+
+    # This is where the player clicks. I need to see the `onClick` handlers.
+    "frontend/src/components/Inventory.jsx"
+
+    # You mentioned a new drag-and-drop equipment screen. Show me this masterpiece of UI engineering.
+    "frontend/src/components/EquipmentScreen.jsx"
+
+    # How are you making API calls now? Did you add new functions for equip/unequip?
+    "frontend/src/services/apiService.js"
+
+    # Is the WebSocket involved in using items? If so, how?
+    "frontend/src/services/webSocketService.js"
+
+    # --- Foundational Stuff (Still Relevant as FUCK) ---
+    "backend/app/api/v1/endpoints/inventory.py" # You said you changed equip logic. PROVE IT.
+    "backend/app/models/character.py"           # Need to see how health is stored to apply healing.
 )
 
 echo "--- START OF CORE BUNDLED FILES ---" >> "$OUTPUT_FILE"
@@ -336,163 +363,1038 @@ This will involve a lot of backend work (models, CRUD, game logic) and careful J
 Remember to run `bundle_context.sh` from the project root to generate `project_context_bundle.txt` if you're handing this off or taking a break.
 --- END OF FILE README.md ---
 
---- START OF FILE backend/app/commands/shop_parser.py ---
-# backend/app/commands/shop_parser.py
-import logging
-from typing import List, Optional
-from collections import defaultdict
+--- START OF FILE backend/app/websocket_router.py ---
+# backend/app/websocket_router.py
 
+import uuid
+from typing import Optional, Any, Generator, List
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query, status
 from sqlalchemy.orm import Session
+from jose import JWTError, jwt
+import logging
 
+from app.core.config import settings
+from app.db.session import get_db # <<< USE THE ONE TRUE DB GETTER
 from app import crud, models, schemas
-from .command_args import CommandContext
+from app.websocket_manager import connection_manager
+from app.game_logic import combat
+from app.game_state import is_character_resting, set_character_resting_status
+from app.commands.command_args import CommandContext
+
+from app.api.v1.endpoints.command import execute_command_logic
+from app.ws_command_parsers import (
+    handle_ws_flee,
+    handle_ws_attack,
+    handle_ws_use_combat_skill,
+    handle_ws_rest,
+    handle_ws_movement
+)
+from app.ws_command_parsers.ws_interaction_parser import _send_inventory_update_to_player
+
 
 logger = logging.getLogger(__name__)
+router = APIRouter()
 
-MERCHANT_BUY_PRICE_MODIFIER = 0.25
+async def get_player_from_token(token: Optional[str], db: Session) -> Optional[models.Player]:
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        player_id_str: Optional[str] = payload.get("sub")
+        if not player_id_str:
+            return None
+        player_uuid = uuid.UUID(player_id_str)
+        return crud.crud_player.get_player(db, player_id=player_uuid)
+    except (JWTError, ValueError):
+        return None
 
-# --- HELPER FUNCTIONS ---
-def _format_price(total_copper: int) -> str:
-    if total_copper <= 0: return "Free"
-    parts = []
-    p, rem = divmod(total_copper, 10000)
-    g, rem = divmod(rem, 100)
-    s, c = divmod(rem, 100)
-    if p > 0: parts.append(f"<span class='currency platinum'>{p}p</span>")
-    if g > 0: parts.append(f"<span class='currency gold'>{g}g</span>")
-    if s > 0: parts.append(f"<span class='currency silver'>{s}s</span>")
-    if c > 0: parts.append(f"<span class='currency copper'>{c}c</span>")
-    return " ".join(parts) if parts else "0c"
+@router.websocket("/ws")
+async def websocket_game_endpoint(
+    websocket: WebSocket,
+    token: str = Query(..., description="Player's JWT authentication token"),
+    character_id: uuid.UUID = Query(..., description="UUID of the character connecting")
+):
+    player: Optional[models.Player] = None
+    character_orm: Optional[models.Character] = None
 
-def _get_merchant_in_room(db: Session, room: models.Room) -> Optional[models.NpcTemplate]:
-    npcs_in_room = crud.crud_room.get_npcs_in_room(db, room=room)
-    for npc in npcs_in_room:
-        if npc.npc_type == "merchant":
-            return npc
-    return None
+    # Use the real get_db() dependency in a context manager
+    with next(get_db()) as db_conn_init:
+        player = await get_player_from_token(token, db_conn_init)
+        if not player:
+            logger.warning(f"WS Connect: Invalid token provided.")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid authentication token")
+            return
 
-def _get_shop_inventory_items(db: Session, merchant: models.NpcTemplate) -> List[models.Item]:
-    inventory_items = []
-    if not merchant.shop_inventory: return []
-    for item_ref in merchant.shop_inventory:
-        item = crud.crud_item.get_item_by_name(db, name=item_ref)
-        if item: inventory_items.append(item)
-    return sorted(inventory_items, key=lambda i: i.name)
+        fetched_char = crud.crud_character.get_character(db_conn_init, character_id=character_id)
+        if not fetched_char or fetched_char.player_id != player.id:
+            logger.warning(f"WS Connect: Invalid char_id: {character_id} for player: {player.id}")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid character ID or not owned by player")
+            return
+        character_orm = fetched_char
 
-# --- COMMAND HANDLERS ---
-async def handle_list(context: CommandContext) -> schemas.CommandResponse:
-    merchant = _get_merchant_in_room(context.db, context.current_room_orm)
-    if not merchant:
-        return schemas.CommandResponse(message_to_player="There is no one here to sell you anything.")
+    await connection_manager.connect(websocket, player.id, character_orm.id)
+    logger.info(f"Player {player.username} ({player.id}) | Character {character_orm.name} ({character_orm.id}) connected via WebSocket.")
 
-    shop_items = _get_shop_inventory_items(context.db, merchant)
-    if not shop_items:
-        return schemas.CommandResponse(message_to_player=f"{merchant.name} has nothing to sell.")
+    initial_messages = [f"Welcome {character_orm.name}! You are connected via WebSocket."]
+    initial_room_schema: Optional[schemas.RoomInDB] = None
+    with next(get_db()) as db_welcome:
+        initial_room_orm = crud.crud_room.get_room_by_id(db_welcome, room_id=character_orm.current_room_id)
+        if initial_room_orm:
+            initial_room_schema = schemas.RoomInDB.from_orm(initial_room_orm)
 
-    response_lines = [f"--- {merchant.name}'s Wares ---"]
-    for i, item in enumerate(shop_items, 1):
-        price_str = _format_price(item.value)
-        response_lines.append(f"[{i:2d}] {item.name:<25} - {price_str}")
-    response_lines.append(f"Type <span class='command-suggestion'>buy <# or name></span> to purchase.")
+    xp_for_next_level = crud.crud_character.get_xp_for_level(character_orm.level + 1)
+    welcome_payload = {
+        "type": "welcome_package",
+        "log": initial_messages,
+        "room_data": initial_room_schema.model_dump(exclude_none=True) if initial_room_schema else None,
+        "character_vitals": {
+            "current_hp": character_orm.current_health, "max_hp": character_orm.max_health,
+            "current_mp": character_orm.current_mana, "max_mp": character_orm.max_mana,
+            "current_xp": character_orm.experience_points,
+            "next_level_xp": int(xp_for_next_level) if xp_for_next_level != float('inf') else -1,
+            "level": character_orm.level,
+            "platinum": character_orm.platinum_coins, "gold": character_orm.gold_coins,
+            "silver": character_orm.silver_coins, "copper": character_orm.copper_coins
+        }
+    }
+    await connection_manager.send_personal_message(welcome_payload, player.id)
+
+    try:
+        while True:
+            received_data = await websocket.receive_json()
+            connection_manager.update_last_seen(player.id)
+            command_text = received_data.get("command_text", "").strip()
+
+            if not command_text:
+                continue
+
+            with next(get_db()) as db_loop:
+                fresh_player = crud.crud_player.get_player(db_loop, player_id=player.id)
+                current_char_state = crud.crud_character.get_character(db_loop, character_id=character_orm.id)
+                response: Optional[schemas.CommandResponse] = None
+
+                if not current_char_state or not fresh_player:
+                    logger.error(f"WS Loop: State lost for char_id: {character_orm.id} or player_id: {player.id}.")
+                    await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="Character or Player state lost in loop")
+                    break
+
+                current_room_orm = crud.crud_room.get_room_by_id(db_loop, current_char_state.current_room_id)
+                if not current_room_orm:
+                    logger.error(f"WS Loop: Character {current_char_state.name} in invalid room {current_char_state.current_room_id}.")
+                    await combat.send_combat_log(fresh_player.id, ["Error: Your current location is unstable."])
+                    continue
+
+                verb = command_text.split(" ", 1)[0].lower()
+                args_list = command_text.split(" ", 1)[1].split() if " " in command_text else []
+                args_str = " ".join(args_list)
+
+                if verb and verb not in ["rest", "look", "l"] and is_character_resting(current_char_state.id):
+                    set_character_resting_status(current_char_state.id, False)
+                    await combat.send_combat_log(fresh_player.id, ["You stop resting."])
+
+                combat_verbs = {"attack", "atk", "kill", "k", "use", "flee"}
+                movement_verbs = {"n", "north", "s", "south", "e", "east", "w", "west", "u", "up", "d", "down", "go"}
+                state_verbs = {"rest"}
+
+                if verb in combat_verbs:
+                    if verb in {"attack", "atk", "kill", "k"}:
+                        await handle_ws_attack(db_loop, fresh_player, current_char_state, current_room_orm, args_str)
+                    elif verb == "use":
+                        await handle_ws_use_combat_skill(db_loop, fresh_player, current_char_state, schemas.RoomInDB.from_orm(current_room_orm), args_str)
+                    elif verb == "flee":
+                        await handle_ws_flee(db_loop, fresh_player, current_char_state, schemas.RoomInDB.from_orm(current_room_orm), args_str)
+                
+                elif verb in movement_verbs: # <<< THE HOLY GRAIL
+                    await handle_ws_movement(db_loop, fresh_player, current_char_state, schemas.RoomInDB.from_orm(current_room_orm), verb, args_str)
+                
+                elif verb in state_verbs:
+                    if verb == "rest":
+                        await handle_ws_rest(db_loop, fresh_player, current_char_state, current_room_orm)
+
+                else: # Fallback to the HTTP-style command processor for everything else (look, say, inv, etc.)
+                    context = CommandContext(
+                        db=db_loop,
+                        active_character=current_char_state,
+                        current_room_orm=current_room_orm,
+                        current_room_schema=schemas.RoomInDB.from_orm(current_room_orm),
+                        original_command=command_text,
+                        command_verb=verb,
+                        args=args_list
+                    )
+                    response = await execute_command_logic(context)
+                    if response.special_payload:
+                        await connection_manager.send_personal_message(response.special_payload, fresh_player.id)
+                    if response.message_to_player:
+                        log_payload = {
+                            "type": "combat_update",
+                            "log": [response.message_to_player],
+                            "room_data": response.room_data.model_dump(exclude_none=True) if response.room_data else None,
+                            "combat_over": response.combat_over
+                        }
+                        await connection_manager.send_personal_message(log_payload, fresh_player.id)
+
+                try:
+                    db_loop.commit()
+                    logger.debug(f"WS Router: DB commit successful for command '{command_text}' by {current_char_state.name}")
+
+                    if response and response.location_update:
+                        update_info = response.location_update
+                        connection_manager.update_character_location(
+                            character_id=update_info.character_id,
+                            room_id=update_info.new_room_id
+                        )
+                        logger.debug(f"Cache updated for {update_info.character_id} to room {update_info.new_room_id}")
+
+                    # The rest of the post-commit logic
+                    inventory_modifying_verbs = ["giveme", "equip", "eq", "unequip", "uneq", "get", "take", "buy", "sell", "drop"]
+                    if verb in inventory_modifying_verbs:
+                       refreshed_char_for_push = crud.crud_character.get_character(db_loop, character_id=current_char_state.id)
+                       if refreshed_char_for_push:
+                           await _send_inventory_update_to_player(db_loop, refreshed_char_for_push)
+                except Exception as e_commit:
+                    db_loop.rollback()
+                    logger.error(f"WS Router: DB commit failed for command '{command_text}': {e_commit}", exc_info=True)
+                    await combat.send_combat_log(fresh_player.id, ["A glitch in the matrix occurred. Your last action may not have saved."])
+
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for Player {player.id if player else 'N/A'}")
+        if player and player.id:
+            await connection_manager.full_player_disconnect(player.id, reason_key="connection_lost")
+    except Exception as e:
+        logger.error(f"Critical Error in WebSocket handler: {e}", exc_info=True)
+        if player and player.id:
+            await connection_manager.full_player_disconnect(player.id, reason_key="connection_lost")
+--- END OF FILE backend/app/websocket_router.py ---
+
+--- START OF FILE backend/app/ws_command_parsers/ws_interaction_parser.py ---
+# backend/app/ws_command_parsers/ws_interaction_parser.py
+
+import uuid
+import random
+import logging # Added logging
+from typing import Optional, List, Tuple, Union, Sequence 
+from sqlalchemy.orm import Session, attributes
+
+from app import crud, models, schemas
+from app.game_logic import combat 
+from app.commands.utils import resolve_room_item_target, get_dynamic_room_description 
+from app.commands.command_args import CommandContext 
+from app.commands import interaction_parser as http_interaction_parser 
+from app import websocket_manager # MODIFIED IMPORT
+from app.schemas.common_structures import ExitDetail, InteractableDetail 
+
+logger = logging.getLogger(__name__) # Added logger
+
+async def _send_inventory_update_to_player(db: Session, character: models.Character):
+    """
+    Helper function to construct and send a full inventory update to a player.
+    """
+    if not character or not character.id:
+        logger.error("Cannot send inventory update: Invalid character object provided.")
+        return
+
+    logger.debug(f"Constructing and sending real-time inventory update to character {character.name} ({character.id})")
+
+    inventory_items_orm = crud.crud_character_inventory.get_character_inventory(db, character_id=character.id)
     
-    return schemas.CommandResponse(message_to_player="\n".join(response_lines))
-
-async def handle_buy(context: CommandContext) -> schemas.CommandResponse:
-    args_str = " ".join(context.args)
-    if not args_str:
-        return schemas.CommandResponse(message_to_player="Buy what?")
-
-    merchant = _get_merchant_in_room(context.db, context.current_room_orm)
-    if not merchant:
-        return schemas.CommandResponse(message_to_player="There is no one here to buy from.")
-
-    shop_items = _get_shop_inventory_items(context.db, merchant)
-    item_to_buy: Optional[models.Item] = None
-    if args_str.isdigit() and 1 <= int(args_str) <= len(shop_items):
-        item_to_buy = shop_items[int(args_str) - 1]
-    else:
-        for item in shop_items:
-            if args_str.lower() in item.name.lower():
-                item_to_buy = item
-                break
+    equipped_items = {}
+    backpack_items = []
     
-    if not item_to_buy:
-        return schemas.CommandResponse(message_to_player=f"'{args_str}' is not for sale here.")
-
-    updated_char, currency_message = crud.crud_character.update_character_currency(context.db, character_id=context.active_character.id, copper_change=-item_to_buy.value)
-    
-    if not updated_char or "Not enough funds" in currency_message:
-        return schemas.CommandResponse(message_to_player="You can't afford that.")
-
-    crud.crud_character_inventory.add_item_to_character_inventory(context.db, character_obj=updated_char, item_id=item_to_buy.id, quantity=1)
-    
-    price_str = _format_price(item_to_buy.value)
-    return schemas.CommandResponse(message_to_player=f"You buy a {item_to_buy.name} for {price_str}.")
-
-async def handle_sell(context: CommandContext) -> schemas.CommandResponse:
-    merchant = _get_merchant_in_room(context.db, context.current_room_orm)
-    if not merchant:
-        return schemas.CommandResponse(message_to_player="There is no one here to sell to.")
-
-    args_str = " ".join(context.args)
-    if not args_str:
-        return schemas.CommandResponse(message_to_player="Sell what? Try 'sell <item>', 'sell all', or 'sell all junk'.")
-
-    parts = args_str.lower().split()
-    command_mode = "single"
-    keyword = ""
-
-    if parts[0] == "all":
-        command_mode = "all"
-        if len(parts) > 1: keyword = parts[1]
-    
-    backpack = [item for item in context.active_character.inventory_items if not item.equipped]
-    items_to_sell = []
-    
-    if command_mode == "single":
-        for item in backpack:
-            if args_str.lower() in item.item.name.lower():
-                items_to_sell.append(item)
-                break # Sell first match
-    else: # "all" or "all junk" etc.
-        for item in backpack:
-            is_junk = item.item.item_type == "junk"
-            matches_keyword = keyword in item.item.name.lower()
+    for item_orm in inventory_items_orm:
+        item_schema = schemas.CharacterInventoryItem.from_orm(item_orm)
+        if item_schema.equipped and item_schema.equipped_slot:
+            equipped_items[item_schema.equipped_slot] = item_schema
+        else:
+            backpack_items.append(item_schema)
             
-            if keyword == "junk" and is_junk: items_to_sell.append(item)
-            elif keyword and matches_keyword: items_to_sell.append(item)
-            elif not keyword: items_to_sell.append(item)
+    inventory_display_data = schemas.CharacterInventoryDisplay(
+        equipped_items=equipped_items,
+        backpack_items=backpack_items,
+        platinum=character.platinum_coins,
+        gold=character.gold_coins,
+        silver=character.silver_coins,
+        copper=character.copper_coins
+    )
 
-    items_to_sell = [item for item in items_to_sell if item.item.value > 0]
-
-    if not items_to_sell:
-        if keyword: return schemas.CommandResponse(message_to_player=f"You have no valuable items matching '{keyword}' to sell.")
-        elif command_mode == "all": return schemas.CommandResponse(message_to_player="You have nothing of value in your backpack to sell.")
-        else: return schemas.CommandResponse(message_to_player=f"You don't have a '{args_str}' or it is worthless.")
+    payload = {
+        "type": "inventory_update",
+        "inventory_data": inventory_display_data.model_dump(exclude_none=True)
+    }
+    if character.player_id:
+        # Access connection_manager via the imported module
+        await websocket_manager.connection_manager.send_personal_message(payload, character.player_id)
+    else:
+        logger.warning(f"Character {character.name} ({character.id}) has no player_id. Cannot send inventory update.")
+    
+async def handle_ws_equip(
+    db: Session,
+    player: models.Player,
+    character: models.Character,
+    args_str: str
+):
+    """Handles the 'equip' or 'eq' command."""
+    if not args_str:
+        await combat.send_combat_log(player.id, ["Usage: equip <item_in_backpack> [target_slot]"])
+        return
         
-    total_payout_copper = 0
-    sold_items_summary = defaultdict(int)
+    # TODO: Advanced parsing to separate item name from optional target slot
+    # For now, simple matching on the whole args_str
+    
+    backpack_items = [
+        inv_item for inv_item in character.inventory_items if not inv_item.equipped
+    ]
 
-    for item_instance in items_to_sell:
-        item_sell_price = max(1, int(item_instance.item.value * MERCHANT_BUY_PRICE_MODIFIER))
-        total_payout_copper += item_sell_price * item_instance.quantity
-        sold_items_summary[item_instance.item.name] += item_instance.quantity
-        crud.crud_character_inventory.remove_item_from_character_inventory(context.db, inventory_item_id=item_instance.id, quantity_to_remove=item_instance.quantity)
+    if not backpack_items:
+        await combat.send_combat_log(player.id, ["Your backpack is empty."])
+        return
+    
+    # Simple search logic for now
+    possible_matches = [
+        item for item in backpack_items 
+        if item.item and args_str.lower() in item.item.name.lower()
+    ]
 
-    crud.crud_character.update_character_currency(context.db, character_id=context.active_character.id, copper_change=total_payout_copper)
+    target_inv_item: Optional[models.CharacterInventoryItem] = None
+    if len(possible_matches) == 1:
+        target_inv_item = possible_matches[0]
+    elif len(possible_matches) > 1:
+        # Check for an exact match
+        exact_match = next((item for item in possible_matches if item.item.name.lower() == args_str.lower()), None)
+        if exact_match:
+            target_inv_item = exact_match
+        else:
+            await combat.send_combat_log(player.id, [f"Multiple items match '{args_str}'. Be more specific."])
+            return
+    
+    if not target_inv_item:
+        await combat.send_combat_log(player.id, [f"You do not have '{args_str}' in your backpack."])
+        return
 
-    price_str = _format_price(total_payout_copper)
-    sold_details = ", ".join([f"{qty}x {name}" for name, qty in sorted(sold_items_summary.items())])
-    return schemas.CommandResponse(message_to_player=f"You sell {sold_details} for a total of {price_str}.")
---- END OF FILE backend/app/commands/shop_parser.py ---
+    # At this point, target_inv_item is the CharacterInventoryItem to equip
+    equipped_entry, message = crud.crud_character_inventory.equip_item_from_inventory(
+        db, character_obj=character, inventory_item_id=target_inv_item.id
+    )
+
+    if equipped_entry:
+        await combat.send_combat_log(player.id, [message.replace("Staged equipping of", "You equip the")])
+    else:
+        await combat.send_combat_log(player.id, [f"You can't equip that: {message}"])
+    
+    # The inventory update will be pushed after commit in the router
+
+async def handle_ws_unequip(
+    db: Session,
+    player: models.Player,
+    character: models.Character,
+    args_str: str
+):
+    """Handles the 'unequip' or 'uneq' command."""
+    if not args_str:
+        await combat.send_combat_log(player.id, ["Usage: unequip <slot_name>"])
+        return
+
+    slot_to_unequip = args_str.lower().strip()
+    
+    if slot_to_unequip not in models.item.EQUIPMENT_SLOTS:
+        await combat.send_combat_log(player.id, [f"'{slot_to_unequip}' is not a valid equipment slot."])
+        return
+
+    unequipped_entry, message = crud.crud_character_inventory.unequip_item_to_inventory(
+        db, character_obj=character, slot_to_unequip=slot_to_unequip
+    )
+
+    if unequipped_entry:
+        await combat.send_combat_log(player.id, [message.replace("Staged unequipping of", "You unequip the")])
+    else:
+        await combat.send_combat_log(player.id, [f"You can't unequip from there: {message}"])
+
+async def handle_ws_get_take(
+    db: Session,
+    player: models.Player,
+    current_char_state: models.Character,
+    current_room_orm: models.Room, 
+    args_str: str 
+):
+    # ... (code to prepare room schema is unchanged) ...
+    dynamic_desc = get_dynamic_room_description(current_room_orm)
+    current_room_data_dict = schemas.RoomInDB.from_orm(current_room_orm).model_dump()
+    current_room_data_dict["description"] = dynamic_desc
+    current_room_schema_with_dynamic_desc = schemas.RoomInDB(**current_room_data_dict)
+
+
+    if args_str.lower() == "all":
+        # ... (code for 'get all' logic is unchanged up until the commit) ...
+        items_on_ground_orm = crud.crud_room_item.get_items_in_room(db, room_id=current_room_orm.id)
+        if not items_on_ground_orm:
+            await combat.send_combat_log(player.id, ["There is nothing on the ground here to get."], room_data=current_room_schema_with_dynamic_desc)
+            return
+
+        picked_up_item_messages = []
+        failed_to_pick_up_messages = []
+        picked_up_item_names_for_broadcast = []
+        anything_actually_picked_up = False
+
+        for room_item_instance in items_on_ground_orm:
+            if not room_item_instance.item:
+                logger.warning(f"RoomItemInstance {room_item_instance.id} in room {current_room_orm.id} has no associated ItemTemplate. Skipping for 'get all'.")
+                continue
+
+            if not getattr(room_item_instance.item, 'is_gettable', True):
+                continue
+            
+            _inv_add_entry, add_message = crud.crud_character_inventory.add_item_to_character_inventory(
+                db, character_obj=current_char_state,
+                item_id=room_item_instance.item_id,
+                quantity=room_item_instance.quantity
+            )
+
+            if _inv_add_entry:
+                crud.crud_room_item.remove_item_from_room(
+                    db, room_item_instance_id=room_item_instance.id,
+                    quantity_to_remove=room_item_instance.quantity
+                )
+                item_name_with_qty = room_item_instance.item.name
+                if room_item_instance.quantity > 1:
+                    item_name_with_qty += f" (x{room_item_instance.quantity})"
+                
+                picked_up_item_messages.append(f"You take the {item_name_with_qty}.")
+                picked_up_item_names_for_broadcast.append(item_name_with_qty)
+                anything_actually_picked_up = True
+            else:
+                failed_to_pick_up_messages.append(f"Could not take {room_item_instance.item.name}: {add_message.replace('You pick up the ', '').replace('You add ', '').replace(' to your inventory.', '')}")
+        
+        if not anything_actually_picked_up and not failed_to_pick_up_messages:
+            await combat.send_combat_log(player.id, ["There was nothing gettable on the ground."], room_data=current_room_schema_with_dynamic_desc)
+            return
+
+        if anything_actually_picked_up:
+            db.commit()
+            await _send_inventory_update_to_player(db, current_char_state) # ### UPDATE PUSH ###
+        else:
+            db.rollback() # If nothing was picked up, rollback any potential changes
+        
+        db.refresh(current_char_state)
+        refreshed_room_orm = crud.crud_room.get_room_by_id(db, current_room_orm.id)
+
+        # ... (rest of the 'get all' response logic is unchanged) ...
+        updated_room_schema_for_response = current_room_schema_with_dynamic_desc # Default
+        if refreshed_room_orm:
+            updated_dynamic_desc = get_dynamic_room_description(refreshed_room_orm)
+            updated_room_data_dict = schemas.RoomInDB.from_orm(refreshed_room_orm).model_dump()
+            updated_room_data_dict["description"] = updated_dynamic_desc
+            updated_room_schema_for_response = schemas.RoomInDB(**updated_room_data_dict)
+        
+        final_log_to_player = []
+        if picked_up_item_messages:
+            final_log_to_player.extend(picked_up_item_messages)
+        if failed_to_pick_up_messages:
+            final_log_to_player.extend(failed_to_pick_up_messages)
+        
+        if not final_log_to_player:
+            final_log_to_player.append("No items were picked up.")
+
+        xp_for_next = crud.crud_character.get_xp_for_level(current_char_state.level + 1)
+        vitals_payload = {
+            "current_hp": current_char_state.current_health, "max_hp": current_char_state.max_health,
+            "current_mp": current_char_state.current_mana, "max_mp": current_char_state.max_mana,
+            "current_xp": current_char_state.experience_points,
+            "next_level_xp": int(xp_for_next) if xp_for_next != float('inf') else -1,
+            "level": current_char_state.level, "platinum": current_char_state.platinum_coins,
+            "gold": current_char_state.gold_coins, "silver": current_char_state.silver_coins,
+            "copper": current_char_state.copper_coins
+        }
+        await combat.send_combat_log(player.id, final_log_to_player, room_data=updated_room_schema_for_response, character_vitals=vitals_payload)
+
+        if picked_up_item_names_for_broadcast:
+            broadcast_get_msg = f"<span class='char-name'>{current_char_state.name}</span> picks up: {', '.join(picked_up_item_names_for_broadcast)}."
+            await combat.broadcast_to_room_participants(db, current_room_orm.id, broadcast_get_msg, exclude_player_id=player.id)
+        return
+
+    # --- Existing logic for single item "get" ---
+    # ... (code for resolving single item is unchanged) ...
+    if not args_str:
+        await combat.send_combat_log(player.id, ["Get what?"], room_data=current_room_schema_with_dynamic_desc)
+        return
+    
+    items_on_ground_orm = crud.crud_room_item.get_items_in_room(db, room_id=current_room_orm.id)
+    if not items_on_ground_orm:
+        await combat.send_combat_log(player.id, ["There is nothing on the ground here to get."], room_data=current_room_schema_with_dynamic_desc)
+        return
+
+    target_room_item_instance, error_or_prompt = resolve_room_item_target(args_str, items_on_ground_orm)
+    if error_or_prompt:
+        await combat.send_combat_log(player.id, [error_or_prompt], room_data=current_room_schema_with_dynamic_desc)
+        return
+    if not target_room_item_instance or not target_room_item_instance.item:
+        await combat.send_combat_log(player.id, [f"Cannot find '{args_str}' on the ground here."], room_data=current_room_schema_with_dynamic_desc)
+        return
+    
+    if not getattr(target_room_item_instance.item, 'is_gettable', True):
+        await combat.send_combat_log(player.id, [f"You cannot pick up the {target_room_item_instance.item.name}."], room_data=current_room_schema_with_dynamic_desc)
+        return
+        
+    _inv_add_entry, add_message = crud.crud_character_inventory.add_item_to_character_inventory(
+        db, character_obj=current_char_state,
+        item_id=target_room_item_instance.item_id,
+        quantity=target_room_item_instance.quantity
+    )
+    if not _inv_add_entry: 
+        await combat.send_combat_log(player.id, [f"You try to pick up {target_room_item_instance.item.name}, but cannot. ({add_message})"], room_data=current_room_schema_with_dynamic_desc)
+        return
+    
+    crud.crud_room_item.remove_item_from_room(
+        db, room_item_instance_id=target_room_item_instance.id,
+        quantity_to_remove=target_room_item_instance.quantity
+    )
+    final_pickup_message = add_message
+    
+    db.commit()
+    await _send_inventory_update_to_player(db, current_char_state) # ### UPDATE PUSH ###
+    
+    db.refresh(current_char_state) 
+    refreshed_room_orm = crud.crud_room.get_room_by_id(db, current_room_orm.id)
+    
+    # ... (rest of the single 'get' response logic is unchanged) ...
+    updated_room_schema_for_response = current_room_schema_with_dynamic_desc
+    if refreshed_room_orm:
+        updated_dynamic_desc = get_dynamic_room_description(refreshed_room_orm)
+        updated_room_data_dict = schemas.RoomInDB.from_orm(refreshed_room_orm).model_dump()
+        updated_room_data_dict["description"] = updated_dynamic_desc
+        updated_room_schema_for_response = schemas.RoomInDB(**updated_room_data_dict)
+
+    xp_for_next = crud.crud_character.get_xp_for_level(current_char_state.level + 1)
+    vitals_payload = {
+        "current_hp": current_char_state.current_health, "max_hp": current_char_state.max_health,
+        "current_mp": current_char_state.current_mana, "max_mp": current_char_state.max_mana,
+        "current_xp": current_char_state.experience_points,
+        "next_level_xp": int(xp_for_next) if xp_for_next != float('inf') else -1,
+        "level": current_char_state.level, "platinum": current_char_state.platinum_coins,
+        "gold": current_char_state.gold_coins, "silver": current_char_state.silver_coins,
+        "copper": current_char_state.copper_coins
+    }
+    await combat.send_combat_log(player.id, [final_pickup_message], room_data=updated_room_schema_for_response, character_vitals=vitals_payload)
+    
+    broadcast_get_msg = f"<span class='char-name'>{current_char_state.name}</span> picks up {target_room_item_instance.item.name}."
+    await combat.broadcast_to_room_participants(db, current_room_orm.id, broadcast_get_msg, exclude_player_id=player.id)
+
+
+async def handle_ws_unlock(
+    db: Session,
+    player: models.Player,
+    current_char_state: models.Character,
+    current_room_orm: models.Room,
+    args_list: Sequence[str] 
+):
+    # Dynamic description for initial room schema if needed by HTTP parser (though it shouldn't modify it)
+    initial_dynamic_desc = get_dynamic_room_description(current_room_orm)
+    initial_room_data_dict = schemas.RoomInDB.from_orm(current_room_orm).model_dump()
+    initial_room_data_dict["description"] = initial_dynamic_desc
+    initial_room_schema_with_dynamic_desc = schemas.RoomInDB(**initial_room_data_dict)
+
+    cmd_context = CommandContext(
+        db=db, active_character=current_char_state,
+        current_room_orm=current_room_orm,
+        current_room_schema=initial_room_schema_with_dynamic_desc, # Pass schema with dynamic desc
+        original_command=f"unlock {' '.join(args_list)}", 
+        command_verb="unlock", args=list(args_list) 
+    )
+    response_schema_from_http = await http_interaction_parser.handle_unlock(cmd_context)
+    
+    # Prepare final room data for WS response, ensuring it has dynamic description
+    final_room_orm_for_response = crud.crud_room.get_room_by_id(db, current_room_orm.id) # Re-fetch
+    if final_room_orm_for_response:
+        final_dynamic_desc = get_dynamic_room_description(final_room_orm_for_response)
+        final_room_data_dict = schemas.RoomInDB.from_orm(final_room_orm_for_response).model_dump()
+        final_room_data_dict["description"] = final_dynamic_desc
+        final_room_schema_for_ws_response = schemas.RoomInDB(**final_room_data_dict)
+    else: # Fallback
+        final_room_schema_for_ws_response = initial_room_schema_with_dynamic_desc
+
+
+    if response_schema_from_http.message_to_player:
+        await combat.send_combat_log(
+            player.id, 
+            [response_schema_from_http.message_to_player], 
+            room_data=final_room_schema_for_ws_response # Use schema with dynamic desc
+        )
+
+
+async def handle_ws_search_examine(
+    db: Session,
+    player: models.Player,
+    current_char_state: models.Character,
+    current_room_orm: models.Room,
+    args_list: Sequence[str] 
+):
+    initial_dynamic_desc = get_dynamic_room_description(current_room_orm)
+    initial_room_data_dict = schemas.RoomInDB.from_orm(current_room_orm).model_dump()
+    initial_room_data_dict["description"] = initial_dynamic_desc
+    initial_room_schema_with_dynamic_desc = schemas.RoomInDB(**initial_room_data_dict)
+
+    cmd_context = CommandContext(
+        db=db, active_character=current_char_state,
+        current_room_orm=current_room_orm,
+        current_room_schema=initial_room_schema_with_dynamic_desc,
+        original_command=f"search {' '.join(args_list)}", 
+        command_verb="search",  
+        args=list(args_list) 
+    )
+    response_schema_from_http = await http_interaction_parser.handle_search(cmd_context)
+    
+    final_room_orm_for_response = crud.crud_room.get_room_by_id(db, current_room_orm.id) 
+    if final_room_orm_for_response:
+        final_dynamic_desc = get_dynamic_room_description(final_room_orm_for_response)
+        final_room_data_dict = schemas.RoomInDB.from_orm(final_room_orm_for_response).model_dump()
+        final_room_data_dict["description"] = final_dynamic_desc
+        final_room_schema_for_ws_response = schemas.RoomInDB(**final_room_data_dict)
+    else:
+        final_room_schema_for_ws_response = initial_room_schema_with_dynamic_desc
+        
+    if response_schema_from_http.message_to_player:
+        await combat.send_combat_log(
+            player.id, 
+            [response_schema_from_http.message_to_player], 
+            room_data=final_room_schema_for_ws_response
+        )
+
+async def handle_ws_contextual_interactable(
+    db: Session,
+    player: models.Player,
+    current_char_state: models.Character,
+    current_room_orm: models.Room,
+    verb: str, 
+    args_list: Sequence[str], 
+    interactable_schema: schemas.InteractableDetail 
+):
+    initial_dynamic_desc = get_dynamic_room_description(current_room_orm)
+    initial_room_data_dict = schemas.RoomInDB.from_orm(current_room_orm).model_dump()
+    initial_room_data_dict["description"] = initial_dynamic_desc
+    initial_room_schema_with_dynamic_desc = schemas.RoomInDB(**initial_room_data_dict)
+
+    cmd_context = CommandContext(
+        db=db, active_character=current_char_state,
+        current_room_orm=current_room_orm,
+        current_room_schema=initial_room_schema_with_dynamic_desc, 
+        original_command=f"{verb} {' '.join(args_list)}",
+        command_verb=verb, args=list(args_list) 
+    )
+    
+    response_schema_from_http = await http_interaction_parser.handle_contextual_interactable_action(cmd_context, interactable_schema)
+    
+    # Re-fetch the current room ORM to ensure its 'exits' are up-to-date after any commits in HTTP parser
+    final_response_room_orm = crud.crud_room.get_room_by_id(db, current_room_orm.id) 
+    
+    if final_response_room_orm:
+        dynamic_desc_for_response = get_dynamic_room_description(final_response_room_orm)
+        response_room_data_dict = schemas.RoomInDB.from_orm(final_response_room_orm).model_dump()
+        response_room_data_dict["description"] = dynamic_desc_for_response
+        response_room_schema_with_dynamic_desc = schemas.RoomInDB(**response_room_data_dict)
+    else: 
+        # Fallback if room somehow vanished
+        logger.warning(f"Room {current_room_orm.id} not found after contextual interactable. Using initial schema for dynamic desc.")
+        dynamic_desc_for_response = get_dynamic_room_description(current_room_orm) # Use potentially stale ORM
+        fallback_dict = initial_room_schema_with_dynamic_desc.model_dump() # Should already have a dynamic desc
+        # Ensure it's using the most recent dynamic description based on potentially stale ORM
+        fallback_dict["description"] = dynamic_desc_for_response 
+        response_room_schema_with_dynamic_desc = schemas.RoomInDB(**fallback_dict)
+
+    if response_schema_from_http.message_to_player:
+        await combat.send_combat_log(
+            player.id, 
+            [response_schema_from_http.message_to_player], 
+            room_data=response_room_schema_with_dynamic_desc 
+        )
+
+async def handle_ws_use_ooc_skill(
+    db: Session,
+    player: models.Player,
+    current_char_state: models.Character,
+    current_room_orm: models.Room, 
+    selected_skill_template: models.SkillTemplate, 
+    target_identifier: Optional[str] 
+):
+    current_room_id_for_broadcast = current_room_orm.id
+    
+    # Initial room schema for log, with dynamic description
+    initial_dynamic_desc = get_dynamic_room_description(current_room_orm)
+    initial_room_data_dict = schemas.RoomInDB.from_orm(current_room_orm).model_dump()
+    initial_room_data_dict["description"] = initial_dynamic_desc
+    current_room_schema_for_log = schemas.RoomInDB(**initial_room_data_dict)
+
+    resolved_target_for_effect: Optional[Union[models.RoomMobInstance, str]] = None
+
+    if selected_skill_template.target_type == "DOOR":
+        if target_identifier and target_identifier.lower() not in ["none", "self"]:
+            resolved_target_for_effect = target_identifier
+        else:
+            await combat.send_combat_log(player.id, [f"Which direction do you want to use '{selected_skill_template.name}' on?"], room_data=current_room_schema_for_log)
+            return
+    elif selected_skill_template.target_type in ["SELF", "NONE"]:
+        resolved_target_for_effect = None 
+    else:
+        await combat.send_combat_log(player.id, [f"Skill '{selected_skill_template.name}' has an OOC target type ('{selected_skill_template.target_type}') not yet handled for direct use."], room_data=current_room_schema_for_log)
+        return
+
+    skill_log_messages, action_taken_by_skill, char_after_ooc_skill_attempt = await combat.resolve_skill_effect(
+        db, current_char_state, selected_skill_template, resolved_target_for_effect, 
+        player.id, current_room_id_for_broadcast
+    )
+    
+    final_room_schema_for_response = current_room_schema_for_log # Start with initial
+    if action_taken_by_skill:
+        if char_after_ooc_skill_attempt: db.add(char_after_ooc_skill_attempt)
+        db.commit()
+        
+        if char_after_ooc_skill_attempt: 
+            db.refresh(char_after_ooc_skill_attempt)
+            current_char_state = char_after_ooc_skill_attempt 
+
+        refreshed_room_orm = crud.crud_room.get_room_by_id(db, current_room_id_for_broadcast)
+        if refreshed_room_orm:
+            # Generate dynamic description for the updated room state
+            final_dynamic_desc = get_dynamic_room_description(refreshed_room_orm)
+            final_room_dict = schemas.RoomInDB.from_orm(refreshed_room_orm).model_dump()
+            final_room_dict["description"] = final_dynamic_desc
+            final_room_schema_for_response = schemas.RoomInDB(**final_room_dict)
+        else:
+            logger.warning(f"Room {current_room_id_for_broadcast} not found after OOC skill. Using initial schema for log.")
+            # final_room_schema_for_response remains the initial one
+    
+    xp_for_next = crud.crud_character.get_xp_for_level(current_char_state.level + 1)
+    vitals_payload = {
+        "current_hp": current_char_state.current_health, "max_hp": current_char_state.max_health,
+        "current_mp": current_char_state.current_mana, "max_mp": current_char_state.max_mana,
+        "current_xp": current_char_state.experience_points,
+        "next_level_xp": int(xp_for_next) if xp_for_next != float('inf') else -1,
+        "level": current_char_state.level,
+        "platinum": current_char_state.platinum_coins, "gold": current_char_state.gold_coins,
+        "silver": current_char_state.silver_coins, "copper": current_char_state.copper_coins
+    }
+    await combat.send_combat_log(player.id, skill_log_messages, room_data=final_room_schema_for_response, character_vitals=vitals_payload)
+--- END OF FILE backend/app/ws_command_parsers/ws_interaction_parser.py ---
+
+--- START OF FILE backend/app/commands/interaction_parser.py ---
+# backend/app/commands/interaction_parser.py
+
+import uuid
+from typing import Optional, List, Tuple
+
+from sqlalchemy.orm import Session, attributes 
+
+from app import schemas, models, crud
+from app.schemas.common_structures import ExitDetail 
+from .command_args import CommandContext
+import random
+from app import websocket_manager # MODIFIED IMPORT
+
+async def handle_unlock(context: CommandContext) -> schemas.CommandResponse:
+    if not context.args:
+        return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player="Unlock which direction?")
+
+    direction_arg = context.args[0].lower()
+    item_hint_arg: Optional[str] = None # Changed from item_ref_arg to item_hint_arg
+
+    if len(context.args) > 2 and context.args[1].lower() == "with":
+        item_hint_arg = " ".join(context.args[2:]).strip().lower() # Store hint as lowercase
+    # ... (rest of direction parsing as before) ...
+    direction_map = {"n": "north", "s": "south", "e": "east", "w": "west", "u": "up", "d": "down"}
+    target_direction = direction_map.get(direction_arg, direction_arg)
+
+    if target_direction not in direction_map.values():
+        return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=f"'{direction_arg}' is not a valid direction.")
+
+    current_room_orm = context.current_room_orm
+    current_exits_dict = current_room_orm.exits or {}
+
+    if target_direction not in current_exits_dict:
+        return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=f"There is no exit to the {target_direction} to unlock.")
+
+    exit_data_dict = current_exits_dict.get(target_direction)
+    if not isinstance(exit_data_dict, dict):
+        return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=f"The exit to the {target_direction} is malformed.")
+
+    try:
+        exit_detail = ExitDetail(**exit_data_dict)
+    except Exception as e_parse:
+        print(f"ERROR: Pydantic validation for ExitDetail on unlock failed: {e_parse}, Data: {exit_data_dict}")
+        return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=f"The exit to the {target_direction} has corrupted lock data.")
+
+    if not exit_detail.is_locked:
+        return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=f"The way {target_direction} is already unlocked.")
+
+    # --- Key-based unlocking with smarter matching ---
+    if exit_detail.key_item_tag_opens: # This door requires a key
+        if not item_hint_arg:
+            return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=f"That lock looks like it needs a key. Try 'unlock {target_direction} with <key_name_or_type>'.")
+
+        # Search inventory for suitable keys based on the hint
+        potential_keys: List[models.CharacterInventoryItem] = []
+        inventory_items = crud.crud_character_inventory.get_character_inventory(context.db, character_id=context.active_character.id)
+        
+        for inv_item in inventory_items:
+            item_template = inv_item.item
+            if not item_template: continue
+
+            # Match if item_hint_arg is part of item name OR item type is 'key' and hint matches 'key'
+            # Or if item_hint_arg matches item_tag
+            item_properties = item_template.properties or {}
+            item_tag = item_properties.get("item_tag")
+            item_name_lower = item_template.name.lower()
+            item_type_lower = item_template.item_type.lower()
+
+            matches_hint = False
+            if item_hint_arg in item_name_lower:
+                matches_hint = True
+            elif item_hint_arg == "key" and "key" in item_type_lower: # "unlock with key" and item is of type "key"
+                matches_hint = True
+            elif item_tag and item_hint_arg == item_tag.lower(): # Exact tag match for hint
+                matches_hint = True
+            
+            if matches_hint:
+                potential_keys.append(inv_item)
+        
+        if not potential_keys:
+            return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=f"You don't seem to have any '{item_hint_arg}' that could be a key for this.")
+
+        # Now, iterate through potential keys and see if any of them open *this specific lock*
+        successfully_unlocked_with_item: Optional[models.Item] = None
+        for key_inv_item in potential_keys:
+            key_item_template = key_inv_item.item
+            key_item_properties = key_item_template.properties or {}
+            key_item_actual_tag = key_item_properties.get("item_tag")
+
+            # Door's required key can be matched by item_tag primarily, or by name as a fallback
+            required_key_identifier_lower = exit_detail.key_item_tag_opens.lower()
+
+            if (key_item_actual_tag and required_key_identifier_lower == key_item_actual_tag.lower()) or \
+               (required_key_identifier_lower == key_item_template.name.lower()):
+                successfully_unlocked_with_item = key_item_template
+                break # Found a working key
+
+        if successfully_unlocked_with_item:
+            exit_detail.is_locked = False
+            updated_exits_dict = dict(current_room_orm.exits or {})
+            updated_exits_dict[target_direction] = exit_detail.model_dump(mode='json')
+            current_room_orm.exits = updated_exits_dict
+            
+            attributes.flag_modified(current_room_orm, "exits")
+            context.db.add(current_room_orm)
+            context.db.commit()
+
+            message_to_player = f"You try the {successfully_unlocked_with_item.name}... *click* It unlocks the way {target_direction}!"
+            
+            broadcast_message = f"<span class='char-name'>{context.active_character.name}</span> unlocks the {target_direction}ern passage."
+            player_ids_in_room = [
+                char.player_id for char in crud.crud_character.get_characters_in_room(
+                    context.db, room_id=current_room_orm.id, exclude_character_id=context.active_character.id
+                ) if websocket_manager.connection_manager.is_player_connected(char.player_id)
+            ]
+            if player_ids_in_room:
+                await websocket_manager.connection_manager.broadcast_to_players({"type": "game_event", "message": broadcast_message}, player_ids_in_room)
+
+            return schemas.CommandResponse(
+                room_data=schemas.RoomInDB.from_orm(current_room_orm),
+                message_to_player=message_to_player
+            )
+        else:
+            # None of the items matching the hint worked for this specific door
+            if len(potential_keys) == 1:
+                return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=f"The {potential_keys[0].item.name} doesn't seem to fit this lock.")
+            else:
+                return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=f"None of your items matching '{item_hint_arg}' seem to fit this lock.")
+                
+    # Door does not require a key (e.g. lever, skill etc.)
+    elif not exit_detail.key_item_tag_opens and item_hint_arg:
+        return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=f"That exit doesn't seem to require a key. Using '{item_hint_arg}' has no effect.")
+
+    # Fallback: No item specified, or door isn't key-based by default 'unlock' command
+    message_to_player = f"You can't seem to unlock the way {target_direction} with your bare hands."
+    if exit_detail.skill_to_pick:
+        message_to_player += f" It might be pickable (e.g., 'use {exit_detail.skill_to_pick.skill_id_tag} {target_direction}')."
+    # Add hint for force_open_dc if present
+
+    return schemas.CommandResponse(room_data=context.current_room_schema, message_to_player=message_to_player)
+
+async def handle_search(context: CommandContext) -> schemas.CommandResponse:
+    # For now, general room search. Targetted search "search <target>" can be added later.
+    # e.g. "search east wall" would need interactables to have location tags.
+    
+    char_attrs = context.active_character # shortcut
+    # Simple perception: 1d20 + WIS_mod. TODO: Add perception skill bonus if we have skills for it.
+    perception_roll = random.randint(1, 20) + char_attrs.get_attribute_modifier("wisdom")
+    
+    messages_to_player = [f"You search the area (Perception roll: {perception_roll})..."]
+    found_something_new = False
+
+    current_room_orm = context.current_room_orm
+    if not current_room_orm.interactables: # Should be [] by default, not None
+        current_room_orm.interactables = []
+
+    # Make a mutable copy of the interactables list from the ORM for potential modification
+    # This is tricky because we're modifying a list of dicts within a JSONB field.
+    # The best way is to get the whole list, modify it, and set it back.
+    room_interactables_list_of_dicts = list(current_room_orm.interactables or [])
+    interactables_updated_in_db = False
+
+    for i, interactable_dict in enumerate(room_interactables_list_of_dicts):
+        try:
+            interactable = schemas.InteractableDetail(**interactable_dict)
+            if interactable.is_hidden and \
+               char_attrs.id not in interactable.revealed_to_char_ids and \
+               interactable.reveal_dc_perception is not None and \
+               perception_roll >= interactable.reveal_dc_perception:
+                
+                messages_to_player.append(f"You notice {interactable.name}!")
+                
+                # Update the specific interactable_dict in our list copy
+                if char_attrs.id not in room_interactables_list_of_dicts[i].setdefault("revealed_to_char_ids", []):
+                    room_interactables_list_of_dicts[i]["revealed_to_char_ids"].append(str(char_attrs.id)) # Store as string if JSON
+                
+                found_something_new = True
+                interactables_updated_in_db = True
+        except Exception as e_parse:
+            print(f"ERROR parsing interactable during search: {e_parse}, Data: {interactable_dict}")
+            continue # Skip malformed interactable
+
+    if interactables_updated_in_db:
+        current_room_orm.interactables = room_interactables_list_of_dicts # Assign modified list back
+        attributes.flag_modified(current_room_orm, "interactables")
+        context.db.add(current_room_orm)
+        context.db.commit()
+        # context.db.refresh(current_room_orm) # If schema needs immediate reflection of change
+
+    if not found_something_new and len(messages_to_player) == 1: # Only the "You search..." message
+        messages_to_player.append("You don't find anything new or out of the ordinary.")
+    
+    return schemas.CommandResponse(
+        room_data=schemas.RoomInDB.from_orm(current_room_orm), # Send updated room if anything changed
+        message_to_player="\n".join(messages_to_player)
+    )
+
+
+async def handle_contextual_interactable_action(
+    context: CommandContext, 
+    interactable: schemas.InteractableDetail # The specific interactable being acted upon
+) -> schemas.CommandResponse:
+    
+    effect = interactable.on_interact_effect
+    message_to_player = ""
+    # This will be the room data sent back to the player initiating the action.
+    # It should be the data of the room they are currently in.
+    response_room_schema = context.current_room_schema 
+    room_state_changed_for_response = False
+
+
+    if effect.type == "toggle_exit_lock":
+        if not effect.target_exit_direction:
+            message_to_player = "Error: This interactable's effect is misconfigured (no target direction)."
+        else:
+            # Step 1: Identify the lock_id_tag from the CURRENT room's targeted exit
+            current_room_orm = context.current_room_orm
+            current_room_exits_dict = dict(current_room_orm.exits or {})
+            targeted_exit_in_current_room_data = current_room_exits_dict.get(effect.target_exit_direction)
+
+            if not targeted_exit_in_current_room_data or not isinstance(targeted_exit_in_current_room_data, dict):
+                message_to_player = f"Error: The {effect.target_exit_direction} exit in your current room is misconfigured or doesn't exist."
+            else:
+                try:
+                    current_room_exit_detail = ExitDetail(**targeted_exit_in_current_room_data)
+                    lock_to_toggle_id_tag = current_room_exit_detail.lock_id_tag
+                    
+                    if not lock_to_toggle_id_tag:
+                        message_to_player = f"Error: The {effect.target_exit_direction} exit in your room doesn't have a lock_id_tag to toggle."
+                    else:
+                        # Step 2 & 3: Find ALL rooms and iterate through ALL their exits
+                        all_rooms_in_db = context.db.query(models.Room).all()
+                        rooms_actually_modified_this_action = []
+
+                        for room_orm_to_check in all_rooms_in_db:
+                            room_exits_dict_to_check = dict(room_orm_to_check.exits or {})
+                            an_exit_in_this_room_was_modified = False
+
+                            for direction, exit_data_dict_to_check in room_exits_dict_to_check.items():
+                                if isinstance(exit_data_dict_to_check, dict):
+                                    try:
+                                        exit_detail_to_check = ExitDetail(**exit_data_dict_to_check)
+                                        if exit_detail_to_check.lock_id_tag == lock_to_toggle_id_tag:
+                                            # Found a matching lock_id_tag, toggle it
+                                            exit_detail_to_check.is_locked = not exit_detail_to_check.is_locked
+                                            room_exits_dict_to_check[direction] = exit_detail_to_check.model_dump(mode='json')
+                                            an_exit_in_this_room_was_modified = True
+                                    except Exception as e_parse_other_exit:
+                                        # Log this, but don't necessarily stop the whole process
+                                        # logger.error(f"Error parsing exit data in room {room_orm_to_check.name} ({room_orm_to_check.id}) for exit {direction}: {e_parse_other_exit}")
+                                        print(f"ERROR (interaction_parser): Parsing exit {direction} in room {room_orm_to_check.name}: {e_parse_other_exit}")
+
+
+                            if an_exit_in_this_room_was_modified:
+                                room_orm_to_check.exits = room_exits_dict_to_check
+                                attributes.flag_modified(room_orm_to_check, "exits")
+                                context.db.add(room_orm_to_check)
+                                rooms_actually_modified_this_action.append(room_orm_to_check)
+                        
+                        if rooms_actually_modified_this_action:
+                            context.db.commit()
+                            # Refresh the current room ORM if it was among those modified,
+                            # to ensure the response_room_schema is up-to-date.
+                            if current_room_orm in rooms_actually_modified_this_action:
+                                context.db.refresh(current_room_orm)
+                            
+                            response_room_schema = schemas.RoomInDB.from_orm(current_room_orm) # Update with potentially changed current room
+                            room_state_changed_for_response = True
+
+                            message_to_player = (effect.message_success_self or "You interact with it.").format(character_name=context.active_character.name)
+                            broadcast_msg_text = (effect.message_success_others or f"{{character_name}} interacts with {interactable.name}.").format(character_name=context.active_character.name)
+                            
+                            # Optimized broadcast: only broadcast to players in *affected* rooms if they are different from current.
+                            # For simplicity now, just broadcasting to current room.
+                            # A more advanced system could collect all affected room_ids and broadcast to them.
+                            player_ids_in_current_room = [
+                                char.player_id for char in crud.crud_character.get_characters_in_room(
+                                    context.db, room_id=current_room_orm.id, exclude_character_id=context.active_character.id
+                                ) if websocket_manager.connection_manager.is_player_connected(char.player_id)
+                            ]
+                            if player_ids_in_current_room:
+                                await websocket_manager.connection_manager.broadcast_to_players({"type": "game_event", "message": broadcast_msg_text}, player_ids_in_current_room)
+                        else:
+                            message_to_player = f"You interact with the {interactable.name}, but it seems disconnected or already in the desired state."
+
+                except Exception as e_parse_current_exit:
+                    message_to_player = f"Error processing the {effect.target_exit_direction} exit in your room: {e_parse_current_exit}"
+                    print(f"ERROR (interaction_parser): Parsing current room's target exit for interactable: {e_parse_current_exit}")
+    
+    elif effect.type == "custom_event":
+        message_to_player = (effect.message_success_self or f"You {interactable.action_verb} the {interactable.name}.").format(character_name=context.active_character.name)
+        broadcast_msg_text = (effect.message_success_others or f"{{character_name}} {interactable.action_verb}s the {interactable.name}.").format(character_name=context.active_character.name)
+        
+        player_ids_in_room = [
+            char.player_id for char in crud.crud_character.get_characters_in_room(
+                context.db, room_id=context.current_room_orm.id, exclude_character_id=context.active_character.id
+            ) if websocket_manager.connection_manager.is_player_connected(char.player_id)
+        ]
+        if player_ids_in_room and broadcast_msg_text:
+            await websocket_manager.connection_manager.broadcast_to_players({"type": "game_event", "message": broadcast_msg_text}, player_ids_in_room)
+        
+        # If this custom event changes room state (e.g. description, interactable visibility)
+        # then response_room_schema should be updated and room_state_changed_for_response set to True.
+        # For now, assume no state change for generic custom_event unless explicitly handled.
+
+    else: # Default fallback for other/unhandled effect types
+        message_to_player = (effect.message_fail_self or "Nothing interesting happens.").format(character_name=context.active_character.name)
+
+    return schemas.CommandResponse(
+        room_data=response_room_schema, # This will be the (potentially refreshed) current room's schema
+        message_to_player=message_to_player
+    )
+--- END OF FILE backend/app/commands/interaction_parser.py ---
 
 --- START OF FILE backend/app/models/item.py ---
 # backend/app/models/item.py
 import uuid
 from typing import Optional, Dict, Any
 
-from sqlalchemy import Column, String, Text, Float, Integer, Boolean # Keep Column for __tablename__ etc.
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
+from sqlalchemy import Column, String, Text, Float, JSON, Integer, Boolean # Keep Column for __tablename__ etc.
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.base_class import Base
@@ -513,7 +1415,7 @@ class Item(Base):
     rarity: Mapped[str] = mapped_column(String(50), nullable=False, default="common", index=True)
     slot: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, comment="e.g., head, torso, main_hand, off_hand, ring, consumable, utility")
     
-    properties: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSONB, nullable=True, comment="e.g., {'damage': '1d6', 'armor_class': 5, 'modifier': {'strength': 1}}")
+    properties: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True, comment="e.g., {'damage': '1d6', 'armor_class': 5, 'modifier': {'strength': 1}}")
     
     weight: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     value: Mapped[int] = mapped_column(Integer, nullable=False, default=0, comment="Monetary value for shops")
@@ -552,13 +1454,1029 @@ EQUIPMENT_SLOTS = {
 }
 --- END OF FILE backend/app/models/item.py ---
 
+--- START OF FILE backend/app/schemas/item.py ---
+# backend/app/schemas/item.py
+import uuid
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, Any, List
+
+# --- Item Schemas ---
+class ItemBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = None
+    item_type: str = Field(..., description="e.g., weapon, armor, potion, junk")
+    rarity: str = "common"
+    slot: Optional[str] = Field(None, description="Primary equippable slot type, e.g., head, main_hand, consumable")
+    properties: Optional[Dict[str, Any]] = Field(None, description="e.g., {'damage': '1d6', 'armor_class': 5}")
+    weight: float = Field(0.0, ge=0)
+    value: int = Field(0, ge=0)
+    stackable: bool = False
+    max_stack_size: Optional[int] = Field(1, ge=1)
+
+class RoomItemInstanceBase(BaseModel):
+    quantity: int
+    item: 'Item' # Use the existing Item schema for the template details
+
+class RoomItemInstanceInDB(RoomItemInstanceBase):
+    id: uuid.UUID
+    room_id: uuid.UUID
+    item_id: uuid.UUID
+    
+    class Config:
+        from_attributes = True
+class ItemCreate(ItemBase):
+    pass
+
+class ItemUpdate(BaseModel): # Allow partial updates
+    name: Optional[str] = None
+    description: Optional[str] = None
+    item_type: Optional[str] = None
+    slot: Optional[str] = None
+    properties: Optional[Dict[str, Any]] = None
+    weight: Optional[float] = None
+    value: Optional[int] = None
+    stackable: Optional[bool] = None
+    max_stack_size: Optional[int] = None
+
+class ItemInDBBase(ItemBase):
+    id: uuid.UUID
+
+    class Config:
+        from_attributes = True
+
+class Item(ItemInDBBase): # For returning item info
+    pass
+
+class ItemInDB(ItemInDBBase): # More complete internal representation if needed
+    pass
+
+
+# --- CharacterInventoryItem Schemas ---
+# This represents an item *instance* in a character's inventory
+
+class CharacterInventoryItemBase(BaseModel):
+    item_id: uuid.UUID
+    quantity: int = Field(1, ge=1)
+    equipped: bool = False
+    equipped_slot: Optional[str] = None # Actual character slot occupied if equipped
+
+class CharacterInventoryItemCreate(CharacterInventoryItemBase):
+    # character_id will be supplied by the service/path
+    pass
+
+class CharacterInventoryItemUpdate(BaseModel):
+    quantity: Optional[int] = Field(None, ge=1)
+    equipped: Optional[bool] = None
+    equipped_slot: Optional[str] = None
+
+class CharacterInventoryItemInDBBase(CharacterInventoryItemBase):
+    id: uuid.UUID # The unique ID of this inventory entry
+    character_id: uuid.UUID
+    item: Item # Include full item details when displaying inventory
+
+    class Config:
+        from_attributes = True
+
+class CharacterInventoryItem(CharacterInventoryItemInDBBase): # For returning to client
+    pass
+
+
+# --- Composite Schema for Displaying Full Inventory ---
+class CharacterInventoryDisplay(BaseModel):
+    equipped_items: Dict[str, CharacterInventoryItem] = Field(default_factory=dict, description="Items currently equipped, keyed by their equipped_slot")
+    backpack_items: List[CharacterInventoryItem] = Field(default_factory=list, description="Items in inventory but not equipped")
+    platinum: int = 0
+    gold: int = 0
+    silver: int = 0
+    copper: int = 0
+    # Add more fields like total_weight, currency later
+
+class EquipRequest(BaseModel):
+    target_slot: Optional[str] = Field(None, description="Optional: The specific character slot to equip the item to, e.g., 'finger_1'")
+--- END OF FILE backend/app/schemas/item.py ---
+
+--- START OF FILE backend/app/models/character_inventory_item.py ---
+# backend/app/models/character_inventory_item.py
+import uuid
+from typing import TYPE_CHECKING, Optional
+
+from sqlalchemy import ForeignKey, Integer, Boolean, String
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from ..db.base_class import Base
+
+if TYPE_CHECKING:
+    from .character import Character  # noqa: F401
+    from .item import Item  # noqa: F401
+
+
+class CharacterInventoryItem(Base):
+    __tablename__ = "character_inventory_items"
+
+    # Composite Primary Key: (character_id, item_id)
+    # However, SQLAlchemy prefers a single surrogate primary key for association objects
+    # if they have additional attributes beyond just the foreign keys.
+    # Let's add an explicit id for this table for easier reference, though character_id + item_id could form a unique constraint.
+    # Or, if an item can appear multiple times (e.g. two identical non-stackable swords),
+    # then an auto-incrementing ID for this table row is essential.
+    # Let's assume for now a character can only have ONE "entry" for a given item_id, and quantity handles multiples if stackable.
+    # If not stackable, and they have two of the same sword, they'd be two separate Item instances in the Item table (e.g. with serial numbers or unique IDs anyway).
+    # For our MUD, usually an Item is a "template". If a player has two "Long Sword" (same item_id), this table handles it.
+    # Okay, if Item.stackable is false, each instance is a separate row here with quantity 1.
+    # If Item.stackable is true, one row with quantity > 1.
+    # Let's give this table its own UUID PK for simplicity in referencing a specific *instance* in inventory.
+
+    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, comment="Unique ID for this specific instance of an item in a character's inventory")
+    
+    character_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("characters.id"), index=True, nullable=False)
+    item_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("items.id"), index=True, nullable=False)
+    
+    quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    
+    # Indicates if this specific inventory item instance is currently equipped
+    equipped: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    
+    # If equipped, this specifies which of the character's equipment slots it occupies.
+    # This must be one of the keys from models.item.EQUIPMENT_SLOTS.
+    # Necessary for items that can fit into more than one type of slot (e.g. generic 'ring' item into 'finger_1' or 'finger_2')
+    # or to distinguish main_hand vs off_hand for identical weapons.
+    equipped_slot: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, comment="Actual character slot occupied if equipped, e.g. 'finger_1'")
+
+    # Relationships
+    character: Mapped["Character"] = relationship(back_populates="inventory_items")
+    item: Mapped["Item"] = relationship() # No back_populates needed if Item doesn't need to know all its inventory entries directly
+
+    def __repr__(self) -> str:
+        return f"<CharInvItem(id={self.id}, char_id='{self.character_id}', item_id='{self.item_id}', qty={self.quantity}, equipped={self.equipped}, slot='{self.equipped_slot}')>"
+--- END OF FILE backend/app/models/character_inventory_item.py ---
+
+--- CORE FILE NOT FOUND: backend/app/schemas/inventory.py ---
+
+--- START OF FILE frontend/src/state/gameStore.js ---
+// frontend/src/state/gameStore.js
+import { create } from 'zustand';
+import { immer } from 'zustand/middleware/immer';
+import { apiService } from '../services/apiService';
+import { v4 as uuidv4 } from 'uuid';
+
+const createLogLine = (data, type = 'html') => ({
+  id: uuidv4(),
+  type,
+  data,
+});
+
+const initialState = {
+  sessionState: 'LOGGED_OUT',
+  token: null,
+  characterId: null,
+  characterName: '',
+  characterClass: '',
+  characterLevel: 1,
+  characterList: [],
+  classTemplates: [],
+  logLines: [createLogLine('<span class="system-message-inline">Zustand brain is online. Please log in.</span>')],
+  hasUnreadChatMessages: false,
+  vitals: { hp: { current: 100, max: 100 }, mp: { current: 50, max: 50 }, xp: { current: 0, max: 100 }, platinum: 0, gold: 0, silver: 0, copper: 0 },
+  mapData: null,
+  currentRoomId: null,
+  activeTab: 'Terminal',
+  characterStats: null,
+  inventory: null,
+  abilities: null,
+  whoListData: null, // Added for Who List
+};
+
+const useGameStore = create(
+  immer((set, get) => ({
+    ...initialState,
+
+    // === ACTIONS ===
+    // For simple, pre-formatted HTML messages
+    addLogLine: (data) => {
+      set((state) => {
+        state.logLines.push(createLogLine(data, 'html'));
+      });
+    },
+
+    // For new structured chat payloads
+    addMessage: (chatPayload) => {
+      set((state) => {
+        state.logLines.push(createLogLine(chatPayload, 'chat'));
+        if (get().activeTab !== 'Chat') {
+          state.hasUnreadChatMessages = true;
+        }
+      });
+    },
+
+    setSessionState: (newState) => set({ sessionState: newState }),
+    login: (token) => set({ token, sessionState: 'CHAR_SELECT' }),
+    startCharacterCreation: () => set({ sessionState: 'CHAR_CREATE' }),
+    setClassTemplates: (templates) => set({ classTemplates: templates }),
+    finishCharacterCreation: () => set({ sessionState: 'CHAR_SELECT' }),
+    setCharacterList: (characters) => set({ characterList: characters }),
+
+    selectCharacter: (character) => {
+      set((state) => {
+        state.characterId = character.id;
+        state.characterName = character.name;
+        state.characterClass = character.class_name;
+        state.characterLevel = character.level;
+        state.currentRoomId = character.current_room_id;
+        state.sessionState = 'IN_GAME';
+        state.logLines = [createLogLine(`<span class="system-message-inline">Welcome, ${character.name}!</span>`)];
+      });
+      get().fetchMapData();
+    },
+
+    setVitals: (vitalsUpdate) => {
+      set((state) => {
+        if (vitalsUpdate.current_hp !== undefined) state.vitals.hp.current = vitalsUpdate.current_hp;
+        if (vitalsUpdate.max_hp !== undefined) state.vitals.hp.max = vitalsUpdate.max_hp;
+        if (vitalsUpdate.current_mp !== undefined) state.vitals.mp.current = vitalsUpdate.current_mp;
+        if (vitalsUpdate.max_mp !== undefined) state.vitals.mp.max = vitalsUpdate.max_mp;
+        if (vitalsUpdate.current_xp !== undefined) state.vitals.xp.current = vitalsUpdate.current_xp;
+        if (vitalsUpdate.next_level_xp !== undefined) state.vitals.xp.max = vitalsUpdate.next_level_xp;
+        if (vitalsUpdate.platinum !== undefined) state.vitals.platinum = vitalsUpdate.platinum;
+        if (vitalsUpdate.gold !== undefined) state.vitals.gold = vitalsUpdate.gold;
+        if (vitalsUpdate.silver !== undefined) state.vitals.silver = vitalsUpdate.silver;
+        if (vitalsUpdate.copper !== undefined) state.vitals.copper = vitalsUpdate.copper;
+
+        // And we still check for level updates
+        if (vitalsUpdate.level !== undefined) state.characterLevel = vitalsUpdate.level;
+      });
+    },
+    setInventory: (inventoryData) => set({ inventory: inventoryData }),
+    setActiveTab: (tabName) => {
+      if (tabName === 'Chat') {
+        set({ hasUnreadChatMessages: false });
+      }
+      set({ activeTab: tabName });
+      const state = get();
+      if (tabName === 'Score' && !state.characterStats) state.fetchScoreSheet();
+      if ((tabName === 'Backpack' || tabName === 'Equipment') && !state.inventory) state.fetchInventory();
+      if ((tabName === 'Skills/Spells' || tabName === 'Traits') && !state.abilities) state.fetchAbilities();
+      if (tabName === 'Who' && !state.whoListData) state.fetchWhoList(); // Fetch Who List
+    },
+
+    fetchAbilities: async () => {
+      const token = get().token;
+      if (!token) return;
+      try {
+        const abilitiesData = await apiService.fetchAbilities(token);
+        set({ abilities: abilitiesData });
+      } catch (error) {
+        console.error("Failed to fetch abilities:", error);
+        get().addLogLine("! Could not retrieve skills and traits list.");
+      }
+    },
+
+    fetchScoreSheet: async () => {
+      const token = get().token;
+      if (!token) return;
+      try {
+        const charDetails = await apiService.fetchCharacterDetails(token);
+        set({ characterStats: charDetails });
+      } catch (error) {
+        console.error("Failed to fetch score sheet:", error);
+        get().addLogLine("! Could not retrieve character score sheet.");
+      }
+    },
+
+    fetchInventory: async () => {
+      const token = get().token;
+      if (!token) return;
+      try {
+        const inventoryData = await apiService.fetchInventory(token);
+        set({ inventory: inventoryData });
+      } catch (error) {
+        console.error("Failed to fetch inventory:", error);
+        get().addLogLine("! Could not retrieve inventory.");
+      }
+    },
+
+    fetchMapData: async () => {
+      const token = get().token;
+      if (!token) return;
+      try {
+        const mapData = await apiService.fetchMapData(token);
+        set({ mapData: mapData });
+      } catch (error) {
+        console.error("Failed to fetch map data:", error);
+        get().addLogLine("! Failed to load map data.");
+      }
+    },
+
+    fetchWhoList: async () => {
+      // const token = get().token; // Needed if endpoint is secured
+      // if (!token && endpoint_is_secured) return;
+      try {
+        const whoData = await apiService.fetchWhoList(/*token*/);
+        set({ whoListData: whoData });
+      } catch (error) {
+        console.error("Failed to fetch who list:", error);
+        get().addLogLine("! Could not retrieve who list.");
+      }
+    },
+
+    logout: () => {
+      set({ ...initialState, logLines: [createLogLine('<span class="system-message-inline">You have been logged out. Please log in again.</span>')] });
+    },
+  }))
+);
+
+export default useGameStore;
+--- END OF FILE frontend/src/state/gameStore.js ---
+
+--- START OF FILE frontend/src/components/Inventory.jsx ---
+import React from 'react';
+import useGameStore from '../state/gameStore';
+import ItemName from './ItemName'; // <-- IMPORT OUR NEW COMPONENT
+import './Inventory.css'; // <-- Import its own CSS
+
+function Inventory() {
+  const inventory = useGameStore((state) => state.inventory);
+
+  if (!inventory) {
+    return <div>Loading inventory...</div>;
+  }
+
+  const { equipped_items, backpack_items, platinum, gold, silver, copper } = inventory;
+
+  const formatSlotName = (slot) => {
+    return slot.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  return (
+    <div className="inventory-container">
+      <div className="inventory-section">
+        <h4 className="inventory-header">Equipped</h4>
+        <div className="equipped-items-grid">
+          {Object.keys(equipped_items).length > 0 ? (
+            Object.entries(equipped_items).map(([slot, item]) => (
+              <div key={slot} className="inventory-item equipped">
+                <span className="slot-name">{`[${formatSlotName(slot)}]`}</span>
+                {/* ### THE CHANGE IS HERE ### */}
+                <ItemName item={item.item} />
+              </div>
+            ))
+          ) : (
+            <p className="inventory-empty-message">Nothing equipped.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="inventory-section">
+        <h4 className="inventory-header">Backpack</h4>
+        <div className="backpack-items-list">
+          {backpack_items.length > 0 ? (
+            backpack_items.map((item) => (
+              <div key={item.id} className="inventory-item backpack">
+                {/* ### AND HERE ### */}
+                <ItemName item={item.item} />
+                {item.quantity > 1 && (
+                  <span className="item-quantity"> (x{item.quantity})</span>
+                )}
+              </div>
+            ))
+          ) : (
+            <p className="inventory-empty-message">Your backpack is empty.</p>
+          )}
+        </div>
+      </div>
+      
+      <div className="inventory-section currency-footer">
+         <h4 className="inventory-header">Wealth</h4>
+         <div className="currency-display">
+            <span className="currency platinum">{platinum}p</span>
+            <span className="currency gold">{gold}g</span>
+            <span className="currency silver">{silver}s</span>
+            <span className="currency copper">{copper}c</span>
+         </div>
+      </div>
+    </div>
+  );
+}
+
+export default Inventory;
+--- END OF FILE frontend/src/components/Inventory.jsx ---
+
+--- START OF FILE frontend/src/components/EquipmentScreen.jsx ---
+import React, { useState } from 'react';
+import useGameStore from '../state/gameStore';
+import ItemName from './ItemName';
+import { apiService } from '../services/apiService';
+import './EquipmentScreen.css';
+
+const EQUIPMENT_SLOTS_CONFIG = {
+  head: { label: "Head", order: 1 },
+  neck: { label: "Neck", order: 2 },
+  torso: { label: "Torso", order: 3 },
+  back: { label: "Back", order: 4 },
+  main_hand: { label: "Main Hand", order: 5 },
+  off_hand: { label: "Off Hand", order: 6 },
+  legs: { label: "Legs", order: 7 },
+  feet: { label: "Feet", order: 8 },
+  wrists: { label: "Wrists", order: 9 },
+  hands: { label: "Hands", order: 10 },
+  finger_1: { label: "Finger 1", order: 11 },
+  finger_2: { label: "Finger 2", order: 12 },
+};
+
+const ORDERED_SLOT_KEYS = Object.keys(EQUIPMENT_SLOTS_CONFIG).sort(
+  (a, b) => EQUIPMENT_SLOTS_CONFIG[a].order - EQUIPMENT_SLOTS_CONFIG[b].order
+);
+
+const isItemEquippable = (item) => {
+  if (!item || !item.item || !item.item.slot) {
+    return false;
+  }
+  const nonEquippableSlots = ["consumable", "inventory", "junk", "key", "tool", "crafting_material"];
+  return !nonEquippableSlots.includes(item.item.slot.toLowerCase());
+};
+
+function EquipmentScreen() {
+  const inventory = useGameStore((state) => state.inventory);
+  const activeTab = useGameStore((state) => state.activeTab);
+  const token = useGameStore((state) => state.token);
+  const addLogLine = useGameStore((state) => state.addLogLine);
+
+  const [draggedItemInfo, setDraggedItemInfo] = useState(null); // Stores {id, type: 'backpack' | 'equipped'}
+  const [feedbackMessage, setFeedbackMessage] = useState('');
+
+  if (activeTab !== 'Equipment') return null;
+
+  if (!inventory) {
+    return <div className="equipment-screen-loading">Loading equipment...</div>;
+  }
+
+  const { equipped_items, backpack_items } = inventory;
+  const equippableBackpackItems = backpack_items.filter(isItemEquippable);
+
+  const handleDragStart = (event, itemId, itemType) => {
+    const dragData = JSON.stringify({ id: itemId, type: itemType });
+    event.dataTransfer.setData("application/llmud-drag-item", dragData);
+    event.dataTransfer.effectAllowed = "move";
+    setDraggedItemInfo({ id: itemId, type: itemType });
+    setFeedbackMessage('');
+  };
+
+  const handleDragOver = (event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDropOnSlot = async (event, targetSlotKey) => {
+    event.preventDefault();
+    const dragDataString = event.dataTransfer.getData("application/llmud-drag-item");
+    setDraggedItemInfo(null);
+
+    if (!dragDataString) return;
+    const dragData = JSON.parse(dragDataString);
+
+    if (dragData.type === 'backpack-item') {
+      try {
+        await apiService.equipItem(dragData.id, targetSlotKey, token);
+        // Success message can be added, or rely on reactive UI update + terminal log
+      } catch (error) {
+        console.error("Error equipping item:", error);
+        const errorDetail = error.data?.detail || error.message || 'Failed to equip item.';
+        addLogLine(`! ${errorDetail}`);
+        setFeedbackMessage(`Error: ${errorDetail}`);
+      }
+    } else {
+      // Optionally handle or ignore dropping an equipped item onto another slot
+      // For now, we only allow equipping from backpack to slot.
+      setFeedbackMessage('You can only equip items from your backpack.');
+      setTimeout(() => setFeedbackMessage(''), 3000);
+    }
+  };
+
+  const handleDropOnBackpackPanel = async (event) => {
+    event.preventDefault();
+    const dragDataString = event.dataTransfer.getData("application/llmud-drag-item");
+    setDraggedItemInfo(null);
+
+    if (!dragDataString) return;
+    const dragData = JSON.parse(dragDataString);
+
+    if (dragData.type === 'equipped-item') {
+      try {
+        await apiService.unequipItem(dragData.id, token);
+        // Success message can be added, or rely on reactive UI update + terminal log
+      } catch (error) {
+        console.error("Error unequipping item:", error);
+        const errorDetail = error.data?.detail || error.message || 'Failed to unequip item.';
+        addLogLine(`! ${errorDetail}`);
+        setFeedbackMessage(`Error: ${errorDetail}`);
+      }
+    } else {
+      // Item dragged from backpack to backpack, do nothing or provide feedback
+      // setFeedbackMessage('Item is already in your backpack.');
+      // setTimeout(() => setFeedbackMessage(''), 3000);
+    }
+  };
+  
+  const handleDragEnd = () => {
+    setDraggedItemInfo(null);
+  };
+
+  return (
+    <div className="equipment-screen-container">
+      <div className="equipped-slots-panel">
+        <h3 className="panel-header">Equipped Gear</h3>
+        {ORDERED_SLOT_KEYS.map((slotKey) => {
+          const equippedItemEntry = equipped_items[slotKey]; // This is CharacterInventoryItem
+          return (
+            <div
+              key={slotKey}
+              className="equipment-slot"
+              data-slot-key={slotKey}
+              onDragOver={handleDragOver}
+              onDrop={(e) => handleDropOnSlot(e, slotKey)}
+            >
+              <span className="slot-label">{EQUIPMENT_SLOTS_CONFIG[slotKey].label}:</span>
+              <div 
+                className="slot-item-display"
+                draggable={!!equippedItemEntry} // Make draggable only if item exists
+                onDragStart={(e) => equippedItemEntry && handleDragStart(e, equippedItemEntry.id, 'equipped-item')}
+                onDragEnd={handleDragEnd}
+              >
+                {equippedItemEntry ? (
+                  <ItemName item={equippedItemEntry.item} />
+                ) : (
+                  <span className="slot-empty">[Empty]</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div 
+        className="equippable-items-panel"
+        onDragOver={handleDragOver}
+        onDrop={handleDropOnBackpackPanel}
+      >
+        <h3 className="panel-header">Equippable Items (Backpack)</h3>
+        {feedbackMessage && <p className="feedback-message">{feedbackMessage}</p>}
+        <div className="equippable-items-list">
+          {equippableBackpackItems.length > 0 ? (
+            equippableBackpackItems.map((invItem) => ( // invItem is CharacterInventoryItem
+              <div
+                key={invItem.id}
+                className={`equippable-item ${draggedItemInfo?.id === invItem.id ? 'dragging' : ''}`}
+                draggable="true"
+                onDragStart={(e) => handleDragStart(e, invItem.id, 'backpack-item')}
+                onDragEnd={handleDragEnd}
+                data-inventory-item-id={invItem.id}
+              >
+                <ItemName item={invItem.item} />
+                {invItem.quantity > 1 && <span className="item-quantity"> (x{invItem.quantity})</span>}
+              </div>
+            ))
+          ) : (
+            <p className="items-empty-message">No equippable items in backpack.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default EquipmentScreen;
+--- END OF FILE frontend/src/components/EquipmentScreen.jsx ---
+
+--- START OF FILE frontend/src/services/apiService.js ---
+const API_BASE_URL = 'https://llmud.trazen.org/api/v1';
+
+async function fetchData(endpoint, options = {}, token = null) {
+    // console.log(`[apiService] fetchData called for endpoint: ${endpoint}. Token received:`, token);
+    const headers = new Headers(options.headers || {});
+
+    // The component will give us the token when needed.
+    if (token) {
+        headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    // ... the rest of this function is unchanged...
+    if (options.body && typeof options.body === 'object' && !(options.body instanceof URLSearchParams)) {
+        headers.set('Content-Type', 'application/json');
+        options.body = JSON.stringify(options.body);
+    }
+    options.headers = headers;
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+    if (response.status === 204) return null;
+    const data = await response.json();
+    if (!response.ok) {
+        console.error("API Error Response Data:", data);
+        const error = new Error(data.detail || `HTTP error! Status: ${response.status}`);
+        error.response = response;
+        error.data = data;
+        throw error;
+    }
+    return data;
+}
+
+
+export const apiService = {
+    // loginUser and registerUser don't need a token, so they are unchanged.
+    loginUser: (username, password) => {
+        const formData = new URLSearchParams();
+        formData.append('username', username);
+        formData.append('password', password);
+        return fetchData('/users/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData
+        });
+    },
+
+    registerUser: (username, password) => {
+        return fetchData('/users/register', {
+            method: 'POST',
+            body: { username, password }
+        });
+    },
+    fetchCharacters: (token) => {
+        return fetchData('/character/mine', {}, token);
+    },
+    fetchClassTemplates: (token) => {
+        return fetchData('/character-class/templates', {}, token);
+    },
+    fetchCharacterDetails: async (token) => {
+        const response = await fetch(`${API_BASE_URL}/character/me/active`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to fetch character details');
+        return response.json();
+    },
+    fetchInventory: async (token) => {
+        const response = await fetch(`${API_BASE_URL}/inventory/mine`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to fetch inventory');
+        return response.json();
+    },
+    selectCharacterOnBackend: (characterId, token) => {
+        return fetchData(`/character/${characterId}/select`, { method: 'POST' }, token);
+    },
+    fetchMapData: async (token) => {
+        const response = await fetch(`${API_BASE_URL}/map/level_data`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to fetch map data');
+        return response.json();
+    },
+    fetchAbilities: async (token) => {
+        const response = await fetch(`${API_BASE_URL}/character/me/abilities`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to fetch abilities');
+        return response.json();
+    },
+    createCharacter: (characterData, token) => {
+        return fetchData('/character/create', {
+            method: 'POST',
+            body: characterData
+        }, token);
+    },
+    equipItem: (inventoryItemEntryId, targetSlotKey, token) => {
+        return fetchData(`/inventory/equip/${inventoryItemEntryId}`, {
+            method: 'POST',
+            body: { target_slot: targetSlotKey }
+        }, token);
+    },
+    unequipItem: (inventoryItemEntryId, token) => {
+        return fetchData(`/inventory/unequip/${inventoryItemEntryId}`, {
+            method: 'POST', // Backend endpoint is POST
+            // No body needed for this unequip endpoint
+        }, token);
+    },
+    fetchWhoList: async (token) => {
+        const response = await fetch(`${API_BASE_URL}/character/who_list`, {
+            // No token needed if it's a public endpoint, otherwise add:
+            // headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to fetch who list');
+        return response.json();
+    },
+};
+--- END OF FILE frontend/src/services/apiService.js ---
+
+--- START OF FILE frontend/src/services/webSocketService.js ---
+// frontend/src/services/webSocketService.js
+import useGameStore from '../state/gameStore';
+import { v4 as uuidv4 } from 'uuid';
+
+const WS_PROTOCOL = 'wss:';
+const WS_HOST = 'llmud.trazen.org';
+
+const { getState, setState } = useGameStore;
+
+let socket = null;
+
+const createLogEntry = (type, data) => ({
+  id: uuidv4(),
+  type: type,
+  data: data,
+});
+
+const handleMessage = (event) => {
+    try {
+        const serverData = JSON.parse(event.data);
+        console.log("WS RCV:", serverData);
+
+        // Get all the actions we might need from the store.
+        const { addLogLine, addMessage, setVitals, fetchWhoList } = getState(); // Add fetchWhoList
+
+        switch (serverData.type) {
+            case "welcome_package":
+                // Handle log lines and map data separately...
+                if (serverData.log && serverData.log.length > 0) {
+                    const newLogEntries = serverData.log.map(line => createLogEntry('html', line));
+                    setState(state => { state.logLines.push(...newLogEntries); });
+                }
+                if (serverData.room_data) {
+                    setState(state => { state.currentRoomId = serverData.room_data.id; });
+                    getState().fetchMapData(serverData.room_data.z);
+                }
+                // ...THEN call the single source of truth for vitals.
+                if (serverData.character_vitals) {
+                    setVitals(serverData.character_vitals);
+                }
+                break;
+
+            case "combat_update":
+                // Handle log lines and map data separately...
+                if (serverData.log && serverData.log.length > 0) {
+                    const newLogEntries = serverData.log.map(line => createLogEntry('html', line));
+                    setState(state => { state.logLines.push(...newLogEntries); });
+                }
+                if (serverData.room_data) {
+                     setState(state => { state.currentRoomId = serverData.room_data.id; });
+                     const currentZ = getState().mapData ? getState().mapData.z_level : null;
+                     if (currentZ !== null && currentZ !== serverData.room_data.z) {
+                         getState().fetchMapData(serverData.room_data.z);
+                     }
+                }
+                // ...THEN call the single source of truth for vitals.
+                if (serverData.character_vitals) {
+                    setVitals(serverData.character_vitals);
+                }
+                break;
+
+            case "look_response":
+                setState(state => {
+                    state.logLines.push(createLogEntry('look', serverData)); 
+                    if (serverData.room_data) {
+                        state.currentRoomId = serverData.room_data.id;
+                        const currentZ = state.mapData ? state.mapData.z_level : null;
+                        if (currentZ === null || currentZ !== serverData.room_data.z) {
+                             getState().fetchMapData(serverData.room_data.z);
+                        }
+                    }
+                });
+                break;
+
+            case "vitals_update":
+                // No wrappers. No bullshit. Just call the action.
+                setVitals(serverData);
+                break;
+            
+            case "inventory_update":
+                setState(state => {
+                    state.inventory = serverData.inventory_data;
+                });
+                break;
+
+            case "game_event":
+                if(serverData.message) addLogLine(serverData.message, 'html');
+                break;
+            
+            case "ooc_message":
+                 if(serverData.message) addLogLine(serverData.message, 'html');
+                 break;
+                 
+            case "chat_message":
+                if (serverData.payload) {
+                    addMessage(serverData.payload);
+                }
+                break;
+            
+            case "who_list_updated": // New case
+                console.log("WS: Received who_list_updated, fetching new list.");
+                fetchWhoList();
+                break;
+ 
+            default:
+                console.warn("Unhandled WS message type:", serverData.type, serverData);
+                addLogLine(`<span class="system-message-inline">Unhandled event: ${serverData.type}</span>`, 'html');
+                break;
+        }
+
+    } catch (e) {
+        console.error("Error parsing or handling WebSocket message:", e);
+    }
+};
+
+const handleClose = (event) => {
+    console.log("WebSocket connection closed:", event.code, event.reason);
+    socket = null;
+    const { addLogLine } = getState();
+    const closeMessage = `! Game server connection closed. (Code: ${event.code} ${event.reason || ''})`.trim();
+    addLogLine(`<span class="system-message-inline">${closeMessage}</span>`, 'html');
+};
+
+const handleError = (event) => {
+    console.error("WebSocket error observed:", event);
+    const { addLogLine } = getState();
+    addLogLine('<span class="system-message-inline">! WebSocket connection error.</span>', 'html');
+};
+
+export const webSocketService = {
+    connect: () => {
+        const token = getState().token;
+        const characterId = getState().characterId;
+
+        if (!token || !characterId) {
+            console.error("WS Connect: Missing token or character ID.");
+            return;
+        }
+
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            console.log("WebSocket already open.");
+            return;
+        }
+
+        const wsUrl = `${WS_PROTOCOL}//${WS_HOST}/ws?token=${token}&character_id=${characterId}`;
+        
+        socket = new WebSocket(wsUrl);
+        socket.onopen = () => console.log("WebSocket connection established.");
+        socket.onmessage = handleMessage;
+        socket.onclose = handleClose;
+        socket.onerror = handleError;
+    },
+
+    disconnect: () => {
+        if (socket) {
+            socket.close();
+        }
+    },
+
+    sendMessage: (payload) => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify(payload));
+        } else {
+            console.error("Cannot send WS message: Not connected.");
+            const { addLogLine } = getState();
+            addLogLine('<span class="system-message-inline">! Cannot send command: Not connected.</span>', 'html');
+        }
+    },
+    
+    addClientEcho: (command) => {
+        const { addLogLine } = getState();
+        addLogLine(`> ${command}`, 'html');
+    }
+};
+--- END OF FILE frontend/src/services/webSocketService.js ---
+
+--- START OF FILE backend/app/api/v1/endpoints/inventory.py ---
+# backend/app/api/v1/endpoints/inventory.py
+import uuid
+from fastapi import APIRouter, Depends, HTTPException, status, Body
+from sqlalchemy.orm import Session
+from typing import List
+
+from .... import schemas, models, crud
+from ....db.session import get_db
+from ....api.dependencies import get_current_active_character
+from ....ws_command_parsers.ws_interaction_parser import _send_inventory_update_to_player # IMPORT THE HELPER
+
+router = APIRouter()
+
+def format_inventory_for_display(
+    inventory_items: List[models.CharacterInventoryItem],
+    character: models.Character # Add character for currency
+) -> schemas.CharacterInventoryDisplay:
+    """Helper function to format raw inventory items into the display schema."""
+    equipped_dict: dict[str, schemas.CharacterInventoryItem] = {} # Use correct schema
+    backpack_list: list[schemas.CharacterInventoryItem] = [] # Use correct schema
+
+    for inv_item_orm in inventory_items:
+        # Ensure the item relationship is loaded for the schema conversion
+        # This should be handled by the query that fetches inventory_items_orm
+        # (e.g., crud.crud_character_inventory.get_character_inventory)
+        if not inv_item_orm.item: # Defensive check
+            # logger.warning(f"Inventory item {inv_item_orm.id} missing item details, skipping in display.")
+            continue
+        item_schema = schemas.CharacterInventoryItem.from_orm(inv_item_orm) # Use correct schema
+        if inv_item_orm.equipped and inv_item_orm.equipped_slot:
+            equipped_dict[inv_item_orm.equipped_slot] = item_schema
+        else:
+            backpack_list.append(item_schema)
+            
+    return schemas.CharacterInventoryDisplay(
+        equipped_items=equipped_dict, 
+        backpack_items=backpack_list,
+        platinum=character.platinum_coins,
+        gold=character.gold_coins,
+        silver=character.silver_coins,
+        copper=character.copper_coins
+    )
+
+
+@router.get("/mine", response_model=schemas.CharacterInventoryDisplay)
+def get_my_inventory( # This can remain synchronous as it's read-only
+    db: Session = Depends(get_db),
+    current_character: models.Character = Depends(get_current_active_character),
+):
+    """
+    Retrieve the inventory for the currently active character.
+    """
+    inventory_items_orm = crud.crud_character_inventory.get_character_inventory(
+        db, character_id=current_character.id
+    )
+    # Pass current_character to include currency
+    return format_inventory_for_display(inventory_items_orm, current_character)
+
+
+@router.post("/equip/{inventory_item_id}", response_model=schemas.CommandResponse)
+async def equip_inventory_item_api( # MAKE ASYNC
+    inventory_item_id: uuid.UUID,
+    payload: schemas.EquipRequest = Body(None),
+    db: Session = Depends(get_db),
+    current_character: models.Character = Depends(get_current_active_character),
+):
+    target_slot_from_payload = payload.target_slot if payload else None
+    
+    updated_inv_item, message = crud.crud_character_inventory.equip_item_from_inventory(
+        db=db,
+        character_obj=current_character, 
+        inventory_item_id=inventory_item_id,
+        target_slot=target_slot_from_payload
+    )
+
+    if not updated_inv_item and not message.lower().endswith("already equipped.") and not message.lower().startswith("item not found"):
+         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+
+    if updated_inv_item: 
+        db.commit()
+        db.refresh(updated_inv_item) # Refresh the specific item
+        db.refresh(current_character) # Refresh character for currency and other stats
+        await _send_inventory_update_to_player(db, current_character) # SEND WS UPDATE
+    # else: db.rollback() # If no update, ensure no lingering changes
+
+    current_room_orm = crud.crud_room.get_room_by_id(db, room_id=current_character.current_room_id)
+    current_room_schema = None
+    if current_room_orm:
+        current_room_schema = schemas.RoomInDB.from_orm(current_room_orm)
+        
+    return schemas.CommandResponse(
+        message_to_player=message,
+        room_data=current_room_schema
+    )
+
+@router.post("/unequip/{inventory_item_id}", response_model=schemas.CommandResponse)
+async def unequip_inventory_item_api( # MAKE ASYNC
+    inventory_item_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_character: models.Character = Depends(get_current_active_character),
+):
+    updated_inv_item, message = crud.crud_character_inventory.unequip_item_to_inventory(
+        db=db,
+        character_obj=current_character,
+        inventory_item_id=inventory_item_id # Pass inventory_item_id directly
+    )
+
+    if not updated_inv_item and not message.lower().endswith("not currently equipped.") and not message.lower().startswith("item not found"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+
+    if updated_inv_item:
+        db.commit()
+        db.refresh(updated_inv_item) # Refresh the specific item
+        db.refresh(current_character) # Refresh character for currency and other stats
+        await _send_inventory_update_to_player(db, current_character) # SEND WS UPDATE
+    # else: db.rollback() # If no update, ensure no lingering changes
+
+    current_room_orm = crud.crud_room.get_room_by_id(db, room_id=current_character.current_room_id)
+    current_room_schema = None
+    if current_room_orm:
+        current_room_schema = schemas.RoomInDB.from_orm(current_room_orm)
+
+    return schemas.CommandResponse(
+        message_to_player=message,
+        room_data=current_room_schema
+    )
+--- END OF FILE backend/app/api/v1/endpoints/inventory.py ---
+
 --- START OF FILE backend/app/models/character.py ---
 # backend/app/models/character.py
 import uuid
 from typing import Any, Dict, Optional, List, TYPE_CHECKING
 
-from sqlalchemy import Boolean, Column, String, ForeignKey, Integer
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB
+from sqlalchemy import JSON, Column, Integer, String, Boolean, ForeignKey, Enum, Text # Ensure Boolean is imported
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app import models
 
@@ -581,7 +2499,7 @@ class Character(Base):
 
     player_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("players.id"), nullable=False, index=True)
     god_level: Mapped[int] = mapped_column(Integer, default=0, nullable=False, comment="0 for mortals, 1-10 for gods")
-    titles: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: [], comment="e.g., ['The Godslayer', 'Cheesewheel Enthusiast']")
+    titles: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True, default=lambda: [], comment="e.g., ['The Godslayer', 'Cheesewheel Enthusiast']")
     current_room_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("rooms.id"), nullable=False, index=True)
     is_brief_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # --- Class Template Link ---
@@ -615,8 +2533,8 @@ class Character(Base):
     experience_points: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # --- Skills & Traits ---
-    learned_skills: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: [])
-    learned_traits: Mapped[Optional[List[str]]] = mapped_column(JSONB, nullable=True, default=lambda: [])
+    learned_skills: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True, default=lambda: [])
+    learned_traits: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True, default=lambda: [])
 
     # --- Basic Combat Stats (Placeholders until derived from gear/attributes) ---
     base_ac: Mapped[int] = mapped_column(Integer, default=10, nullable=False, comment="Base Armor Class")
@@ -629,6 +2547,13 @@ class Character(Base):
     silver_coins: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     copper_coins: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
+    # --- Skill and Trait Points ---
+    skill_points: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    trait_points: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+
+    autoloot_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+
+    # Relationships
     inventory_items: Mapped[List["CharacterInventoryItem"]] = relationship(
         back_populates="character",
         cascade="all, delete-orphan"
@@ -735,877 +2660,6 @@ class Character(Base):
     def __repr__(self) -> str:
         return f"<Character(id={self.id}, name='{self.name}', class='{self.class_name}', level={self.level}, hp={self.current_health}/{self.max_health})>"
 --- END OF FILE backend/app/models/character.py ---
-
---- START OF FILE backend/app/websocket_manager.py ---
-# backend/app/websocket_manager.py
-import uuid
-import logging
-import time
-from typing import Dict, List, Optional
-from fastapi import WebSocket
-from fastapi.encoders import jsonable_encoder
-
-# We need access to the database to find out where characters are.
-from app.db.session import SessionLocal
-from app import crud, models, schemas
-from app.game_logic.combat.combat_state_manager import end_combat_for_character
-from app.game_state import is_character_resting, set_character_resting_status
-from app.services.room_service import get_player_ids_in_room
-
-logger = logging.getLogger(__name__) 
-
-class ConnectionManager:
-    def __init__(self):
-        # player_id -> WebSocket mapping
-        self.active_player_connections: Dict[uuid.UUID, WebSocket] = {}
-        # player_id -> active_character_id mapping
-        self.player_active_characters: Dict[uuid.UUID, uuid.UUID] = {}
-        # character_id -> room_id mapping (CACHE)
-        self.character_locations: Dict[uuid.UUID, uuid.UUID] = {}
-        self.player_last_seen: Dict[uuid.UUID, float] = {}
-
-    async def connect(self, websocket: WebSocket, player_id: uuid.UUID, character_id: uuid.UUID):
-        await websocket.accept()
-        self.active_player_connections[player_id] = websocket
-        self.player_active_characters[player_id] = character_id
-        self.player_last_seen[player_id] = time.time()
-        
-        with SessionLocal() as db:
-            character = crud.crud_character.get_character(db, character_id=character_id)
-            if character:
-                self.character_locations[character_id] = character.current_room_id
-        
-        logger.info(f"Player {player_id} (Character {character_id}) connected via WebSocket.")
-
-    def update_last_seen(self, player_id: uuid.UUID):
-        if player_id in self.player_last_seen:
-            self.player_last_seen[player_id] = time.time()
-
-    def disconnect(self, player_id: uuid.UUID):
-        character_id = self.player_active_characters.get(player_id)
-        if character_id and character_id in self.character_locations:
-            del self.character_locations[character_id]
-        if player_id in self.active_player_connections:
-            del self.active_player_connections[player_id]
-        if player_id in self.player_active_characters:
-            del self.player_active_characters[player_id]
-        if player_id in self.player_last_seen:
-            del self.player_last_seen[player_id]
-        
-        logger.info(f"Player {player_id} disconnected from WebSocket.")
-
-    def get_character_id(self, player_id: uuid.UUID) -> Optional[uuid.UUID]:
-        return self.player_active_characters.get(player_id)
-        
-    def update_character_location(self, character_id: uuid.UUID, room_id: uuid.UUID):
-        self.character_locations[character_id] = room_id
-
-    def get_all_player_locations(self) -> Dict[uuid.UUID, uuid.UUID]:
-        return self.character_locations
-
-    def is_character_online(self, character_id: uuid.UUID) -> bool:
-        return character_id in self.character_locations
-
-    def is_player_connected(self, player_id: uuid.UUID) -> bool:
-        return player_id in self.active_player_connections
-
-    async def send_personal_message(self, message_payload: dict, player_id: uuid.UUID):
-        if player_id in self.active_player_connections:
-            websocket = self.active_player_connections[player_id]
-            try:
-                encoded_payload = jsonable_encoder(message_payload)
-                await websocket.send_json(encoded_payload)
-            except Exception as e:
-                logger.error(f"Error sending personal WS message to {player_id}: {e}")
-
-    async def broadcast_to_players(self, message_payload: dict, player_ids: List[uuid.UUID]):
-        encoded_payload = jsonable_encoder(message_payload)
-        for player_id in player_ids:
-            if player_id in self.active_player_connections:
-                websocket = self.active_player_connections[player_id]
-                try:
-                    await websocket.send_json(encoded_payload)
-                except Exception as e:
-                    logger.error(f"Error broadcasting to player {player_id}: {e}")
-    
-    # --- THIS IS THE NEW METHOD THAT MY BROKEN CODE WAS TRYING TO CALL ---
-    async def broadcast(self, message_payload: dict):
-        """Sends a message to every single connected WebSocket client."""
-        logger.info(f"Broadcasting global message: {message_payload.get('message', 'No message content')}")
-        encoded_payload = jsonable_encoder(message_payload)
-        # We iterate over the WebSocket objects directly
-        for connection in self.active_player_connections.values():
-            try:
-                await connection.send_json(encoded_payload)
-            except Exception as e:
-                # Log the error but continue trying to send to others. One bad client shouldn't stop a broadcast.
-                logger.warning(f"Failed to broadcast to a client: {e}")
-    # --- END OF NEW METHOD ---
-
-    def get_all_active_player_ids(self) -> List[uuid.UUID]:
-        return list(self.active_player_connections.keys())
-
-    async def full_player_disconnect(self, player_id: uuid.UUID, reason_key: str = "connection_lost"):
-        """
-        Orchestrates the complete removal of a player and their character from the active game world.
-        This is the function to call for timeouts, logouts, or connection drops.
-        """
-        logger.info(f"Initiating full disconnect for player {player_id}, reason: {reason_key}.")
-        character_id = self.get_character_id(player_id)
-        
-        if not character_id:
-            logger.warning(f"Cannot perform full disconnect for player {player_id}, no active character found.")
-            # Still run shallow disconnect to be safe
-            self.disconnect(player_id)
-            return
-
-        with SessionLocal() as db:
-            character = crud.crud_character.get_character(db, character_id=character_id)
-            if not character:
-                logger.error(f"Cannot find character {character_id} in DB during disconnect.")
-                self.disconnect(player_id)
-                return
-
-            # 1. Clean up game state (Combat, Resting)
-            end_combat_for_character(character.id, reason=f"disconnect_{reason_key}")
-            if is_character_resting(character.id):
-                set_character_resting_status(character.id, False)
-
-            # 2. Announce departure to the room
-            reason_messages = {
-                "timeout": "fades away after a long period of inactivity.",
-                "logout": "has left the realm.",
-                "connection_lost": "has lost their connection."
-            }
-            message = f"<span class='char-name'>{character.name}</span> {reason_messages.get(reason_key, 'vanishes.')}"
-            
-            # Get players in the room (excluding the one disconnecting)
-            player_ids_in_room = get_player_ids_in_room(db, character.current_room_id, exclude_player_ids=[player_id])
-            if player_ids_in_room:
-                await self.broadcast_to_players(
-                    {"type": "game_event", "message": message},
-                    player_ids_in_room
-                )
-
-        # 3. Close the WebSocket connection if it's still open
-        websocket = self.active_player_connections.get(player_id)
-        if websocket:
-            try:
-                await websocket.close(code=1000, reason=reason_key)
-            except Exception as e:
-                logger.warning(f"Exception while closing WebSocket for player {player_id}: {e}")
-
-        # 4. Perform the shallow disconnect to clean up manager state
-        self.disconnect(player_id)
-        logger.info(f"Full disconnect for player {player_id} complete.")
-
-# Global instance
-connection_manager = ConnectionManager()
---- END OF FILE backend/app/websocket_manager.py ---
-
---- START OF FILE backend/app/game_logic/world_ticker.py ---
-# backend/app/game_logic/world_ticker.py
-import asyncio
-import logging
-import time 
-from typing import Callable, Iterator, List, Awaitable, Dict, Any, Optional # Added Optional
-from sqlalchemy.orm import Session
-from contextlib import contextmanager
-
-from app.db.session import SessionLocal
-# We might need crud/models here if the ticker itself directly does something,
-# but generally, tasks will import what they need.
-
-from app.game_logic.mob_respawner import manage_mob_populations_task 
-from app.game_logic.mob_ai_ticker import process_roaming_mobs_task, process_aggressive_mobs_task
-from app.game_logic.player_vital_regenerator import regenerate_player_vitals_task 
-
-from app.websocket_manager import connection_manager as ws_manager
-
-logger = logging.getLogger(__name__)
-
-# --- Configuration ---
-WORLD_TICK_INTERVAL_SECONDS = 10.0
-PLAYER_AFK_TIMEOUT_SECONDS = 900.0 # 15 minutes
-
-# --- Task Registry ---
-world_tick_tasks: Dict[str, Callable[[Session], Awaitable[None]]] = {}
-
-async def check_afk_players_task(db: Session):
-    """
-    Scans for players who have been idle for too long and kicks them.
-    This function does NOT need the db session, but we accept it to match the task signature.
-    """
-    current_time = time.time()
-    # Iterate over a copy of the items to avoid runtime errors if the dict changes
-    idle_players = [
-        player_id for player_id, last_seen in list(ws_manager.player_last_seen.items())
-        if current_time - last_seen > PLAYER_AFK_TIMEOUT_SECONDS
-    ]
-
-    for player_id in idle_players:
-        logger.info(f"Player {player_id} exceeded AFK timeout. Initiating disconnect.")
-        await ws_manager.full_player_disconnect(player_id, reason_key="timeout")
-
-@contextmanager
-def db_session_for_world_tick() -> Iterator[Session]: 
-    """Provides a DB session for the duration of a world tick's tasks."""
-    db = SessionLocal()
-    try:
-        yield db 
-    finally:
-        db.close()
-
-def register_world_tick_task(task_name: str, task_func: Callable[[Session], Awaitable[None]]):
-    if task_name in world_tick_tasks:
-        print(f"Warning: World tick task '{task_name}' is being redefined.")
-    world_tick_tasks[task_name] = task_func
-
-def _initialize_and_register_all_world_tasks():
-    """
-    This function is called once when this module is loaded.
-    It registers all known world tick tasks.
-    """
-    print("World Ticker: Initializing and registering world tick tasks...")
-    
-    register_world_tick_task("mob_population_manager", manage_mob_populations_task)
-    register_world_tick_task("roaming_mob_processor", process_roaming_mobs_task) # <<< NEW TASK
-    register_world_tick_task("aggressive_mob_processor", process_aggressive_mobs_task) # <<< NEW TASK
-    register_world_tick_task("player_vital_regenerator", regenerate_player_vitals_task)
-    register_world_tick_task("afk_player_checker", check_afk_players_task) 
-    
-    print(f"World Ticker: All tasks registered. Active tasks: {list(world_tick_tasks.keys())}")
-
-_initialize_and_register_all_world_tasks() 
-
-
-async def world_ticker_loop():
-    print(f"World Ticker: Loop now running with interval: {WORLD_TICK_INTERVAL_SECONDS}s.")
-    while True:
-        start_time = time.time()
-        
-        if not world_tick_tasks:
-            await asyncio.sleep(WORLD_TICK_INTERVAL_SECONDS)
-            continue
-
-        try:
-            with db_session_for_world_tick() as db:
-                # Create a list of tasks to run to avoid issues if tasks modify the registry (not expected)
-                tasks_to_run = list(world_tick_tasks.items())
-                for task_name, task_func in tasks_to_run:
-                    try:
-                        # print(f"World Ticker: Running task '{task_name}'...") # Verbose logging
-                        await task_func(db)
-                        # print(f"World Ticker: Task '{task_name}' completed.") # Verbose logging
-                    except Exception as e:
-                        print(f"ERROR in world_tick task '{task_name}': {e}") 
-                db.commit() 
-        except Exception as e:
-            print(f"CRITICAL ERROR in world_ticker_loop's DB session: {e}") 
-
-        end_time = time.time()
-        processing_time = end_time - start_time
-        
-        sleep_duration = WORLD_TICK_INTERVAL_SECONDS - processing_time
-        if sleep_duration < 0:
-            print(f"Warning: World tick processing time ({processing_time:.2f}s) exceeded interval ({WORLD_TICK_INTERVAL_SECONDS}s).")
-            sleep_duration = 0 
-        
-        await asyncio.sleep(sleep_duration)
-
-_world_ticker_task_handle: Optional[asyncio.Task] = None
-
-def start_world_ticker_task():
-    global _world_ticker_task_handle
-    if _world_ticker_task_handle is None or _world_ticker_task_handle.done():
-        print("World Ticker: Attempting to start task...")
-        _world_ticker_task_handle = asyncio.create_task(world_ticker_loop())
-        print("World Ticker: Task created and running.")
-    else:
-        print("World Ticker: Task already running.")
-
-def stop_world_ticker_task():
-    global _world_ticker_task_handle
-    if _world_ticker_task_handle and not _world_ticker_task_handle.done():
-        print("World Ticker: Attempting to stop task...")
-        _world_ticker_task_handle.cancel()
-        _world_ticker_task_handle = None 
-        print("World Ticker: Task cancellation requested.")
-    else:
-        print("World Ticker: Task not running or already stopped.")
---- END OF FILE backend/app/game_logic/world_ticker.py ---
-
---- START OF FILE frontend/src/components/TerminalOutput.jsx ---
-// frontend/src/components/TerminalOutput.jsx
-import React from 'react';
-import LookResult from './LookResult';
-import ChatMessage from './ChatMessage'; // Import the new renderer
-
-// React.forwardRef is essential for the parent component (TabbedWindow)
-// to get a reference to the scrolling div and manage the scroll position.
-const TerminalOutput = React.forwardRef(function TerminalOutput({ logLines }, ref) {
-  return (
-    // The ref is attached to the div that actually scrolls.
-    <div id="output" className="terminal-output" ref={ref}>
-      {logLines.map((line) => {
-        // Use a stable, unique key for each log entry.
-        const key = line.id; 
-
-        // Decide how to render the line based on its 'type' property.
-        switch (line.type) {
-          // For structured 'look' responses, use the dedicated component.
-          case 'look':
-            return (
-              <div key={key} className="terminal-line look-result-wrapper">
-                <LookResult data={line.data} />
-              </div>
-            );
-          
-          // For our new structured 'chat' messages, use the ChatMessage component.
-          case 'chat':
-            return <ChatMessage key={key} data={line.data} />;
-
-          // For everything else ('html' type or any legacy strings),
-          // render it as raw HTML. This is our default fallback.
-          case 'html':
-          default:
-            return (
-              <div
-                key={key}
-                className="terminal-line"
-                dangerouslySetInnerHTML={{ __html: line.data }}
-              />
-            );
-        }
-      })}
-    </div>
-  );
-});
-
-export default TerminalOutput;
---- END OF FILE frontend/src/components/TerminalOutput.jsx ---
-
---- START OF FILE frontend/src/services/webSocketService.js ---
-// frontend/src/services/webSocketService.js
-import useGameStore from '../state/gameStore';
-import { v4 as uuidv4 } from 'uuid';
-
-const WS_PROTOCOL = 'wss:';
-const WS_HOST = 'llmud.trazen.org';
-
-const { getState, setState } = useGameStore;
-
-let socket = null;
-
-const createLogEntry = (type, data) => ({
-  id: uuidv4(),
-  type: type,
-  data: data,
-});
-
-// THIS IS THE CORRECTED FUNCTION BLOCK
-const handleMessage = (event) => {
-    try {
-        const serverData = JSON.parse(event.data);
-        console.log("WS RCV:", serverData);
-
-        // <<< THE FIX: Get the functions from the store at the time of execution.
-        const { addLogLine, addMessage } = getState();
-
-        switch (serverData.type) {
-            case "welcome_package":
-                setState((state) => {
-                    if (serverData.log && serverData.log.length > 0) {
-                        const newLogEntries = serverData.log.map(line => createLogEntry('html', line));
-                        state.logLines.push(...newLogEntries);
-                    }
-                    if (serverData.character_vitals) {
-                        state.vitals.hp.current = serverData.character_vitals.current_hp;
-                        state.vitals.hp.max = serverData.character_vitals.max_hp;
-                        state.vitals.mp.current = serverData.character_vitals.current_mp;
-                        state.vitals.mp.max = serverData.character_vitals.max_mp;
-                        state.vitals.xp.current = serverData.character_vitals.current_xp;
-                        if (serverData.character_vitals.next_level_xp !== undefined) {
-                            state.vitals.xp.max = serverData.character_vitals.next_level_xp;
-                        }
-                        state.characterLevel = serverData.character_vitals.level;
-                    }
-                    if (serverData.room_data) {
-                        state.currentRoomId = serverData.room_data.id;
-                        getState().fetchMapData(serverData.room_data.z);
-                    }
-                });
-                break;
-
-            case "combat_update":
-                setState((state) => {
-                    if (serverData.log && serverData.log.length > 0) {
-                        const newLogEntries = serverData.log.map(line => createLogEntry('html', line));
-                        state.logLines.push(...newLogEntries);
-                    }
-                    if (serverData.character_vitals) {
-                        Object.assign(state.vitals, serverData.character_vitals);
-                        if(serverData.character_vitals.level) state.characterLevel = serverData.character_vitals.level;
-                    }
-                    if (serverData.room_data) {
-                        state.currentRoomId = serverData.room_data.id;
-                        const currentZ = state.mapData ? state.mapData.z_level : null;
-                        if (currentZ !== null && currentZ !== serverData.room_data.z) {
-                            getState().fetchMapData(serverData.room_data.z);
-                        }
-                    }
-                });
-                break;
-
-            case "look_response":
-                setState(state => {
-                    state.logLines.push(createLogEntry('look', serverData)); 
-                    if (serverData.room_data) {
-                        state.currentRoomId = serverData.room_data.id;
-                        const currentZ = state.mapData ? state.mapData.z_level : null;
-                        if (currentZ === null || currentZ !== serverData.room_data.z) {
-                             getState().fetchMapData(serverData.room_data.z);
-                        }
-                    }
-                });
-                break;
-
-            case "vitals_update":
-                setState((state) => {
-                    Object.assign(state.vitals, serverData);
-                    if(serverData.level) state.characterLevel = serverData.level;
-                });
-                break;
-            
-            case "inventory_update":
-                setState(state => {
-                    state.inventory = serverData.inventory_data;
-                });
-                break;
-
-            case "game_event":
-            // THIS CASE IS FOR NPC SPEECH, MOB MOVEMENTS, ETC.
-            // IT CORRECTLY USES addLogLine TO ONLY GO TO THE TERMINAL.
-                if(serverData.message) addLogLine(serverData.message, 'html');
-                break;
-            
-            // This case should no longer be used by the backend for chat,
-            // but we'll leave it in as a fallback to prevent crashes.
-            case "ooc_message":
-                 if(serverData.message) addLogLine(serverData.message, 'html');
-                 break;
-                 
-            // <<< THIS IS THE NEW, CORRECT CASE FOR OUR STRUCTURED CHAT >>>
-            case "chat_message":
-                if (serverData.payload) {
-                    addMessage(serverData.payload);
-                }
-                break;
- 
-            default:
-                console.warn("Unhandled WS message type:", serverData.type, serverData);
-                addLogLine(`<span class="system-message-inline">Unhandled event: ${serverData.type}</span>`, 'html');
-                break;
-        }
-
-    } catch (e) {
-        console.error("Error parsing or handling WebSocket message:", e);
-    }
-};
-
-const handleClose = (event) => {
-    console.log("WebSocket connection closed:", event.code, event.reason);
-    socket = null;
-    const { addLogLine } = getState();
-    const closeMessage = `! Game server connection closed. (Code: ${event.code} ${event.reason || ''})`.trim();
-    addLogLine(`<span class="system-message-inline">${closeMessage}</span>`, 'html');
-};
-
-const handleError = (event) => {
-    console.error("WebSocket error observed:", event);
-    const { addLogLine } = getState();
-    addLogLine('<span class="system-message-inline">! WebSocket connection error.</span>', 'html');
-};
-
-export const webSocketService = {
-    connect: () => {
-        const token = getState().token;
-        const characterId = getState().characterId;
-
-        if (!token || !characterId) {
-            console.error("WS Connect: Missing token or character ID.");
-            return;
-        }
-
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            console.log("WebSocket already open.");
-            return;
-        }
-
-        const wsUrl = `${WS_PROTOCOL}//${WS_HOST}/ws?token=${token}&character_id=${characterId}`;
-        
-        socket = new WebSocket(wsUrl);
-        socket.onopen = () => console.log("WebSocket connection established.");
-        socket.onmessage = handleMessage;
-        socket.onclose = handleClose;
-        socket.onerror = handleError;
-    },
-
-    disconnect: () => {
-        if (socket) {
-            socket.close();
-        }
-    },
-
-    sendMessage: (payload) => {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify(payload));
-        } else {
-            console.error("Cannot send WS message: Not connected.");
-            const { addLogLine } = getState();
-            addLogLine('<span class="system-message-inline">! Cannot send command: Not connected.</span>', 'html');
-        }
-    },
-    
-    addClientEcho: (command) => {
-        const { addLogLine } = getState();
-        addLogLine(`> ${command}`, 'html');
-    }
-};
---- END OF FILE frontend/src/services/webSocketService.js ---
-
---- START OF FILE backend/app/api/v1/endpoints/command.py ---
-# backend/app/api/v1/endpoints/command.py
-from fastapi import APIRouter, Depends, Body
-from sqlalchemy.orm import Session
-from typing import Dict, Callable, Awaitable
-
-from app import schemas, models, crud
-from app.db.session import get_db
-from app.api.dependencies import get_current_active_character
-from app.commands.command_args import CommandContext
-from app.commands import shop_parser
-
-# Import handler modules
-from app.commands import chat_parser, movement_parser, inventory_parser, social_parser, debug_parser, meta_parser, interaction_parser
-from app.services.chat_manager import chat_manager
-
-import logging
-logger = logging.getLogger(__name__)
-
-router = APIRouter()
-
-CommandHandler = Callable[[CommandContext], Awaitable[schemas.CommandResponse]]
-
-COMMAND_REGISTRY: Dict[str, CommandHandler] = {}
-
-
-# <<< THE FUNCTION DEFINITION YOU RIGHTFULLY POINTED OUT WAS MISSING FROM MY EXPLANATION >>>
-def build_command_registry():
-    """
-    Dynamically builds the command registry at startup.
-    This function populates the COMMAND_REGISTRY with both static commands
-    and dynamic chat commands loaded from the chat_channels.json file.
-    """
-    global COMMAND_REGISTRY
-    
-    # 1. Add all static, non-chat commands to the registry.
-    static_commands = {
-        # Movement and Perception
-        "look": movement_parser.handle_look, "l": movement_parser.handle_look,
-        "north": movement_parser.handle_move, "n": movement_parser.handle_move,
-        "south": movement_parser.handle_move, "s": movement_parser.handle_move,
-        "east": movement_parser.handle_move, "e": movement_parser.handle_move,
-        "west": movement_parser.handle_move, "w": movement_parser.handle_move,
-        "up": movement_parser.handle_move, "u": movement_parser.handle_move,
-        "down": movement_parser.handle_move, "d": movement_parser.handle_move,
-        "go": movement_parser.handle_move,
-
-        # Inventory Management
-        "inventory": inventory_parser.handle_inventory, "i": inventory_parser.handle_inventory,
-        "equip": inventory_parser.handle_equip, "eq": inventory_parser.handle_equip,
-        "unequip": inventory_parser.handle_unequip, "uneq": inventory_parser.handle_unequip,
-        "drop": inventory_parser.handle_drop,
-        "get": inventory_parser.handle_get, "take": inventory_parser.handle_get,
-
-        # Interactions
-        "unlock": interaction_parser.handle_unlock,
-        "search": interaction_parser.handle_search, "examine": interaction_parser.handle_search,
-        "ex": interaction_parser.handle_search, "exa": interaction_parser.handle_search,
-
-        # Local Social Commands (Room-based)
-        "say": social_parser.handle_say, "'": social_parser.handle_say,
-        "emote": social_parser.handle_emote, ":": social_parser.handle_emote,
-        "fart": social_parser.handle_fart,
-
-        # Debug
-        "giveme": debug_parser.handle_giveme,
-        "spawnmob": debug_parser.handle_spawnmob,
-        "set_hp": debug_parser.handle_set_hp,
-        "mod_xp": debug_parser.handle_mod_xp,
-        "set_level": debug_parser.handle_set_level,
-        "setmoney": debug_parser.handle_set_money,
-        "addmoney": debug_parser.handle_add_money,
-
-        # Meta
-        "score": meta_parser.handle_score, "sc": meta_parser.handle_score,
-        "skills": meta_parser.handle_skills, "sk": meta_parser.handle_skills,
-        "traits": meta_parser.handle_traits, "tr": meta_parser.handle_traits,
-        "status": meta_parser.handle_score, "st": meta_parser.handle_score,
-        "help": meta_parser.handle_help, "?": meta_parser.handle_help,
-
-        # Shop commands
-        "list": shop_parser.handle_list,
-        "buy": shop_parser.handle_buy,
-        "sell": shop_parser.handle_sell,
-    }
-    COMMAND_REGISTRY.update(static_commands)
-
-    # 2. Add all dynamic chat commands from the ChatManager.
-    for command_alias in chat_manager.command_to_channel_map.keys():
-        COMMAND_REGISTRY[command_alias.lower()] = chat_parser.handle_chat_command
-    
-    logger.info(f"Command registry built with {len(COMMAND_REGISTRY)} total commands.")
-
-build_command_registry()
-
-# <<< NEW CORE LOGIC FUNCTION >>>
-async def execute_command_logic(context: CommandContext) -> schemas.CommandResponse:
-    """The one true command processing function, now with consolidated permission checks."""
-
-    # --- Permission Check for STATIC Debug/Sysop Commands ---
-    # The new chat system handles permissions for dynamic channels like 'godsay' on its own.
-    # We only need to protect the old-school, hardcoded debug commands here.
-    static_sysop_commands = ["giveme", "spawnmob", "set_hp", "mod_xp", "set_level", "setmoney", "addmoney", "setgod"]
-    if context.command_verb in static_sysop_commands:
-        # Check if the character's owner has the 'is_sysop' flag.
-        is_sysop = hasattr(context.active_character, 'owner') and context.active_character.owner.is_sysop
-        if not is_sysop:
-            return schemas.CommandResponse(message_to_player="A strange force prevents you from using that command.")
-
-    # 1. Check the dynamically-built command registry.
-    handler = COMMAND_REGISTRY.get(context.command_verb)
-    if handler:
-        return await handler(context)
-
-    # 2. Check for interactable action verbs as a fallback.
-    # This logic would be fully implemented here. For now, it's a placeholder.
-    if context.current_room_orm.interactables:
-        target_interactable_name = " ".join(context.args).lower()
-        for interactable_dict in context.current_room_orm.interactables:
-            try:
-                # This is where you would put the full logic to match the verb and target
-                # with an interactable object's action_verb and name/id_tag.
-                # If a match is found, you would call the interaction parser.
-                # e.g., return await interaction_parser.handle_contextual_interactable_action(context, matched_interactable)
-                pass # Placeholder for full implementation
-            except Exception as e:
-                # Log error if interactable data is malformed
-                logger.error(f"Could not parse interactable for contextual command: {e}")
-                continue
-
-    # 3. Handle commands that are exclusively for real-time WebSocket interaction.
-    # This prevents them from being accidentally processed via other means.
-    real_time_verbs = ["attack", "atk", "kill", "k", "use", "flee", "rest"]
-    if context.command_verb in real_time_verbs:
-        return schemas.CommandResponse(
-            message_to_player=f"Actions like '{context.command_verb}' are handled in real-time. (This is a WebSocket-only command)"
-        )
-
-    # 4. If no handler is found after all checks, return the default unknown command message.
-    return schemas.CommandResponse(
-        message_to_player=f"I don't understand the command: '{context.original_command}'. Type 'help' or '?'."
-    )
-
-
-# <<< THE HTTP ENDPOINT IS NOW JUST A THIN WRAPPER >>>
-@router.post("", response_model=schemas.CommandResponse)
-async def process_command_for_character(
-    payload: schemas.CommandRequest = Body(...),
-    db: Session = Depends(get_db),
-    active_character: models.Character = Depends(get_current_active_character)
-):
-    original_command_text = payload.command.strip()
-    if not original_command_text:
-        return schemas.CommandResponse(message_to_player="Please type a command.")
-
-    command_parts = original_command_text.split()
-    command_verb = command_parts[0].lower()
-    args = command_parts[1:]
-
-    current_room_orm = crud.crud_room.get_room_by_id(db, room_id=active_character.current_room_id)
-    if not current_room_orm:
-        return schemas.CommandResponse(message_to_player="CRITICAL ERROR: Character in void.")
-    
-    context = CommandContext(
-        db=db,
-        active_character=active_character,
-        current_room_orm=current_room_orm,
-        current_room_schema=schemas.RoomInDB.from_orm(current_room_orm),
-        original_command=original_command_text,
-        command_verb=command_verb,
-        args=args
-    )
-
-    # Call the new shared logic function
-    response = await execute_command_logic(context)
-    
-    # HTTP endpoint still needs to commit the transaction if changes were made
-    if response.message_to_player or response.room_data or response.special_payload:
-        db.commit()
-
-    return response
---- END OF FILE backend/app/api/v1/endpoints/command.py ---
-
---- START OF FILE frontend/src/state/gameStore.js ---
-// frontend/src/state/gameStore.js
-import { create } from 'zustand';
-import { immer } from 'zustand/middleware/immer';
-import { apiService } from '../services/apiService';
-import { v4 as uuidv4 } from 'uuid';
-
-const createLogLine = (data, type = 'html') => ({
-  id: uuidv4(),
-  type,
-  data,
-});
-
-const initialState = {
-  sessionState: 'LOGGED_OUT',
-  token: null,
-  characterId: null,
-  characterName: '',
-  characterClass: '',
-  characterLevel: 1,
-  characterList: [],
-  classTemplates: [],
-  logLines: [createLogLine('<span class="system-message-inline">Zustand brain is online. Please log in.</span>')],
-  hasUnreadChatMessages: false,
-  vitals: { hp: { current: 100, max: 100 }, mp: { current: 50, max: 50 }, xp: { current: 0, max: 100 }, platinum: 0, gold: 0, silver: 0, copper: 0 },
-  mapData: null,
-  currentRoomId: null,
-  activeTab: 'Terminal',
-  characterStats: null,
-  inventory: null,
-  abilities: null,
-  whoListData: null,
-};
-
-const useGameStore = create(
-  immer((set, get) => ({
-    ...initialState,
-
-    // === ACTIONS ===
-    // For simple, pre-formatted HTML messages
-    addLogLine: (data) => {
-      set((state) => {
-        state.logLines.push(createLogLine(data, 'html'));
-      });
-    },
-
-    // For new structured chat payloads
-    addMessage: (chatPayload) => {
-      set((state) => {
-        state.logLines.push(createLogLine(chatPayload, 'chat'));
-        if (get().activeTab !== 'Chat') {
-          state.hasUnreadChatMessages = true;
-        }
-      });
-    },
-
-    setSessionState: (newState) => set({ sessionState: newState }),
-    login: (token) => set({ token, sessionState: 'CHAR_SELECT' }),
-    startCharacterCreation: () => set({ sessionState: 'CHAR_CREATE' }),
-    setClassTemplates: (templates) => set({ classTemplates: templates }),
-    finishCharacterCreation: () => set({ sessionState: 'CHAR_SELECT' }),
-    setCharacterList: (characters) => set({ characterList: characters }),
-
-    selectCharacter: (character) => {
-      set((state) => {
-        state.characterId = character.id;
-        state.characterName = character.name;
-        state.characterClass = character.class_name;
-        state.characterLevel = character.level;
-        state.currentRoomId = character.current_room_id;
-        state.sessionState = 'IN_GAME';
-        state.logLines = [createLogLine(`<span class="system-message-inline">Welcome, ${character.name}!</span>`)];
-      });
-      get().fetchMapData();
-    },
-
-    setVitals: (vitalsUpdate) => set((state) => { Object.assign(state.vitals, vitalsUpdate); if (vitalsUpdate.level) state.characterLevel = vitalsUpdate.level; }),
-    setInventory: (inventoryData) => set({ inventory: inventoryData }),
-    setActiveTab: (tabName) => {
-      if (tabName === 'Chat') {
-        set({ hasUnreadChatMessages: false });
-      }
-      set({ activeTab: tabName });
-      const state = get();
-      if (tabName === 'Score' && !state.characterStats) state.fetchScoreSheet();
-      if ((tabName === 'Backpack' || tabName === 'Equipment') && !state.inventory) state.fetchInventory();
-      if ((tabName === 'Skills/Spells' || tabName === 'Traits') && !state.abilities) state.fetchAbilities();
-    },
-
-    fetchAbilities: async () => {
-      const token = get().token;
-      if (!token) return;
-      try {
-        const abilitiesData = await apiService.fetchAbilities(token);
-        set({ abilities: abilitiesData });
-      } catch (error) {
-        console.error("Failed to fetch abilities:", error);
-        get().addLogLine("! Could not retrieve skills and traits list.");
-      }
-    },
-
-    fetchScoreSheet: async () => {
-      const token = get().token;
-      if (!token) return;
-      try {
-        const charDetails = await apiService.fetchCharacterDetails(token);
-        set({ characterStats: charDetails });
-      } catch (error) {
-        console.error("Failed to fetch score sheet:", error);
-        get().addLogLine("! Could not retrieve character score sheet.");
-      }
-    },
-
-    fetchInventory: async () => {
-      const token = get().token;
-      if (!token) return;
-      try {
-        const inventoryData = await apiService.fetchInventory(token);
-        set({ inventory: inventoryData });
-      } catch (error) {
-        console.error("Failed to fetch inventory:", error);
-        get().addLogLine("! Could not retrieve inventory.");
-      }
-    },
-
-    fetchMapData: async () => {
-      const token = get().token;
-      if (!token) return;
-      try {
-        const mapData = await apiService.fetchMapData(token);
-        set({ mapData: mapData });
-      } catch (error) {
-        console.error("Failed to fetch map data:", error);
-        get().addLogLine("! Failed to load map data.");
-      }
-    },
-
-    fetchWhoList: async () => {
-      get().addLogLine("! 'Who' command not yet implemented.");
-    },
-
-    logout: () => {
-      set({ ...initialState, logLines: [createLogLine('<span class="system-message-inline">You have been logged out. Please log in again.</span>')] });
-    },
-  }))
-);
-
-export default useGameStore;
---- END OF FILE frontend/src/state/gameStore.js ---
 --- END OF CORE BUNDLED FILES ---
 
 --- SCRIPT END --- Bundle complete: project_context_bundle.txt ---

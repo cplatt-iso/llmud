@@ -13,6 +13,10 @@ from app.commands.command_args import CommandContext
 from app.commands import interaction_parser as http_interaction_parser 
 from app import websocket_manager # MODIFIED IMPORT
 from app.schemas.common_structures import ExitDetail, InteractableDetail 
+from app.commands.utils import roll_dice
+from app import websocket_manager
+from .ws_combat_actions_parser import handle_ws_use_combat_skill
+
 
 logger = logging.getLogger(__name__) # Added logger
 
@@ -112,6 +116,97 @@ async def handle_ws_equip(
         await combat.send_combat_log(player.id, [f"You can't equip that: {message}"])
     
     # The inventory update will be pushed after commit in the router
+
+async def handle_ws_use_item_or_skill(db: Session, player: models.Player, character: models.Character, args_str: str):
+    """
+    Intelligently determines if the player is trying to use an item from their
+    inventory or a learned skill, then delegates to the appropriate handler.
+    """
+    if not args_str:
+        await combat.send_combat_log(player.id, ["Use what? (An item or a skill)"])
+        return
+        
+    target_name = args_str.strip().lower()
+
+    # --- Step 1: Check for an item in the backpack first ---
+    item_to_use: Optional[models.CharacterInventoryItem] = None
+    # We iterate through the character's loaded inventory items
+    for inv_item in character.inventory_items:
+        # Must be in backpack (not equipped) and have a valid item template
+        if not inv_item.equipped and inv_item.item and target_name in inv_item.item.name.lower():
+            item_to_use = inv_item
+            break # Found the first match, proceed
+            
+    if item_to_use:
+        # Found a matching item in the backpack, so we assume they want to use it.
+        await _resolve_item_use(db, player, character, item_to_use)
+        return
+
+    # --- Step 2: If no item was found, assume it's a skill and delegate ---
+    # Get the current room ORM, which the combat skill handler needs
+    room_orm = crud.crud_room.get_room_by_id(db, room_id=character.current_room_id)
+    if not room_orm:
+        logger.error(f"Character {character.name} in invalid room {character.current_room_id} during 'use' command.")
+        await combat.send_combat_log(player.id, ["Your location is unstable, cannot use skill."])
+        return
+    
+    # The combat skill handler needs a schema, so we convert it here.
+    room_schema = schemas.RoomInDB.from_orm(room_orm)
+    await handle_ws_use_combat_skill(db, player, character, room_schema, args_str)
+
+
+async def _resolve_item_use(db: Session, player: models.Player, character: models.Character, item_to_use: models.CharacterInventoryItem):
+    """
+    The actual logic for using an item. This function is called when an item
+    is definitively the target of the 'use' command.
+    """
+    item_template = item_to_use.item
+    item_props = item_template.properties or {}
+
+    # Check if the item is a "consumable" type that can be used this way
+    if item_template.item_type != "potion" and item_template.slot != "consumable":
+        await combat.send_combat_log(player.id, [f"You can't use the {item_template.name} that way."])
+        return
+
+    effect_type = item_props.get("effect_type")
+    
+    if effect_type == "heal_direct":
+        if character.current_health >= character.max_health:
+            await combat.send_combat_log(player.id, ["You are already at full health."])
+            return
+
+        heal_dice = item_props.get("heal_amount_dice", "0d0")
+        heal_bonus = item_props.get("heal_amount_bonus", 0)
+        
+        rolled_heal = roll_dice(heal_dice) + heal_bonus
+        
+        health_before = character.current_health
+        character.current_health = min(character.max_health, health_before + rolled_heal)
+        health_regained = character.current_health - health_before
+        
+        # This function call removes the item from inventory
+        crud.crud_character_inventory.remove_item_from_character_inventory(
+            db, inventory_item_id=item_to_use.id, quantity_to_remove=1
+        )
+        
+        log_message = f"You drink the {item_template.name}. You feel a soothing warmth and regain {health_regained} health."
+        await combat.send_combat_log(player.id, [log_message])
+        
+        # The actions (healing, item removal) are staged. Now we commit.
+        db.commit()
+        # After commit, refresh the character object to get the latest state from the DB.
+        db.refresh(character)
+        
+        # Now, push the updates to the client.
+        await _send_inventory_update_to_player(db, character)
+        
+        xp_for_next_level = crud.crud_character.get_xp_for_level(character.level + 1)
+        vitals_payload = { "type": "vitals_update", "current_hp": character.current_health, "max_hp": character.max_health, "current_mp": character.current_mana, "max_mp": character.max_mana, "current_xp": character.experience_points, "next_level_xp": int(xp_for_next_level) if xp_for_next_level != float('inf') else -1, "level": character.level, "platinum": character.platinum_coins, "gold": character.gold_coins, "silver": character.silver_coins, "copper": character.copper_coins }
+        await websocket_manager.connection_manager.send_personal_message(vitals_payload, player.id)
+
+    else:
+        # Handle other effect types here in the future
+        await combat.send_combat_log(player.id, [f"The {item_template.name} doesn't seem to do anything when you try to use it."])
 
 async def handle_ws_unequip(
     db: Session,
@@ -308,6 +403,88 @@ async def handle_ws_get_take(
     broadcast_get_msg = f"<span class='char-name'>{current_char_state.name}</span> picks up {target_room_item_instance.item.name}."
     await combat.broadcast_to_room_participants(db, current_room_orm.id, broadcast_get_msg, exclude_player_id=player.id)
 
+async def handle_ws_use_item(db: Session, player: models.Player, character: models.Character, args_str: str):
+    """Handles using/quaffing/drinking an item from inventory."""
+    if not args_str:
+        await combat.send_combat_log(player.id, ["Use what?"])
+        return
+
+    # Find the item in the character's backpack
+    target_item_name = args_str.strip().lower()
+    item_to_use: Optional[models.CharacterInventoryItem] = None
+
+    for inv_item in character.inventory_items:
+        # We only care about items in the backpack
+        if inv_item.equipped or not inv_item.item:
+            continue
+        
+        if target_item_name in inv_item.item.name.lower():
+            item_to_use = inv_item
+            break # Found a match, stop looking
+
+    if not item_to_use:
+        await combat.send_combat_log(player.id, [f"You don't have a '{args_str}' to use."])
+        return
+
+    item_template = item_to_use.item
+    item_props = item_template.properties or {}
+
+    # Check if the item is actually usable in this way
+    if item_template.slot != "consumable" and item_template.item_type != "potion":
+        await combat.send_combat_log(player.id, [f"You can't use the {item_template.name} that way."])
+        return
+
+    # --- EFFECT RESOLUTION ---
+    effect_type = item_props.get("effect_type")
+    
+    if effect_type == "heal_direct":
+        if character.current_health >= character.max_health:
+            await combat.send_combat_log(player.id, [f"You are already at full health."])
+            return
+
+        heal_dice = item_props.get("heal_amount_dice", "0d0")
+        heal_bonus = item_props.get("heal_amount_bonus", 0)
+        
+        # Use our dice roller
+        rolled_heal = roll_dice(heal_dice) + heal_bonus
+        
+        health_before = character.current_health
+        character.current_health = min(character.max_health, health_before + rolled_heal)
+        health_regained = character.current_health - health_before
+        
+        # Remove the item from inventory
+        crud.crud_character_inventory.remove_item_from_character_inventory(
+            db, inventory_item_id=item_to_use.id, quantity_to_remove=1
+        )
+        
+        log_message = f"You drink the {item_template.name}. You feel a soothing warmth and regain {health_regained} health."
+        await combat.send_combat_log(player.id, [log_message])
+        
+        # The router will commit, then we need to send updates. We can do it here post-action.
+        db.commit() # Commit the changes from healing and item removal
+        db.refresh(character)
+        
+        # Manually push updates since the router's generic post-commit hook might not cover this
+        await _send_inventory_update_to_player(db, character)
+        xp_for_next_level = crud.crud_character.get_xp_for_level(character.level + 1)
+        vitals_payload = {
+            "type": "vitals_update",
+            "current_hp": character.current_health,
+            "max_hp": character.max_health,
+            "current_mp": character.current_mana,
+            "max_mp": character.max_mana,
+            "current_xp": character.experience_points,
+            "next_level_xp": int(xp_for_next_level) if xp_for_next_level != float('inf') else -1,
+            "level": character.level,
+            "platinum": character.platinum_coins,
+            "gold": character.gold_coins,
+            "silver": character.silver_coins,
+            "copper": character.copper_coins
+        }
+        await websocket_manager.connection_manager.send_personal_message(vitals_payload, player.id)
+
+    else:
+        await combat.send_combat_log(player.id, [f"The {item_template.name} doesn't seem to do anything when you try to use it."])
 
 async def handle_ws_unlock(
     db: Session,

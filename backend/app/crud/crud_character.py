@@ -471,7 +471,8 @@ def get_character_abilities(db: Session, character: models.Character) -> Dict[st
                     name=skill_template.name,
                     description=description_str,
                     level_required=int(level),
-                    has_learned=(tag in char_skills)
+                    has_learned=(tag in char_skills),
+                    skill_id_tag=skill_template.skill_id_tag                    
                 ))
 
     # Process Traits
@@ -488,7 +489,8 @@ def get_character_abilities(db: Session, character: models.Character) -> Dict[st
                     name=trait_template.name,
                     description=description_str,
                     level_required=int(level),
-                    has_learned=(tag in char_traits)
+                    has_learned=(tag in char_traits),
+                    skill_id_tag=trait_template.trait_id_tag
                 ))
     
     # Sort by level required

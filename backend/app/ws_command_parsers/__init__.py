@@ -15,7 +15,9 @@ from .ws_interaction_parser import (
     handle_ws_use_ooc_skill,
     handle_ws_equip,
     handle_ws_unequip,
-    _send_inventory_update_to_player
+    handle_ws_use_item,
+    _send_inventory_update_to_player,
+    handle_ws_use_item_or_skill
 )
 from .ws_movement_parser import (
     handle_ws_movement,
@@ -26,7 +28,6 @@ from .ws_shop_parser import (
     handle_ws_buy,
     handle_ws_sell,
 )
-
 
 __all__ = [
     "handle_ws_attack",
@@ -46,4 +47,6 @@ __all__ = [
     "handle_ws_equip",
     "handle_ws_unequip",
     "_send_inventory_update_to_player",
+    "handle_ws_use_item",
+    "handle_ws_use_item_or_skill",
 ]

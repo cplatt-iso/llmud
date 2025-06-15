@@ -1,7 +1,7 @@
 import React from 'react';
 import useGameStore from '../state/gameStore';
-import ItemName from './ItemName'; // <-- IMPORT OUR NEW COMPONENT
-import './Inventory.css'; // <-- Import its own CSS
+import ItemName from './ItemName';
+import { webSocketService } from '../services/webSocketService'; 
 
 function Inventory() {
   const inventory = useGameStore((state) => state.inventory);
@@ -16,6 +16,29 @@ function Inventory() {
     return slot.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
+  const handleItemClick = (item) => {
+    // Check if the item is a consumable/potion
+    if (item && item.item && (item.item.item_type === 'potion' || item.item.slot === 'consumable')) {
+      console.log(`Using item: ${item.item.name} (ID: ${item.id})`);
+      // Use the item's name for the 'use' command to match the text parser.
+      webSocketService.sendMessage({ command_text: `use ${item.item.name}` });
+    } else {
+      console.log('Clicked a non-consumable item:', item.item.name);
+      // In the future, this could open a context menu (e.g., 'drop', 'examine'). For now, it does nothing.
+    }
+  };
+
+  const handleDragStart = (e, item) => {
+    // This function sets the data that will be available when the item is dropped.
+    const payload = {
+        type: 'item',
+        identifier: item.item.name, // The backend 'use' command uses the name.
+        name: item.item.name       // The hotbar UI uses this for display.
+    };
+    e.dataTransfer.setData('application/llmud-hotbar-item', JSON.stringify(payload));
+    e.dataTransfer.effectAllowed = "move";
+  };
+
   return (
     <div className="inventory-container">
       <div className="inventory-section">
@@ -25,7 +48,6 @@ function Inventory() {
             Object.entries(equipped_items).map(([slot, item]) => (
               <div key={slot} className="inventory-item equipped">
                 <span className="slot-name">{`[${formatSlotName(slot)}]`}</span>
-                {/* ### THE CHANGE IS HERE ### */}
                 <ItemName item={item.item} />
               </div>
             ))
@@ -40,8 +62,14 @@ function Inventory() {
         <div className="backpack-items-list">
           {backpack_items.length > 0 ? (
             backpack_items.map((item) => (
-              <div key={item.id} className="inventory-item backpack">
-                {/* ### AND HERE ### */}
+              <div
+                key={item.id}
+                className={`inventory-item backpack ${(item.item.item_type === 'potion' || item.item.slot === 'consumable') ? 'is-usable' : ''}`}
+                onClick={() => handleItemClick(item)}
+                title={(item.item.item_type === 'potion' || item.item.slot === 'consumable') ? 'Click to use / Drag to Hotbar' : 'Drag to Hotbar'}
+                draggable={true} // <<< MAKE IT DRAGGABLE
+                onDragStart={(e) => handleDragStart(e, item)} // <<< SET DRAG DATA
+              >                
                 <ItemName item={item.item} />
                 {item.quantity > 1 && (
                   <span className="item-quantity"> (x{item.quantity})</span>
@@ -53,15 +81,15 @@ function Inventory() {
           )}
         </div>
       </div>
-      
+
       <div className="inventory-section currency-footer">
-         <h4 className="inventory-header">Wealth</h4>
-         <div className="currency-display">
-            <span className="currency platinum">{platinum}p</span>
-            <span className="currency gold">{gold}g</span>
-            <span className="currency silver">{silver}s</span>
-            <span className="currency copper">{copper}c</span>
-         </div>
+        <h4 className="inventory-header">Wealth</h4>
+        <div className="currency-display">
+          <span className="currency platinum">{platinum}p</span>
+          <span className="currency gold">{gold}g</span>
+          <span className="currency silver">{silver}s</span>
+          <span className="currency copper">{copper}c</span>
+        </div>
       </div>
     </div>
   );

@@ -49,3 +49,7 @@ from .chat import (
 
 from .who import (WhoListEntry, CharacterBasicInfo
 )
+
+from .shop import (
+    StatComparison, ShopItemDetail, ShopListingPayload
+)

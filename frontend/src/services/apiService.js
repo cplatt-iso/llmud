@@ -111,4 +111,10 @@ export const apiService = {
         if (!response.ok) throw new Error('Failed to fetch who list');
         return response.json();
     },
+    setHotbarSlot: (slotId, payload, token) => {
+        return fetchData(`/character/me/hotbar/${slotId}`, {
+            method: 'POST',
+            body: payload
+        }, token);
+    },
 };

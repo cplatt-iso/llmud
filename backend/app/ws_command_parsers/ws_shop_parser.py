@@ -9,6 +9,8 @@ from app import crud, models, schemas
 from app.game_logic import combat
 from app.commands.utils import get_visible_length
 from app.ws_command_parsers.ws_interaction_parser import _send_inventory_update_to_player
+from app.schemas.shop import ShopItemDetail, StatComparison, ShopListingPayload # ADD THIS LINE
+from app import websocket_manager # ADD THIS LINE
 
 logger = logging.getLogger(__name__)
 
@@ -56,19 +58,84 @@ async def handle_ws_list(db: Session, player: models.Player, character: models.C
         await combat.send_combat_log(player.id, ["There is no one here to sell you anything."])
         return
 
-    shop_items = _get_shop_inventory_items(db, merchant)
-    if not shop_items:
+    shop_item_templates = _get_shop_inventory_items(db, merchant)
+    if not shop_item_templates:
         await combat.send_combat_log(player.id, [f"{merchant.name} has nothing to sell."])
         return
 
-    # This shit is too complex. Keeping it simple for now. A beautiful box later maybe.
-    response = [f"--- {merchant.name}'s Wares ---"]
-    for i, item in enumerate(shop_items, 1):
-        price_str = _format_price(item.value)
-        response.append(f"[{i:2d}] {item.name:<25} - {price_str}")
-    response.append(f"Type <span class='command-suggestion'>buy <# or name></span> to purchase.")
-    
-    await combat.send_combat_log(player.id, ["\n".join(response)])
+    # Get a dictionary of the character's currently equipped items, keyed by slot
+    equipped_items_by_slot: Dict[str, models.Item] = {
+        inv_item.equipped_slot: inv_item.item
+        for inv_item in character.inventory_items
+        if inv_item.equipped and inv_item.equipped_slot and inv_item.item
+    }
+
+    detailed_shop_items: List[ShopItemDetail] = []
+    for item_template in shop_item_templates:
+        comparison_data: Optional[StatComparison] = None # Explicitly type hint and initialize
+        equipped_item_name = None
+        
+        # If the shop item is equippable, let's compare it
+        if item_template.slot and item_template.slot in models.item.EQUIPMENT_SLOTS:
+            
+            # Check if the player has an item in that slot
+            equipped_item = equipped_items_by_slot.get(item_template.slot)
+            
+            if equipped_item:
+                equipped_item_name = equipped_item.name
+                shop_item_props = item_template.properties or {}
+                equipped_item_props = equipped_item.properties or {}
+
+                # Calculate differences for relevant stats
+                stat_diff_payload = {}
+
+                # Armor Class
+                ac_shop = shop_item_props.get("armor_class_bonus", 0)
+                ac_equipped = equipped_item_props.get("armor_class_bonus", 0)
+                if ac_shop - ac_equipped != 0:
+                    stat_diff_payload["armor_class"] = ac_shop - ac_equipped
+                
+                # Stat Modifiers (e.g., strength, dexterity)
+                shop_mods = shop_item_props.get("modifiers", {})
+                equipped_mods = equipped_item_props.get("modifiers", {})
+
+                str_shop = shop_mods.get("strength", 0)
+                str_equipped = equipped_mods.get("strength", 0)
+                if str_shop - str_equipped != 0:
+                    stat_diff_payload["strength"] = str_shop - str_equipped
+                
+                dex_shop = shop_mods.get("dexterity", 0)
+                dex_equipped = equipped_mods.get("dexterity", 0)
+                if dex_shop - dex_equipped != 0:
+                    stat_diff_payload["dexterity"] = dex_shop - dex_equipped
+                
+                # ... Add other stat comparisons here, following the pattern:
+                # stat_shop = shop_item_props.get("stat_name", 0) or shop_mods.get("stat_name",0)
+                # stat_equipped = equipped_item_props.get("stat_name", 0) or equipped_mods.get("stat_name",0)
+                # if stat_shop - stat_equipped != 0:
+                #     stat_diff_payload["stat_key_in_StatComparison_model"] = stat_shop - stat_equipped
+
+                # If there are any non-zero differences, create the StatComparison object
+                if stat_diff_payload:
+                    comparison_data = StatComparison(**stat_diff_payload)
+                # Otherwise, comparison_data remains None
+
+        # Create the detailed shop item schema
+        shop_item_detail = ShopItemDetail(
+            **schemas.Item.from_orm(item_template).model_dump(), # Convert Item ORM to schema dict
+            comparison_stats=comparison_data,
+            equipped_item_name=equipped_item_name
+        )
+        detailed_shop_items.append(shop_item_detail)
+
+    # Build the final payload to send to the client
+    final_payload = ShopListingPayload(
+        merchant_name=merchant.name,
+        items=detailed_shop_items
+    )
+
+    # Send the structured payload instead of a simple text message
+    await websocket_manager.connection_manager.send_personal_message(final_payload.model_dump(), player.id)
 
 async def handle_ws_buy(db: Session, player: models.Player, character: models.Character, room: models.Room, args_str: str):
     if not args_str:

@@ -24,6 +24,13 @@ class Character(Base):
     is_brief_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     owner: Mapped["Player"] = relationship(back_populates="characters", lazy="joined") 
 
+    hotbar: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSON, 
+        nullable=True, 
+        default=lambda: {str(i): None for i in range(1, 11)},
+        comment="Stores hotbar configuration, mapping slot number to item/skill info"
+    )
+
     player_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("players.id"), nullable=False, index=True)
     god_level: Mapped[int] = mapped_column(Integer, default=0, nullable=False, comment="0 for mortals, 1-10 for gods")
     titles: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True, default=lambda: [], comment="e.g., ['The Godslayer', 'Cheesewheel Enthusiast']")
