@@ -38,7 +38,48 @@ LOADED_LOOT_TABLES = _load_loot_tables_from_json()
 
 # --- Constants and Maps ---
 direction_map = {"n": "north", "s": "south", "e": "east", "w": "west", "u": "up", "d": "down"}
+async def send_combat_state_update(
+    db: Session,
+    character: models.Character,
+    is_in_combat: bool,
+    all_mob_targets_for_char: Optional[List[uuid.UUID]] = None
+):
+    """
+    Constructs and sends a dedicated 'combat_state_update' payload to a player.
+    This provides a snapshot of all their current combat targets.
+    """
+    from app.websocket_manager import connection_manager as ws_manager # Local import
 
+    payload_targets = []
+    if is_in_combat and all_mob_targets_for_char:
+        # We need to fetch the most current state of these mobs from the DB
+        mob_instances = db.query(models.RoomMobInstance).filter(
+            models.RoomMobInstance.id.in_(all_mob_targets_for_char)
+        ).all()
+
+        for mob in mob_instances:
+            # It's possible a mob was killed and removed between the list being generated
+            # and this code running, so we check.
+            if mob and mob.mob_template:
+                payload_targets.append({
+                    "id": str(mob.id), # Ensure UUID is a string for JSON
+                    "name": get_formatted_mob_name(mob, character),
+                    "current_hp": mob.current_health,
+                    "max_hp": mob.mob_template.base_health
+                })
+
+    # If all mobs in the list were invalid/gone, combat is effectively over for this update
+    is_in_combat_final = is_in_combat and len(payload_targets) > 0
+
+    payload = {
+        "type": "combat_state_update",
+        "is_in_combat": is_in_combat_final,
+        "targets": payload_targets
+    }
+
+    await ws_manager.send_personal_message(payload, character.player_id)
+    logger.debug(f"Sent combat_state_update to char {character.name} ({character.player_id}). InCombat: {is_in_combat_final}, Targets: {len(payload_targets)}")
+    
 # --- THE ONE TRUE BROADCAST FUNCTION ---
 async def broadcast_to_room_participants(
     db: Session,

@@ -19,6 +19,7 @@ from .combat_utils import (
     broadcast_combat_event, # Renamed from _broadcast_combat_event
     broadcast_to_room_participants, # Renamed from _broadcast_to_room_participants
     perform_server_side_move, # Renamed from _perform_server_side_move    
+    send_combat_state_update,
     direction_map # Shared direction map
 )
 

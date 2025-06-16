@@ -44,7 +44,7 @@ def create_db_engine_with_retries():
     # This line should ideally not be reached, but as a fallback:
     # --- FIX IS HERE ---
     # This simpler raise statement accomplishes the same goal without upsetting Pylance.
-    raise exc.OperationalError("Could not connect to database after multiple retries.")
+    raise exc.OperationalError("Could not connect to database after multiple retries.") # type: ignore
 
 
 def get_db() -> Generator:

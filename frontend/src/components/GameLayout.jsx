@@ -10,6 +10,7 @@ import BottomInfoBar from './BottomInfoBar';
 import CommandInput from './CommandInput';
 import Map from './Map';
 import Hotbar from './Hotbar';
+import CombatMonitor from './CombatMonitor';
 
 // CSS IMPORTS - THE HOLY TEMPLE
 import './TabBar.css';
@@ -19,6 +20,7 @@ import './CharacterInfoBar.css';
 import './VitalsMonitor.css';
 import './BottomInfoBar.css';
 import './Map.css';
+import './CombatMonitor.css'; 
 
 import './GroundItems.css'; // Importing GroundItems styles
 import './LookResult.css'; // Importing LookResult styles
@@ -71,7 +73,7 @@ function GameLayout() {
   return (
     <>
       <header className="header-text">
-        {/* Header stuff */}
+        <h1>IT SOMEWHAT WORKS</h1>
       </header>
       <div className="game-area-wrapper">
         <div className="mud-container">
@@ -87,7 +89,10 @@ function GameLayout() {
             <CommandInput />
           </div>
         </div>
-        <Map />
+        <div className="right-side-column">
+          <Map />
+          <CombatMonitor />
+        </div>
       </div>
     </>
   );

@@ -21,7 +21,8 @@ from .skill_resolver import resolve_skill_effect
 from .combat_utils import (
     send_combat_log, 
     perform_server_side_move, direction_map,
-    broadcast_to_room_participants    
+    broadcast_to_room_participants,
+    send_combat_state_update
 )
 from app.ws_command_parsers.ws_interaction_parser import _send_inventory_update_to_player
 
@@ -212,22 +213,22 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
                     
                     if isinstance(target_entity_for_skill_resolution, models.RoomMobInstance) and \
                        target_entity_for_skill_resolution.current_health <= 0:
-                        db.refresh(target_entity_for_skill_resolution) # Ensure DB state is current
-                        if target_entity_for_skill_resolution.current_health <= 0: # Double check after refresh
-                            round_log.append(f"<span class='combat-death'>The {get_formatted_mob_name(target_entity_for_skill_resolution, character)} DIES from your skill!</span>")
-                            character_after_skill_loot, autoloot_occurred_skill, _ = await handle_mob_death_loot_and_cleanup(
-                                db, character, target_entity_for_skill_resolution, round_log, player_id, current_room_id_for_action_broadcasts
-                            )
-                            if character_after_skill_loot:
-                                character = character_after_skill_loot
-                            
-                            if autoloot_occurred_skill and character.player_id:
-                                await _send_inventory_update_to_player(db, character) # CORRECTED CALL
-                                logger.debug(f"Sent inventory update to char {character.name} after skill autoloot.")
+                        # db.refresh(target_entity_for_skill_resolution) 
+                        # if target_entity_for_skill_resolution.current_health <= 0: # Double check after refresh
+                        round_log.append(f"<span class='combat-death'>The {get_formatted_mob_name(target_entity_for_skill_resolution, character)} DIES from your skill!</span>")
+                        character_after_skill_loot, autoloot_occurred_skill, _ = await handle_mob_death_loot_and_cleanup(
+                        db, character, target_entity_for_skill_resolution, round_log, player_id, current_room_id_for_action_broadcasts
+                        )
+                        if character_after_skill_loot:
+                            character = character_after_skill_loot
+                         
+                        if autoloot_occurred_skill and character.player_id:
+                            await _send_inventory_update_to_player(db, character) # CORRECTED CALL
+                            logger.debug(f"Sent inventory update to char {character.name} after skill autoloot.")
 
-                            active_combats.get(character_id, set()).discard(target_entity_for_skill_resolution.id)
-                            if target_entity_for_skill_resolution.id in mob_targets:
-                                mob_targets.pop(target_entity_for_skill_resolution.id, None)
+                        active_combats.get(character_id, set()).discard(target_entity_for_skill_resolution.id)
+                        if target_entity_for_skill_resolution.id in mob_targets:
+                            mob_targets.pop(target_entity_for_skill_resolution.id, None)
                     
                     if not action_was_taken_by_skill and not any("enough mana" in m.lower() for m in skill_messages) and \
                        not any("already unlocked" in m.lower() for m in skill_messages) and \
@@ -338,6 +339,14 @@ async def process_combat_round(db: Session, character_id: uuid.UUID, player_id: 
     db.commit()
     db.refresh(character) 
     
+    current_targets_for_state_update = list(active_combats.get(character.id, set()))
+    await send_combat_state_update(
+        db,
+        character=character,
+        is_in_combat=(not combat_resolved_this_round and character.current_health > 0),
+        all_mob_targets_for_char=current_targets_for_state_update
+    )
+
     final_room_for_payload_orm = crud.crud_room.get_room_by_id(db, room_id=character.current_room_id)
     
     xp_for_next_level_final = crud.crud_character.get_xp_for_level(character.level + 1)

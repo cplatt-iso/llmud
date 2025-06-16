@@ -51,3 +51,15 @@
   font-size: 1.3em;
   font-weight: bold;
 }
+
+.right-side-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 350px; /* Or whatever the map's width is */
+}
+
+.map-container {
+  display: flex;
+  flex-direction: column;
+  /* Add other styles that were on #map-column if needed */
+}

@@ -105,7 +105,7 @@ function Map() {
   const currentRoom = transformedRooms.find(r => r.id === currentRoomId);
 
   return (
-    <div id="map-column">
+    <div className="map-container">
       <div id="map-title-bar" className="map-ui-bar">
         <span id="map-title-text">Map</span> | Coords:
         <span id="map-coords-text">{currentRoom ? `${currentRoom.x}, ${currentRoom.y}, ${mapData.z_level}` : '?, ?, ?'}</span>
@@ -160,7 +160,7 @@ function Map() {
           </g>
         </svg>
       </div>
-       <div id="map-zone-bar" className="map-ui-bar">
+      <div id="map-zone-bar" className="map-ui-bar">
         <span>
           {mapData.current_zone_name || 'Unknown Zone'}
           {mapData.current_zone_level_range && ` (Lvl ${mapData.current_zone_level_range})`}

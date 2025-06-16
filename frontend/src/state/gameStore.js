@@ -30,6 +30,7 @@ const initialState = {
   abilities: null,
   whoListData: null, // Added for Who List
   hotbar: {},
+  combatState: { isInCombat: false, targets: [] },
 };
 
 const useGameStore = create(
@@ -177,7 +178,15 @@ const useGameStore = create(
       }
     },
 
+    setCombatState: (payload) => { // <<< ADD THIS WHOLE ACTION
+      set(state => {
+        state.combatState.isInCombat = payload.is_in_combat;
+        state.combatState.targets = payload.targets;
+      });
+    },
+
     logout: () => {
+      set({ combatState: { isInCombat: false, targets: [] } }); 
       set({ ...initialState, logLines: [createLogLine('<span class="system-message-inline">You have been logged out. Please log in again.</span>')] });
     },
   }))

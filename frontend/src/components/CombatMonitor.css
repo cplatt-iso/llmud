@@ -1,0 +1,75 @@
+/* frontend/src/components/CombatMonitor.css */
+.combat-monitor-container {
+    background-color: rgba(0, 0, 0, 0.6);
+    border: 1px solid #2a2a2a;
+    border-top: 1px solid #444;
+    padding: 8px;
+    min-height: 150px; /* Give it some space even when empty */
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+    font-family: 'Courier New', Courier, monospace;
+}
+
+.combat-monitor-container.not-in-combat {
+    justify-content: center;
+    align-items: center;
+}
+
+.combat-monitor-placeholder {
+    color: #555;
+    font-size: 1.2em;
+    font-weight: bold;
+    letter-spacing: 2px;
+}
+
+.mob-target-entry {
+    background-color: #1a1a1a;
+    border: 1px solid #333;
+    padding: 5px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.mob-target-entry:hover {
+    background-color: #2f2f2f;
+    border-color: #666;
+}
+
+.mob-name {
+    color: #ffb3b3; /* A reddish color for mobs */
+    font-size: 0.9em;
+    margin-bottom: 4px;
+    white-space: nowrap;
+}
+
+.mob-health-bar-container {
+    background-color: #4d0000; /* Dark red background */
+    border: 1px solid #111;
+    border-radius: 3px;
+    height: 16px;
+    position: relative;
+}
+
+.mob-health-bar {
+    background-color: #b30000; /* Bright red for the health */
+    height: 100%;
+    transition: width 0.3s ease-out;
+}
+
+.mob-health-text {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #fff;
+    font-size: 0.8em;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px #000;
+}

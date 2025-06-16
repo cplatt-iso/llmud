@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app import crud, models, schemas # For type hints and DB access
 from app.game_state import is_character_resting, set_character_resting_status
-from .combat_utils import send_combat_log, broadcast_combat_event # Use from local package
+from .combat_utils import send_combat_log, broadcast_combat_event, send_combat_state_update
 from app.commands.utils import get_formatted_mob_name
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,13 @@ async def initiate_combat_session(
     current_room_orm = crud.crud_room.get_room_by_id(db, character_check.current_room_id)
     current_room_schema = schemas.RoomInDB.from_orm(current_room_orm) if current_room_orm else None
     await send_combat_log(player_id, personal_log_messages, room_data=current_room_schema)
+
+    await send_combat_state_update(
+        db,
+        character=character_check,
+        is_in_combat=True,
+        all_mob_targets_for_char=list(active_combats.get(character_id, set()))
+    )
     # Broadcast engagement to room handled by caller or process_combat_round's hit messages
     return True
 
@@ -121,6 +128,12 @@ async def mob_initiates_combat(db: Session, mob_instance: models.RoomMobInstance
     player_room_schema = schemas.RoomInDB.from_orm(player_room_orm) if player_room_orm else None
     await send_combat_log(player_id=target_character.player_id, messages=initiation_log_to_player, room_data=player_room_schema)
     
+    await send_combat_state_update(
+        db,
+        character=target_character,
+        is_in_combat=True,
+        all_mob_targets_for_char=list(active_combats.get(target_character.id, set()))
+    )
     # --- MESSAGE TO EVERYONE ELSE IN THE ROOM ---
     # Note: We can't use the player-specific colored name for the broadcast,
     # as the color depends on each observer's level. The broadcast function

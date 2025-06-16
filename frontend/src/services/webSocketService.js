@@ -21,7 +21,7 @@ const handleMessage = (event) => {
         console.log("WS RCV:", serverData);
 
         // Get all the actions we might need from the store.
-        const { addLogLine, addMessage, setVitals, fetchWhoList, setHotbar } = getState(); // Add fetchWhoList
+        const { addLogLine, addMessage, setVitals, fetchWhoList, setHotbar, setCombatState } = getState(); // Add fetchWhoList
 
         switch (serverData.type) {
             case "welcome_package":
@@ -41,6 +41,10 @@ const handleMessage = (event) => {
                 if (serverData.hotbar) {
                     setHotbar(serverData.hotbar);
                 }
+                break;
+            
+            case "combat_state_update":
+                setCombatState(serverData);
                 break;
 
             case "combat_update":
