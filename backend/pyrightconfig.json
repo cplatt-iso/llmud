@@ -1,0 +1,17 @@
+{
+  "include": [
+    "app"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*"
+  ],
+  "pythonVersion": "3.9",
+  "pythonPlatform": "Linux",
+  "extraPaths": [
+    "."
+  ],
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false
+}

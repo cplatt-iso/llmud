@@ -3,7 +3,7 @@
 .item-name-container {
   font-weight: bold;
   cursor: help;
-  transition: all 0.1s ease-in-out;
+  /* Removed transition for instant, crisp response */
   display: inline-flex;
   align-items: center;
   padding: 2px 4px;
@@ -11,10 +11,10 @@
 }
 
 .item-name-container:hover {
-  outline: 1px solid yellow;
-  transform: scale(1.05);
-  text-shadow: 0 0 5px yellow;
-  background-color: rgba(255, 255, 0, 0.1);
+  outline: 2px solid yellow;
+  /* Removed transform scale - no blur, instant feedback */
+  /* Removed text-shadow - crisp text, no glow */
+  background-color: rgba(255, 255, 0, 0.15);
 }
 
 /* Style for the icon */

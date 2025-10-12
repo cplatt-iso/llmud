@@ -15,12 +15,12 @@
 .inventory-item.is-usable {
   cursor: pointer;
   color: #aaffaa; /* A pleasant green for usable items */
-  text-shadow: 0 0 5px #00ff00;
+  /* Removed text-shadow for crisp, sharp text */
 }
 
 .inventory-item.is-usable:hover {
-  background-color: rgba(100, 255, 100, 0.1);
-  border-left: 2px solid #aaffaa;
-  padding-left: 3px; /* Adjust to keep alignment nice */
-  margin-left: -5px; /* Adjust to keep alignment nice */
+  background-color: rgba(100, 255, 100, 0.15);
+  border-left: 3px solid #00ff00; /* Brighter, thicker border for instant visual feedback */
+  padding-left: 3px;
+  margin-left: -6px; /* Adjust for thicker border */
 }

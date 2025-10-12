@@ -1,0 +1,130 @@
+[MASTER]
+# Specify a configuration file.
+# rcfile=
+
+# Python code to execute, usually for sys.path manipulation such as pygtk.require().
+# init-hook=
+
+# Add files or directories to the blacklist. They should be base names, not paths.
+ignore=migrations,__pycache__,venv,tests
+
+# Use multiple processes to speed up Pylint.
+jobs=1
+
+# Allow loading of arbitrary C extensions. Extensions are imported into the active Python interpreter
+# and may run arbitrary code.
+unsafe-load-any-extension=no
+
+[MESSAGES CONTROL]
+# Disable specific warnings
+disable=
+    C0111,  # missing-docstring
+    C0103,  # invalid-name
+    W0212,  # protected-access
+    R0903,  # too-few-public-methods
+    R0913,  # too-many-arguments
+    R0914,  # too-many-locals
+    R0915,  # too-many-statements
+    E1101,  # no-member (SQLAlchemy false positives)
+    E1136,  # unsubscriptable-object (SQLAlchemy false positives)
+    W1203,  # logging-fstring-interpolation (f-strings in logs - performance issue but acceptable)
+    R0801,  # duplicate-code (acceptable for seed functions)
+    C0413,  # wrong-import-position (FastAPI lifespan pattern requires this)
+
+[FORMAT]
+# Maximum number of characters on a single line.
+max-line-length=120
+
+# Maximum number of lines in a module
+max-module-lines=1000
+
+# String used as indentation unit
+indent-string='    '
+
+[TYPECHECK]
+# List of module names for which member attributes should not be checked
+ignored-modules=
+    sqlalchemy.ext.declarative,
+    sqlalchemy.orm,
+    sqlalchemy
+
+# List of classes names for which member attributes should not be checked
+ignored-classes=
+    scoped_session,
+    Session,
+    Query,
+    Base
+
+# List of members which are set dynamically and missed by pylint inference system
+generated-members=
+    query,
+    session,
+    id,
+    name,
+    created_at,
+    updated_at,
+    character_id,
+    player_id,
+    room_id,
+    item_id,
+    mob_id,
+    npc_id,
+    skill_id,
+    trait_id
+
+[DESIGN]
+# Maximum number of arguments for function / method
+max-args=10
+
+# Maximum number of attributes for a class
+max-attributes=15
+
+# Maximum number of boolean expressions in a if statement
+max-bool-expr=5
+
+# Maximum number of branch for function / method body
+max-branches=20
+
+# Maximum number of locals for function / method body
+max-locals=20
+
+# Maximum number of public methods for a class
+max-public-methods=25
+
+# Maximum number of return / yield for function / method body
+max-returns=8
+
+# Maximum number of statements in function / method body
+max-statements=75
+
+[BASIC]
+# Naming styles
+argument-naming-style=snake_case
+attr-naming-style=snake_case
+class-attribute-naming-style=any
+class-naming-style=PascalCase
+const-naming-style=UPPER_CASE
+function-naming-style=snake_case
+method-naming-style=snake_case
+module-naming-style=snake_case
+variable-naming-style=snake_case
+
+# Good variable names
+good-names=
+    i,j,k,
+    ex,
+    _,
+    db,
+    id,
+    x,y,z
+
+[SIMILARITIES]
+# Minimum lines number of a similarity.
+min-similarity-lines=10
+
+# Ignore imports when computing similarities.
+ignore-imports=yes
+
+[IMPORTS]
+# Allow wildcard imports from modules listed here.
+allow-wildcard-with-all=no

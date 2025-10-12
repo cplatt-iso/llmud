@@ -1,0 +1,95 @@
+{
+  // Python Configuration
+  "python.defaultInterpreterPath": "${workspaceFolder}/venv/bin/python",
+  
+  // Terminal Configuration - Auto-activate venv
+  "python.terminal.activateEnvironment": true,
+  "terminal.integrated.defaultProfile.linux": "bash (venv)",
+  "terminal.integrated.profiles.linux": {
+    "bash (venv)": {
+      "path": "bash",
+      "args": ["-c", "source ${workspaceFolder}/venv/bin/activate && exec bash"]
+    }
+  },
+  
+  // Linting Configuration
+  "python.linting.enabled": true,
+  "python.linting.lintOnSave": true,
+  
+  // Pylint (Comprehensive Python linter)
+  "python.linting.pylintEnabled": true,
+  "python.linting.pylintArgs": [
+    "--disable=C0111,C0103,W0212,R0903,R0913,R0914,R0915",
+    // C0111: missing-docstring
+    // C0103: invalid-name
+    // W0212: protected-access
+    // R0903: too-few-public-methods
+    // R0913: too-many-arguments
+    // R0914: too-many-locals
+    // R0915: too-many-statements
+    "--max-line-length=120"
+  ],
+  
+  // Flake8 (Style guide enforcement)
+  "python.linting.flake8Enabled": false,
+  "python.linting.flake8Args": [
+    "--max-line-length=120",
+    "--extend-ignore=E203,W503"
+  ],
+  
+  // Type Checking with Pylance
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.diagnosticMode": "workspace",
+  "python.analysis.autoImportCompletions": true,
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/backend",
+    "${workspaceFolder}/backend/app"
+  ],
+  "python.analysis.diagnosticSeverityOverrides": {
+    // Suppress false positives from SQLAlchemy JSON column types
+    "reportArgumentType": "none",
+    "reportMissingImports": "none"
+  },
+  
+  // Formatting
+  "python.formatting.provider": "none",
+  "[python]": {
+    "editor.formatOnSave": false,
+    "editor.defaultFormatter": "ms-python.python",
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+  
+  // Auto-save
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 1000,
+  
+  // Python-specific editor settings
+  "editor.rulers": [120],
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  
+  // Exclude patterns
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/.pytest_cache": true,
+    "**/node_modules": true
+  },
+  
+  "search.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/node_modules": true,
+    "**/venv": true
+  },
+  
+  // Disable Markdown linting
+  "markdownlint.config": {
+    "default": false
+  },
+  "[markdown]": {
+    "editor.formatOnSave": false
+  }
+}

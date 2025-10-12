@@ -1,6 +1,34 @@
 .ability-list-container {
   padding: 10px;
   color: var(--color-text-primary);
+  position: relative;
+  background-image: url('/images/portraits/warrior-portrait-relaxed.png');
+  background-size: cover;
+  background-position: center 15%;
+  background-repeat: no-repeat;
+  min-height: 100%;
+  overflow: auto;
+}
+
+.ability-list-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to bottom, 
+    rgba(16, 16, 16, 0.65) 0%,
+    rgba(16, 16, 16, 0.75) 50%,
+    rgba(16, 16, 16, 0.85) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ability-list-container > * {
+  position: relative;
+  z-index: 1;
 }
 
 .ability-list-header {
@@ -27,6 +55,14 @@
   align-items: center;
   gap: 10px;
   margin-bottom: 5px;
+}
+
+.ability-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  image-rendering: crisp-edges;
+  flex-shrink: 0;
 }
 
 .ability-level {

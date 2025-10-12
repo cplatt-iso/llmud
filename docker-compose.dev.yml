@@ -1,0 +1,19 @@
+# Development override for docker-compose
+# Use with: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# This enables hot-reload for development
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    command: npm run dev
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.js:/app/vite.config.js
+    ports:
+      - "5174:5174"  # Expose Vite dev server
+    environment:
+      - CHOKIDAR_USEPOLLING=true  # For file watching in Docker

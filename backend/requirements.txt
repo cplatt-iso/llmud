@@ -6,7 +6,7 @@ sqlalchemy
 psycopg2-binary
 alembic
 passlib[bcrypt]
-bcrypt
+bcrypt==4.0.1  # Pin to 4.0.1 for passlib compatibility (newer versions have breaking changes)
 python-jose[cryptography]
 python-multipart
 google-genai

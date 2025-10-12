@@ -20,53 +20,63 @@ import './CharacterInfoBar.css';
 import './VitalsMonitor.css';
 import './BottomInfoBar.css';
 import './Map.css';
-import './CombatMonitor.css'; 
+import './CombatMonitor.css';
 
 import './GroundItems.css'; // Importing GroundItems styles
 import './LookResult.css'; // Importing LookResult styles
 
-import './AbilityList.css'; 
+import './AbilityList.css';
 import './ChatWindow.css'; // Importing ChatWindow styles
 
 import './Inventory.css';
 import './ShopListing.css'; // We will create this file next
 import './Hotbar.css';
 
-function GameLayout() {
+// Define the GameLayout functional component
+function GameLayout() { // ADDED FUNCTION DEFINITION WRAPPER
+
   useEffect(() => {
     const handleKeyDown = (e) => {
-        // Ignore keypresses if the user is focused on an input field
-        if (e.target.tagName.toLowerCase() === 'input') {
-            return;
-        }
+      // Ignore keypresses if the user is focused on an input field
+      if (e.target.tagName.toLowerCase() === 'input') return;
 
-        // Map keys '1' through '9' to slots 1-9, and '0' to slot 10
-        const slotId = e.key === '0' ? 10 : parseInt(e.key, 10);
-        
-        // Check if the key was a valid hotbar key (1-10)
-        if (!isNaN(slotId) && slotId >= 1 && slotId <= 10) {
-            e.preventDefault(); // This is important! Prevents the '1' from being typed into the command input.
-            
-            const { hotbar } = useGameStore.getState(); // Get the current hotbar state
-            const slotData = hotbar[slotId];
-            
-            if (slotData) {
-                // If the slot has something in it, send the 'use' command to the server
-                console.log(`Hotbar slot ${slotId} triggered. Using: ${slotData.identifier}`);
-                webSocketService.sendMessage({ command_text: `use ${slotData.identifier}` });
-            }
+      // Map keys '1' through '9' to slots 1-9, and '0' to slot 10
+      const slotId = e.key === '0' ? 10 : parseInt(e.key, 10);
+
+      // Check if the key was a valid hotbar key (1-10)
+      if (!isNaN(slotId) && slotId >= 1 && slotId <= 10) {
+        e.preventDefault();
+
+        const { hotbar, combatState } = useGameStore.getState();
+        const slotData = hotbar[slotId];
+
+        if (slotData) {
+          // Let's check our assumptions right here
+          console.log("Hotbar Triggered:", {
+            slotData: slotData,
+            isInCombat: combatState.isInCombat,
+            currentTargetId: combatState.currentTargetId
+          });
+
+          let commandText = `use ${slotData.identifier}`;
+
+          // If it's a skill and we are in combat and we have a current auto-attack target, append it.
+          if (slotData.type === 'skill' && combatState.isInCombat && combatState.currentTargetId) {
+            commandText += ` ${combatState.currentTargetId}`;
+          }
+
+          console.log(`Sending command: "${commandText}"`);
+          webSocketService.sendMessage({ command_text: commandText });
         }
+      }
     };
 
-    // Add the event listener to the whole window
     window.addEventListener('keydown', handleKeyDown);
 
-    // This is the cleanup function. It runs when the component unmounts.
-    // It's crucial for preventing memory leaks.
     return () => {
-        window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keydown', handleKeyDown);
     };
-  }, []); // The empty array [] means this effect runs only once when the component mounts.
+  }, []);
 
 
   // Your existing, beautiful JSX return statement is UNCHANGED.
@@ -96,6 +106,6 @@ function GameLayout() {
       </div>
     </>
   );
-}
+} // ADDED CLOSING BRACE FOR THE FUNCTION
 
 export default GameLayout;

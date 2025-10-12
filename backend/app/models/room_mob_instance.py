@@ -1,54 +1,74 @@
 # backend/app/models/room_mob_instance.py
 import uuid
 from datetime import datetime
-from typing import Optional, Dict, Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from sqlalchemy import ForeignKey, Integer, JSON, DateTime, func, String, Boolean 
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from ..db.base_class import Base
+
 # from .. import models # Let's remove this direct import from here
 
 if TYPE_CHECKING:
-    from .room import Room # Import specific model for type hinting
-    from .mob_template import MobTemplate
     from .mob_spawn_definition import MobSpawnDefinition
+    from .mob_template import MobTemplate
+    from .room import Room  # Import specific model for type hinting
+
 
 class RoomMobInstance(Base):
     __tablename__ = "room_mob_instances"
 
-    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    
-    room_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("rooms.id"), index=True, nullable=False)
-    mob_template_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("mob_templates.id"), index=True, nullable=False)
-    
-    spawn_definition_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        PG_UUID(as_uuid=True), 
-        ForeignKey("mob_spawn_definitions.id"),
-        nullable=True, 
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+
+    room_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("rooms.id"), index=True, nullable=False
+    )
+    mob_template_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("mob_templates.id"),
         index=True,
-        name="spawn_point_id" 
-    ) 
+        nullable=False,
+    )
+
+    spawn_definition_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("mob_spawn_definitions.id"),
+        nullable=True,
+        index=True,
+        name="spawn_point_id",
+    )
 
     current_health: Mapped[int] = mapped_column(Integer, nullable=False)
-    instance_properties_override: Mapped[Optional[Dict[str, Any]]] = mapped_column(JSON, nullable=True)
-    spawned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    last_action_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    instance_properties_override: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSON, nullable=True
+    )
+    spawned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    last_action_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
-    is_static_placement: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False,
-                                                      comment="True if this mob was placed specifically and should not be respawned by general systems.")
+    is_static_placement: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        comment="True if this mob was placed specifically and should not be respawned by general systems.",
+    )
 
     # Relationships
     # For the Mapped type hint, use the specific import from TYPE_CHECKING
     # For the relationship string, use the class name directly if it's defined in another module
     # or the fully qualified string if needed.
     room: Mapped["Room"] = relationship(back_populates="mobs_in_room")
-    mob_template: Mapped["MobTemplate"] = relationship(lazy="joined") 
-    
+    mob_template: Mapped["MobTemplate"] = relationship(lazy="joined")
+
     originating_spawn_definition: Mapped[Optional["MobSpawnDefinition"]] = relationship(
-        foreign_keys=[spawn_definition_id], 
-        back_populates="spawned_mob_instances"
+        foreign_keys=[spawn_definition_id], back_populates="spawned_mob_instances"
     )
 
     def __repr__(self) -> str:

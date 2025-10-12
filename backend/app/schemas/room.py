@@ -1,17 +1,18 @@
 # backend/app/schemas/room.py
 import uuid
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
 
 from ..models.room import RoomTypeEnum
+from .character import Character
 from .common_structures import ExitDetail, InteractableDetail
-from .npc import NpcTemplateInDB # Import this properly now
 from .item import RoomItemInstanceInDB
 from .mob import RoomMobInstance
-from .character import Character
-
+from .npc import NpcTemplateInDB  # Import this properly now
 
 # --- Room Schemas ---
+
 
 # This is the base for what constitutes a "Room" in its simplest form.
 class RoomBase(BaseModel):
@@ -24,6 +25,7 @@ class RoomBase(BaseModel):
     zone_name: Optional[str] = None
     zone_level_range: Optional[str] = None
 
+
 # This schema is specifically for CREATING rooms from the seeder JSON.
 # It must match the structure of the "data" block in rooms_z0.json exactly.
 class RoomCreate(RoomBase):
@@ -33,6 +35,7 @@ class RoomCreate(RoomBase):
     # Note: We use Dict[str, Any] for exits/interactables here because the seeder
     # does its own detailed Pydantic validation later. This schema is just for capture.
 
+
 # This is for PARTIAL updates, e.g., via an API endpoint.
 class RoomUpdate(BaseModel):
     name: Optional[str] = None
@@ -40,7 +43,8 @@ class RoomUpdate(BaseModel):
     exits: Optional[Dict[str, ExitDetail]] = None
     interactables: Optional[List[InteractableDetail]] = None
     room_type: Optional[RoomTypeEnum] = None
-    npc_placements: Optional[List[str]] = None # Allow updating placements via API too
+    npc_placements: Optional[List[str]] = None  # Allow updating placements via API too
+
 
 # This is the full representation of a Room as it exists in the database,
 # including all relationships, for sending to the client.
@@ -51,7 +55,9 @@ class RoomInDB(RoomBase):
     items_on_ground: List[RoomItemInstanceInDB] = []
     mobs_in_room: List[RoomMobInstance] = []
     other_characters: List[Character] = []
-    npcs_in_room: List[NpcTemplateInDB] = [] # This is now correct because of the import
+    npcs_in_room: List[NpcTemplateInDB] = (
+        []
+    )  # This is now correct because of the import
     dynamic_description_additions: List[str] = []
 
     class Config:

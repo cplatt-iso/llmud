@@ -1,7 +1,9 @@
 # backend/app/schemas/character_class_template.py
 import uuid
+from typing import Any, Dict, List, Optional, Union  # <<< Added Union
+
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List, Union # <<< Added Union
+
 
 class CharacterClassTemplateBase(BaseModel):
     name: str = Field(..., min_length=3, max_length=100)
@@ -15,12 +17,13 @@ class CharacterClassTemplateBase(BaseModel):
     # <<< NEW FIELD >>>
     stat_gains_per_level: Optional[Dict[str, Union[int, float]]] = Field(
         default_factory=dict,
-        description="Defines HP, MP, BAB, etc. gains per level. E.g. {'hp': 5, 'mp': 1, 'base_attack_bonus': 0.5}"
+        description="Defines HP, MP, BAB, etc. gains per level. E.g. {'hp': 5, 'mp': 1, 'base_attack_bonus': 0.5}",
     )
 
 
 class CharacterClassTemplateCreate(CharacterClassTemplateBase):
     pass
+
 
 class CharacterClassTemplateUpdate(BaseModel):
     name: Optional[str] = None
@@ -37,11 +40,14 @@ class CharacterClassTemplateUpdate(BaseModel):
 
 class CharacterClassTemplateInDBBase(CharacterClassTemplateBase):
     id: uuid.UUID
+
     class Config:
         from_attributes = True
 
+
 class CharacterClassTemplate(CharacterClassTemplateInDBBase):
     pass
+
 
 class CharacterClassTemplateInDB(CharacterClassTemplateInDBBase):
     pass

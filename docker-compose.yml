@@ -26,7 +26,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    # No host ports needed if NPM is handling external access via npm_web
+    # Port 8000 is accessible on npm_web network for NPM to proxy
+    # Optionally expose to host for debugging: uncomment next 2 lines
+    # ports:
+    #   - "8000:8000"
     volumes:
       - ./backend/app:/app/app
     networks:
@@ -42,8 +45,8 @@ services:
     build: ./frontend
     container_name: mud_frontend_service
     restart: unless-stopped
-    volumes:
-      - ./frontend/src:/usr/share/nginx/html
+    # Volume mount removed - using built files from Dockerfile
+    # For development with hot reload, use: docker compose -f docker-compose.dev.yml up
     networks:
       - npm_web
     depends_on:

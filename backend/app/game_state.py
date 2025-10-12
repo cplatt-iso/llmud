@@ -1,7 +1,7 @@
 # backend/app/game_state.py
 import datetime
 import uuid
-from typing import Dict, Optional
+from typing import Dict
 
 # Player ID -> Active Character ID mapping (for HTTP sessions)
 active_game_sessions: Dict[uuid.UUID, uuid.UUID] = {}
@@ -10,8 +10,10 @@ active_game_sessions: Dict[uuid.UUID, uuid.UUID] = {}
 character_resting_status: Dict[uuid.UUID, bool] = {}
 mob_group_death_timestamps: Dict[uuid.UUID, datetime.datetime] = {}
 
+
 def is_character_resting(character_id: uuid.UUID) -> bool:
     return character_resting_status.get(character_id, False)
+
 
 def set_character_resting_status(character_id: uuid.UUID, is_resting: bool):
     if is_resting:

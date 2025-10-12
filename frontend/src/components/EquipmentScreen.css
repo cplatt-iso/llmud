@@ -27,6 +27,35 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto; /* Allow internal scrolling if needed */
+  position: relative;
+}
+
+.equipped-slots-panel {
+  background-image: url('/images/portraits/warrior-portrait.png');
+  background-size: cover;
+  background-position: center 15%;
+  background-repeat: no-repeat;
+}
+
+.equipped-slots-panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to bottom, 
+    rgba(16, 16, 16, 0.65) 0%,
+    rgba(16, 16, 16, 0.75) 50%,
+    rgba(16, 16, 16, 0.85) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.equipped-slots-panel > * {
+  position: relative;
+  z-index: 1;
 }
 
 .panel-header {

@@ -1,0 +1,20 @@
+# Development Dockerfile for hot-reload
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json* ./
+
+# Install dependencies
+RUN npm install
+
+# Copy config files
+COPY vite.config.js ./
+COPY index.html ./
+
+# Source files will be mounted as volumes
+
+EXPOSE 5174
+
+CMD ["npm", "run", "dev"]

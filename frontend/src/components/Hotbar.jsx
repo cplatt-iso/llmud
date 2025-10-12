@@ -3,6 +3,7 @@ import React from 'react';
 import useGameStore from '../state/gameStore';
 import { apiService } from '../services/apiService';
 import { webSocketService } from '../services/webSocketService';
+import { getHotbarIcon } from '../utils/skillIcons';
 
 const HotbarSlot = ({ slotId }) => {
     const slotData = useGameStore((state) => state.hotbar[slotId]);
@@ -46,6 +47,8 @@ const HotbarSlot = ({ slotId }) => {
         }
     }
 
+    const iconPath = slotData ? getHotbarIcon(slotData) : null;
+
     return (
         <div
             className="hotbar-slot"
@@ -56,7 +59,19 @@ const HotbarSlot = ({ slotId }) => {
             title={slotData ? `Use ${slotData.name} (Right-click to clear)` : `Empty Hotbar Slot ${slotId}`}
         >
             <span className="slot-number">{slotId % 10}</span>
-            {slotData && <div className="slot-content">{slotData.name}</div>}
+            {slotData && (
+                <div className="slot-content">
+                    {iconPath ? (
+                        <img 
+                            src={iconPath} 
+                            alt={slotData.name}
+                            className="hotbar-icon"
+                        />
+                    ) : (
+                        <span className="hotbar-text">{slotData.name}</span>
+                    )}
+                </div>
+            )}
         </div>
     );
 };
@@ -66,7 +81,17 @@ const Hotbar = () => {
 
     return (
         <div className="hotbar-container">
+            <img 
+                src="/images/icons/warrior-bookend-left.png" 
+                alt="Hotbar Left" 
+                className="hotbar-bookend hotbar-bookend-left"
+            />
             {hotbarSlots.map(id => <HotbarSlot key={id} slotId={id} />)}
+            <img 
+                src="/images/icons/warrior-bookend-right.png" 
+                alt="Hotbar Right" 
+                className="hotbar-bookend hotbar-bookend-right"
+            />
         </div>
     );
 };

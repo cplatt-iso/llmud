@@ -1,8 +1,10 @@
+import uuid  # Ensure uuid is imported
 from typing import Optional
-from pydantic import BaseModel, Field # Ensure BaseModel and Field are imported
-import uuid # Ensure uuid is imported
+
+from pydantic import BaseModel, Field  # Ensure BaseModel and Field are imported
 
 # ...existing schemas...
+
 
 class CharacterBasicInfo(BaseModel):
     id: uuid.UUID
@@ -12,6 +14,7 @@ class CharacterBasicInfo(BaseModel):
 
     class Config:
         from_attributes = True
+
 
 class WhoListEntry(BaseModel):
     name: str

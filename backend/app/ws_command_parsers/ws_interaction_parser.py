@@ -1,24 +1,24 @@
 # backend/app/ws_command_parsers/ws_interaction_parser.py
 
-import uuid
-import random
-import logging # Added logging
-from typing import Optional, List, Tuple, Union, Sequence 
-from sqlalchemy.orm import Session, attributes
+import logging  # Added logging
+from typing import Optional, Sequence, Union
 
+from app import websocket_manager  # MODIFIED IMPORT
 from app import crud, models, schemas
-from app.game_logic import combat 
-from app.commands.utils import resolve_room_item_target, get_dynamic_room_description 
-from app.commands.command_args import CommandContext 
-from app.commands import interaction_parser as http_interaction_parser 
-from app import websocket_manager # MODIFIED IMPORT
-from app.schemas.common_structures import ExitDetail, InteractableDetail 
-from app.commands.utils import roll_dice
-from app import websocket_manager
+from app.commands import interaction_parser as http_interaction_parser
+from app.commands.command_args import CommandContext
+from app.commands.utils import (
+    get_dynamic_room_description,
+    resolve_room_item_target,
+    roll_dice,
+)
+from app.game_logic import combat
+from sqlalchemy.orm import Session
+
 from .ws_combat_actions_parser import handle_ws_use_combat_skill
 
+logger = logging.getLogger(__name__)  # Added logger
 
-logger = logging.getLogger(__name__) # Added logger
 
 async def _send_inventory_update_to_player(db: Session, character: models.Character):
     """
@@ -28,53 +28,61 @@ async def _send_inventory_update_to_player(db: Session, character: models.Charac
         logger.error("Cannot send inventory update: Invalid character object provided.")
         return
 
-    logger.debug(f"Constructing and sending real-time inventory update to character {character.name} ({character.id})")
+    logger.debug(
+        f"Constructing and sending real-time inventory update to character {character.name} ({character.id})"
+    )
 
-    inventory_items_orm = crud.crud_character_inventory.get_character_inventory(db, character_id=character.id)
-    
+    inventory_items_orm = crud.crud_character_inventory.get_character_inventory(
+        db, character_id=character.id
+    )
+
     equipped_items = {}
     backpack_items = []
-    
+
     for item_orm in inventory_items_orm:
         item_schema = schemas.CharacterInventoryItem.from_orm(item_orm)
         if item_schema.equipped and item_schema.equipped_slot:
             equipped_items[item_schema.equipped_slot] = item_schema
         else:
             backpack_items.append(item_schema)
-            
+
     inventory_display_data = schemas.CharacterInventoryDisplay(
         equipped_items=equipped_items,
         backpack_items=backpack_items,
         platinum=character.platinum_coins,
         gold=character.gold_coins,
         silver=character.silver_coins,
-        copper=character.copper_coins
+        copper=character.copper_coins,
     )
 
     payload = {
         "type": "inventory_update",
-        "inventory_data": inventory_display_data.model_dump(exclude_none=True)
+        "inventory_data": inventory_display_data.model_dump(exclude_none=True),
     }
     if character.player_id:
         # Access connection_manager via the imported module
-        await websocket_manager.connection_manager.send_personal_message(payload, character.player_id)
+        await websocket_manager.connection_manager.send_personal_message(
+            payload, character.player_id
+        )
     else:
-        logger.warning(f"Character {character.name} ({character.id}) has no player_id. Cannot send inventory update.")
-    
+        logger.warning(
+            f"Character {character.name} ({character.id}) has no player_id. Cannot send inventory update."
+        )
+
+
 async def handle_ws_equip(
-    db: Session,
-    player: models.Player,
-    character: models.Character,
-    args_str: str
+    db: Session, player: models.Player, character: models.Character, args_str: str
 ):
     """Handles the 'equip' or 'eq' command."""
     if not args_str:
-        await combat.send_combat_log(player.id, ["Usage: equip <item_in_backpack> [target_slot]"])
+        await combat.send_combat_log(
+            player.id, ["Usage: equip <item_in_backpack> [target_slot]"]
+        )
         return
-        
+
     # TODO: Advanced parsing to separate item name from optional target slot
     # For now, simple matching on the whole args_str
-    
+
     backpack_items = [
         inv_item for inv_item in character.inventory_items if not inv_item.equipped
     ]
@@ -82,10 +90,11 @@ async def handle_ws_equip(
     if not backpack_items:
         await combat.send_combat_log(player.id, ["Your backpack is empty."])
         return
-    
+
     # Simple search logic for now
     possible_matches = [
-        item for item in backpack_items 
+        item
+        for item in backpack_items
         if item.item and args_str.lower() in item.item.name.lower()
     ]
 
@@ -94,15 +103,26 @@ async def handle_ws_equip(
         target_inv_item = possible_matches[0]
     elif len(possible_matches) > 1:
         # Check for an exact match
-        exact_match = next((item for item in possible_matches if item.item.name.lower() == args_str.lower()), None)
+        exact_match = next(
+            (
+                item
+                for item in possible_matches
+                if item.item.name.lower() == args_str.lower()
+            ),
+            None,
+        )
         if exact_match:
             target_inv_item = exact_match
         else:
-            await combat.send_combat_log(player.id, [f"Multiple items match '{args_str}'. Be more specific."])
+            await combat.send_combat_log(
+                player.id, [f"Multiple items match '{args_str}'. Be more specific."]
+            )
             return
-    
+
     if not target_inv_item:
-        await combat.send_combat_log(player.id, [f"You do not have '{args_str}' in your backpack."])
+        await combat.send_combat_log(
+            player.id, [f"You do not have '{args_str}' in your backpack."]
+        )
         return
 
     # At this point, target_inv_item is the CharacterInventoryItem to equip
@@ -111,13 +131,18 @@ async def handle_ws_equip(
     )
 
     if equipped_entry:
-        await combat.send_combat_log(player.id, [message.replace("Staged equipping of", "You equip the")])
+        await combat.send_combat_log(
+            player.id, [message.replace("Staged equipping of", "You equip the")]
+        )
     else:
         await combat.send_combat_log(player.id, [f"You can't equip that: {message}"])
-    
+
     # The inventory update will be pushed after commit in the router
 
-async def handle_ws_use_item_or_skill(db: Session, player: models.Player, character: models.Character, args_str: str):
+
+async def handle_ws_use_item_or_skill(
+    db: Session, player: models.Player, character: models.Character, args_str: str
+):
     """
     Intelligently determines if the player is trying to use an item from their
     inventory or a learned skill, then delegates to the appropriate handler.
@@ -125,7 +150,7 @@ async def handle_ws_use_item_or_skill(db: Session, player: models.Player, charac
     if not args_str:
         await combat.send_combat_log(player.id, ["Use what? (An item or a skill)"])
         return
-        
+
     target_name = args_str.strip().lower()
 
     # --- Step 1: Check for an item in the backpack first ---
@@ -133,10 +158,14 @@ async def handle_ws_use_item_or_skill(db: Session, player: models.Player, charac
     # We iterate through the character's loaded inventory items
     for inv_item in character.inventory_items:
         # Must be in backpack (not equipped) and have a valid item template
-        if not inv_item.equipped and inv_item.item and target_name in inv_item.item.name.lower():
+        if (
+            not inv_item.equipped
+            and inv_item.item
+            and target_name in inv_item.item.name.lower()
+        ):
             item_to_use = inv_item
-            break # Found the first match, proceed
-            
+            break  # Found the first match, proceed
+
     if item_to_use:
         # Found a matching item in the backpack, so we assume they want to use it.
         await _resolve_item_use(db, player, character, item_to_use)
@@ -146,16 +175,25 @@ async def handle_ws_use_item_or_skill(db: Session, player: models.Player, charac
     # Get the current room ORM, which the combat skill handler needs
     room_orm = crud.crud_room.get_room_by_id(db, room_id=character.current_room_id)
     if not room_orm:
-        logger.error(f"Character {character.name} in invalid room {character.current_room_id} during 'use' command.")
-        await combat.send_combat_log(player.id, ["Your location is unstable, cannot use skill."])
+        logger.error(
+            f"Character {character.name} in invalid room {character.current_room_id} during 'use' command."
+        )
+        await combat.send_combat_log(
+            player.id, ["Your location is unstable, cannot use skill."]
+        )
         return
-    
+
     # The combat skill handler needs a schema, so we convert it here.
     room_schema = schemas.RoomInDB.from_orm(room_orm)
     await handle_ws_use_combat_skill(db, player, character, room_schema, args_str)
 
 
-async def _resolve_item_use(db: Session, player: models.Player, character: models.Character, item_to_use: models.CharacterInventoryItem):
+async def _resolve_item_use(
+    db: Session,
+    player: models.Player,
+    character: models.Character,
+    item_to_use: models.CharacterInventoryItem,
+):
     """
     The actual logic for using an item. This function is called when an item
     is definitively the target of the 'use' command.
@@ -165,11 +203,13 @@ async def _resolve_item_use(db: Session, player: models.Player, character: model
 
     # Check if the item is a "consumable" type that can be used this way
     if item_template.item_type != "potion" and item_template.slot != "consumable":
-        await combat.send_combat_log(player.id, [f"You can't use the {item_template.name} that way."])
+        await combat.send_combat_log(
+            player.id, [f"You can't use the {item_template.name} that way."]
+        )
         return
 
     effect_type = item_props.get("effect_type")
-    
+
     if effect_type == "heal_direct":
         if character.current_health >= character.max_health:
             await combat.send_combat_log(player.id, ["You are already at full health."])
@@ -177,42 +217,64 @@ async def _resolve_item_use(db: Session, player: models.Player, character: model
 
         heal_dice = item_props.get("heal_amount_dice", "0d0")
         heal_bonus = item_props.get("heal_amount_bonus", 0)
-        
+
         rolled_heal = roll_dice(heal_dice) + heal_bonus
-        
+
         health_before = character.current_health
-        character.current_health = min(character.max_health, health_before + rolled_heal)
+        character.current_health = min(
+            character.max_health, health_before + rolled_heal
+        )
         health_regained = character.current_health - health_before
-        
+
         # This function call removes the item from inventory
         crud.crud_character_inventory.remove_item_from_character_inventory(
             db, inventory_item_id=item_to_use.id, quantity_to_remove=1
         )
-        
+
         log_message = f"You drink the {item_template.name}. You feel a soothing warmth and regain {health_regained} health."
         await combat.send_combat_log(player.id, [log_message])
-        
+
         # The actions (healing, item removal) are staged. Now we commit.
         db.commit()
         # After commit, refresh the character object to get the latest state from the DB.
         db.refresh(character)
-        
+
         # Now, push the updates to the client.
         await _send_inventory_update_to_player(db, character)
-        
+
         xp_for_next_level = crud.crud_character.get_xp_for_level(character.level + 1)
-        vitals_payload = { "type": "vitals_update", "current_hp": character.current_health, "max_hp": character.max_health, "current_mp": character.current_mana, "max_mp": character.max_mana, "current_xp": character.experience_points, "next_level_xp": int(xp_for_next_level) if xp_for_next_level != float('inf') else -1, "level": character.level, "platinum": character.platinum_coins, "gold": character.gold_coins, "silver": character.silver_coins, "copper": character.copper_coins }
-        await websocket_manager.connection_manager.send_personal_message(vitals_payload, player.id)
+        vitals_payload = {
+            "type": "vitals_update",
+            "current_hp": character.current_health,
+            "max_hp": character.max_health,
+            "current_mp": character.current_mana,
+            "max_mp": character.max_mana,
+            "current_xp": character.experience_points,
+            "next_level_xp": (
+                int(xp_for_next_level) if xp_for_next_level != float("inf") else -1
+            ),
+            "level": character.level,
+            "platinum": character.platinum_coins,
+            "gold": character.gold_coins,
+            "silver": character.silver_coins,
+            "copper": character.copper_coins,
+        }
+        await websocket_manager.connection_manager.send_personal_message(
+            vitals_payload, player.id
+        )
 
     else:
         # Handle other effect types here in the future
-        await combat.send_combat_log(player.id, [f"The {item_template.name} doesn't seem to do anything when you try to use it."])
+        await combat.send_combat_log(
+            player.id,
+            [
+                f"The {item_template.name} doesn't seem to do anything when you try to use it."
+            ],
+        )
+
 
 async def handle_ws_unequip(
-    db: Session,
-    player: models.Player,
-    character: models.Character,
-    args_str: str
+    db: Session, player: models.Player, character: models.Character, args_str: str
 ):
     """Handles the 'unequip' or 'uneq' command."""
     if not args_str:
@@ -220,9 +282,11 @@ async def handle_ws_unequip(
         return
 
     slot_to_unequip = args_str.lower().strip()
-    
+
     if slot_to_unequip not in models.item.EQUIPMENT_SLOTS:
-        await combat.send_combat_log(player.id, [f"'{slot_to_unequip}' is not a valid equipment slot."])
+        await combat.send_combat_log(
+            player.id, [f"'{slot_to_unequip}' is not a valid equipment slot."]
+        )
         return
 
     unequipped_entry, message = crud.crud_character_inventory.unequip_item_to_inventory(
@@ -230,16 +294,21 @@ async def handle_ws_unequip(
     )
 
     if unequipped_entry:
-        await combat.send_combat_log(player.id, [message.replace("Staged unequipping of", "You unequip the")])
+        await combat.send_combat_log(
+            player.id, [message.replace("Staged unequipping of", "You unequip the")]
+        )
     else:
-        await combat.send_combat_log(player.id, [f"You can't unequip from there: {message}"])
+        await combat.send_combat_log(
+            player.id, [f"You can't unequip from there: {message}"]
+        )
+
 
 async def handle_ws_get_take(
     db: Session,
     player: models.Player,
     current_char_state: models.Character,
-    current_room_orm: models.Room, 
-    args_str: str 
+    current_room_orm: models.Room,
+    args_str: str,
 ):
     # ... (code to prepare room schema is unchanged) ...
     dynamic_desc = get_dynamic_room_description(current_room_orm)
@@ -247,12 +316,17 @@ async def handle_ws_get_take(
     current_room_data_dict["description"] = dynamic_desc
     current_room_schema_with_dynamic_desc = schemas.RoomInDB(**current_room_data_dict)
 
-
     if args_str.lower() == "all":
         # ... (code for 'get all' logic is unchanged up until the commit) ...
-        items_on_ground_orm = crud.crud_room_item.get_items_in_room(db, room_id=current_room_orm.id)
+        items_on_ground_orm = crud.crud_room_item.get_items_in_room(
+            db, room_id=current_room_orm.id
+        )
         if not items_on_ground_orm:
-            await combat.send_combat_log(player.id, ["There is nothing on the ground here to get."], room_data=current_room_schema_with_dynamic_desc)
+            await combat.send_combat_log(
+                player.id,
+                ["There is nothing on the ground here to get."],
+                room_data=current_room_schema_with_dynamic_desc,
+            )
             return
 
         picked_up_item_messages = []
@@ -262,148 +336,229 @@ async def handle_ws_get_take(
 
         for room_item_instance in items_on_ground_orm:
             if not room_item_instance.item:
-                logger.warning(f"RoomItemInstance {room_item_instance.id} in room {current_room_orm.id} has no associated ItemTemplate. Skipping for 'get all'.")
+                logger.warning(
+                    f"RoomItemInstance {room_item_instance.id} in room {current_room_orm.id} has no associated ItemTemplate. Skipping for 'get all'."
+                )
                 continue
 
-            if not getattr(room_item_instance.item, 'is_gettable', True):
+            if not getattr(room_item_instance.item, "is_gettable", True):
                 continue
-            
-            _inv_add_entry, add_message = crud.crud_character_inventory.add_item_to_character_inventory(
-                db, character_obj=current_char_state,
-                item_id=room_item_instance.item_id,
-                quantity=room_item_instance.quantity
+
+            _inv_add_entry, add_message = (
+                crud.crud_character_inventory.add_item_to_character_inventory(
+                    db,
+                    character_obj=current_char_state,
+                    item_id=room_item_instance.item_id,
+                    quantity=room_item_instance.quantity,
+                )
             )
 
             if _inv_add_entry:
                 crud.crud_room_item.remove_item_from_room(
-                    db, room_item_instance_id=room_item_instance.id,
-                    quantity_to_remove=room_item_instance.quantity
+                    db,
+                    room_item_instance_id=room_item_instance.id,
+                    quantity_to_remove=room_item_instance.quantity,
                 )
                 item_name_with_qty = room_item_instance.item.name
                 if room_item_instance.quantity > 1:
                     item_name_with_qty += f" (x{room_item_instance.quantity})"
-                
+
                 picked_up_item_messages.append(f"You take the {item_name_with_qty}.")
                 picked_up_item_names_for_broadcast.append(item_name_with_qty)
                 anything_actually_picked_up = True
             else:
-                failed_to_pick_up_messages.append(f"Could not take {room_item_instance.item.name}: {add_message.replace('You pick up the ', '').replace('You add ', '').replace(' to your inventory.', '')}")
-        
+                failed_to_pick_up_messages.append(
+                    f"Could not take {room_item_instance.item.name}: {add_message.replace('You pick up the ', '').replace('You add ', '').replace(' to your inventory.', '')}"
+                )
+
         if not anything_actually_picked_up and not failed_to_pick_up_messages:
-            await combat.send_combat_log(player.id, ["There was nothing gettable on the ground."], room_data=current_room_schema_with_dynamic_desc)
+            await combat.send_combat_log(
+                player.id,
+                ["There was nothing gettable on the ground."],
+                room_data=current_room_schema_with_dynamic_desc,
+            )
             return
 
         if anything_actually_picked_up:
             db.commit()
-            await _send_inventory_update_to_player(db, current_char_state) # ### UPDATE PUSH ###
+            await _send_inventory_update_to_player(
+                db, current_char_state
+            )  # ### UPDATE PUSH ###
         else:
-            db.rollback() # If nothing was picked up, rollback any potential changes
-        
+            db.rollback()  # If nothing was picked up, rollback any potential changes
+
         db.refresh(current_char_state)
         refreshed_room_orm = crud.crud_room.get_room_by_id(db, current_room_orm.id)
 
         # ... (rest of the 'get all' response logic is unchanged) ...
-        updated_room_schema_for_response = current_room_schema_with_dynamic_desc # Default
+        updated_room_schema_for_response = (
+            current_room_schema_with_dynamic_desc  # Default
+        )
         if refreshed_room_orm:
             updated_dynamic_desc = get_dynamic_room_description(refreshed_room_orm)
-            updated_room_data_dict = schemas.RoomInDB.from_orm(refreshed_room_orm).model_dump()
+            updated_room_data_dict = schemas.RoomInDB.from_orm(
+                refreshed_room_orm
+            ).model_dump()
             updated_room_data_dict["description"] = updated_dynamic_desc
-            updated_room_schema_for_response = schemas.RoomInDB(**updated_room_data_dict)
-        
+            updated_room_schema_for_response = schemas.RoomInDB(
+                **updated_room_data_dict
+            )
+
         final_log_to_player = []
         if picked_up_item_messages:
             final_log_to_player.extend(picked_up_item_messages)
         if failed_to_pick_up_messages:
             final_log_to_player.extend(failed_to_pick_up_messages)
-        
+
         if not final_log_to_player:
             final_log_to_player.append("No items were picked up.")
 
         xp_for_next = crud.crud_character.get_xp_for_level(current_char_state.level + 1)
         vitals_payload = {
-            "current_hp": current_char_state.current_health, "max_hp": current_char_state.max_health,
-            "current_mp": current_char_state.current_mana, "max_mp": current_char_state.max_mana,
+            "current_hp": current_char_state.current_health,
+            "max_hp": current_char_state.max_health,
+            "current_mp": current_char_state.current_mana,
+            "max_mp": current_char_state.max_mana,
             "current_xp": current_char_state.experience_points,
-            "next_level_xp": int(xp_for_next) if xp_for_next != float('inf') else -1,
-            "level": current_char_state.level, "platinum": current_char_state.platinum_coins,
-            "gold": current_char_state.gold_coins, "silver": current_char_state.silver_coins,
-            "copper": current_char_state.copper_coins
+            "next_level_xp": int(xp_for_next) if xp_for_next != float("inf") else -1,
+            "level": current_char_state.level,
+            "platinum": current_char_state.platinum_coins,
+            "gold": current_char_state.gold_coins,
+            "silver": current_char_state.silver_coins,
+            "copper": current_char_state.copper_coins,
         }
-        await combat.send_combat_log(player.id, final_log_to_player, room_data=updated_room_schema_for_response, character_vitals=vitals_payload)
+        await combat.send_combat_log(
+            player.id,
+            final_log_to_player,
+            room_data=updated_room_schema_for_response,
+            character_vitals=vitals_payload,
+        )
 
         if picked_up_item_names_for_broadcast:
             broadcast_get_msg = f"<span class='char-name'>{current_char_state.name}</span> picks up: {', '.join(picked_up_item_names_for_broadcast)}."
-            await combat.broadcast_to_room_participants(db, current_room_orm.id, broadcast_get_msg, exclude_player_id=player.id)
+            await combat.broadcast_to_room_participants(
+                db, current_room_orm.id, broadcast_get_msg, exclude_player_id=player.id
+            )
         return
 
     # --- Existing logic for single item "get" ---
     # ... (code for resolving single item is unchanged) ...
     if not args_str:
-        await combat.send_combat_log(player.id, ["Get what?"], room_data=current_room_schema_with_dynamic_desc)
-        return
-    
-    items_on_ground_orm = crud.crud_room_item.get_items_in_room(db, room_id=current_room_orm.id)
-    if not items_on_ground_orm:
-        await combat.send_combat_log(player.id, ["There is nothing on the ground here to get."], room_data=current_room_schema_with_dynamic_desc)
+        await combat.send_combat_log(
+            player.id, ["Get what?"], room_data=current_room_schema_with_dynamic_desc
+        )
         return
 
-    target_room_item_instance, error_or_prompt = resolve_room_item_target(args_str, items_on_ground_orm)
+    items_on_ground_orm = crud.crud_room_item.get_items_in_room(
+        db, room_id=current_room_orm.id
+    )
+    if not items_on_ground_orm:
+        await combat.send_combat_log(
+            player.id,
+            ["There is nothing on the ground here to get."],
+            room_data=current_room_schema_with_dynamic_desc,
+        )
+        return
+
+    target_room_item_instance, error_or_prompt = resolve_room_item_target(
+        args_str, items_on_ground_orm
+    )
     if error_or_prompt:
-        await combat.send_combat_log(player.id, [error_or_prompt], room_data=current_room_schema_with_dynamic_desc)
+        await combat.send_combat_log(
+            player.id,
+            [error_or_prompt],
+            room_data=current_room_schema_with_dynamic_desc,
+        )
         return
     if not target_room_item_instance or not target_room_item_instance.item:
-        await combat.send_combat_log(player.id, [f"Cannot find '{args_str}' on the ground here."], room_data=current_room_schema_with_dynamic_desc)
+        await combat.send_combat_log(
+            player.id,
+            [f"Cannot find '{args_str}' on the ground here."],
+            room_data=current_room_schema_with_dynamic_desc,
+        )
         return
-    
-    if not getattr(target_room_item_instance.item, 'is_gettable', True):
-        await combat.send_combat_log(player.id, [f"You cannot pick up the {target_room_item_instance.item.name}."], room_data=current_room_schema_with_dynamic_desc)
+
+    if not getattr(target_room_item_instance.item, "is_gettable", True):
+        await combat.send_combat_log(
+            player.id,
+            [f"You cannot pick up the {target_room_item_instance.item.name}."],
+            room_data=current_room_schema_with_dynamic_desc,
+        )
         return
-        
-    _inv_add_entry, add_message = crud.crud_character_inventory.add_item_to_character_inventory(
-        db, character_obj=current_char_state,
-        item_id=target_room_item_instance.item_id,
-        quantity=target_room_item_instance.quantity
+
+    _inv_add_entry, add_message = (
+        crud.crud_character_inventory.add_item_to_character_inventory(
+            db,
+            character_obj=current_char_state,
+            item_id=target_room_item_instance.item_id,
+            quantity=target_room_item_instance.quantity,
+        )
     )
-    if not _inv_add_entry: 
-        await combat.send_combat_log(player.id, [f"You try to pick up {target_room_item_instance.item.name}, but cannot. ({add_message})"], room_data=current_room_schema_with_dynamic_desc)
+    if not _inv_add_entry:
+        await combat.send_combat_log(
+            player.id,
+            [
+                f"You try to pick up {target_room_item_instance.item.name}, but cannot. ({add_message})"
+            ],
+            room_data=current_room_schema_with_dynamic_desc,
+        )
         return
-    
+
     crud.crud_room_item.remove_item_from_room(
-        db, room_item_instance_id=target_room_item_instance.id,
-        quantity_to_remove=target_room_item_instance.quantity
+        db,
+        room_item_instance_id=target_room_item_instance.id,
+        quantity_to_remove=target_room_item_instance.quantity,
     )
     final_pickup_message = add_message
-    
+
     db.commit()
-    await _send_inventory_update_to_player(db, current_char_state) # ### UPDATE PUSH ###
-    
-    db.refresh(current_char_state) 
+    await _send_inventory_update_to_player(
+        db, current_char_state
+    )  # ### UPDATE PUSH ###
+
+    db.refresh(current_char_state)
     refreshed_room_orm = crud.crud_room.get_room_by_id(db, current_room_orm.id)
-    
+
     # ... (rest of the single 'get' response logic is unchanged) ...
     updated_room_schema_for_response = current_room_schema_with_dynamic_desc
     if refreshed_room_orm:
         updated_dynamic_desc = get_dynamic_room_description(refreshed_room_orm)
-        updated_room_data_dict = schemas.RoomInDB.from_orm(refreshed_room_orm).model_dump()
+        updated_room_data_dict = schemas.RoomInDB.from_orm(
+            refreshed_room_orm
+        ).model_dump()
         updated_room_data_dict["description"] = updated_dynamic_desc
         updated_room_schema_for_response = schemas.RoomInDB(**updated_room_data_dict)
 
     xp_for_next = crud.crud_character.get_xp_for_level(current_char_state.level + 1)
     vitals_payload = {
-        "current_hp": current_char_state.current_health, "max_hp": current_char_state.max_health,
-        "current_mp": current_char_state.current_mana, "max_mp": current_char_state.max_mana,
+        "current_hp": current_char_state.current_health,
+        "max_hp": current_char_state.max_health,
+        "current_mp": current_char_state.current_mana,
+        "max_mp": current_char_state.max_mana,
         "current_xp": current_char_state.experience_points,
-        "next_level_xp": int(xp_for_next) if xp_for_next != float('inf') else -1,
-        "level": current_char_state.level, "platinum": current_char_state.platinum_coins,
-        "gold": current_char_state.gold_coins, "silver": current_char_state.silver_coins,
-        "copper": current_char_state.copper_coins
+        "next_level_xp": int(xp_for_next) if xp_for_next != float("inf") else -1,
+        "level": current_char_state.level,
+        "platinum": current_char_state.platinum_coins,
+        "gold": current_char_state.gold_coins,
+        "silver": current_char_state.silver_coins,
+        "copper": current_char_state.copper_coins,
     }
-    await combat.send_combat_log(player.id, [final_pickup_message], room_data=updated_room_schema_for_response, character_vitals=vitals_payload)
-    
-    broadcast_get_msg = f"<span class='char-name'>{current_char_state.name}</span> picks up {target_room_item_instance.item.name}."
-    await combat.broadcast_to_room_participants(db, current_room_orm.id, broadcast_get_msg, exclude_player_id=player.id)
+    await combat.send_combat_log(
+        player.id,
+        [final_pickup_message],
+        room_data=updated_room_schema_for_response,
+        character_vitals=vitals_payload,
+    )
 
-async def handle_ws_use_item(db: Session, player: models.Player, character: models.Character, args_str: str):
+    broadcast_get_msg = f"<span class='char-name'>{current_char_state.name}</span> picks up {target_room_item_instance.item.name}."
+    await combat.broadcast_to_room_participants(
+        db, current_room_orm.id, broadcast_get_msg, exclude_player_id=player.id
+    )
+
+
+async def handle_ws_use_item(
+    db: Session, player: models.Player, character: models.Character, args_str: str
+):
     """Handles using/quaffing/drinking an item from inventory."""
     if not args_str:
         await combat.send_combat_log(player.id, ["Use what?"])
@@ -417,13 +572,15 @@ async def handle_ws_use_item(db: Session, player: models.Player, character: mode
         # We only care about items in the backpack
         if inv_item.equipped or not inv_item.item:
             continue
-        
+
         if target_item_name in inv_item.item.name.lower():
             item_to_use = inv_item
-            break # Found a match, stop looking
+            break  # Found a match, stop looking
 
     if not item_to_use:
-        await combat.send_combat_log(player.id, [f"You don't have a '{args_str}' to use."])
+        await combat.send_combat_log(
+            player.id, [f"You don't have a '{args_str}' to use."]
+        )
         return
 
     item_template = item_to_use.item
@@ -431,39 +588,45 @@ async def handle_ws_use_item(db: Session, player: models.Player, character: mode
 
     # Check if the item is actually usable in this way
     if item_template.slot != "consumable" and item_template.item_type != "potion":
-        await combat.send_combat_log(player.id, [f"You can't use the {item_template.name} that way."])
+        await combat.send_combat_log(
+            player.id, [f"You can't use the {item_template.name} that way."]
+        )
         return
 
     # --- EFFECT RESOLUTION ---
     effect_type = item_props.get("effect_type")
-    
+
     if effect_type == "heal_direct":
         if character.current_health >= character.max_health:
-            await combat.send_combat_log(player.id, [f"You are already at full health."])
+            await combat.send_combat_log(
+                player.id, [f"You are already at full health."]
+            )
             return
 
         heal_dice = item_props.get("heal_amount_dice", "0d0")
         heal_bonus = item_props.get("heal_amount_bonus", 0)
-        
+
         # Use our dice roller
         rolled_heal = roll_dice(heal_dice) + heal_bonus
-        
+
         health_before = character.current_health
-        character.current_health = min(character.max_health, health_before + rolled_heal)
+        character.current_health = min(
+            character.max_health, health_before + rolled_heal
+        )
         health_regained = character.current_health - health_before
-        
+
         # Remove the item from inventory
         crud.crud_character_inventory.remove_item_from_character_inventory(
             db, inventory_item_id=item_to_use.id, quantity_to_remove=1
         )
-        
+
         log_message = f"You drink the {item_template.name}. You feel a soothing warmth and regain {health_regained} health."
         await combat.send_combat_log(player.id, [log_message])
-        
+
         # The router will commit, then we need to send updates. We can do it here post-action.
-        db.commit() # Commit the changes from healing and item removal
+        db.commit()  # Commit the changes from healing and item removal
         db.refresh(character)
-        
+
         # Manually push updates since the router's generic post-commit hook might not cover this
         await _send_inventory_update_to_player(db, character)
         xp_for_next_level = crud.crud_character.get_xp_for_level(character.level + 1)
@@ -474,24 +637,34 @@ async def handle_ws_use_item(db: Session, player: models.Player, character: mode
             "current_mp": character.current_mana,
             "max_mp": character.max_mana,
             "current_xp": character.experience_points,
-            "next_level_xp": int(xp_for_next_level) if xp_for_next_level != float('inf') else -1,
+            "next_level_xp": (
+                int(xp_for_next_level) if xp_for_next_level != float("inf") else -1
+            ),
             "level": character.level,
             "platinum": character.platinum_coins,
             "gold": character.gold_coins,
             "silver": character.silver_coins,
-            "copper": character.copper_coins
+            "copper": character.copper_coins,
         }
-        await websocket_manager.connection_manager.send_personal_message(vitals_payload, player.id)
+        await websocket_manager.connection_manager.send_personal_message(
+            vitals_payload, player.id
+        )
 
     else:
-        await combat.send_combat_log(player.id, [f"The {item_template.name} doesn't seem to do anything when you try to use it."])
+        await combat.send_combat_log(
+            player.id,
+            [
+                f"The {item_template.name} doesn't seem to do anything when you try to use it."
+            ],
+        )
+
 
 async def handle_ws_unlock(
     db: Session,
     player: models.Player,
     current_char_state: models.Character,
     current_room_orm: models.Room,
-    args_list: Sequence[str] 
+    args_list: Sequence[str],
 ):
     # Dynamic description for initial room schema if needed by HTTP parser (though it shouldn't modify it)
     initial_dynamic_desc = get_dynamic_room_description(current_room_orm)
@@ -500,30 +673,35 @@ async def handle_ws_unlock(
     initial_room_schema_with_dynamic_desc = schemas.RoomInDB(**initial_room_data_dict)
 
     cmd_context = CommandContext(
-        db=db, active_character=current_char_state,
+        db=db,
+        active_character=current_char_state,
         current_room_orm=current_room_orm,
-        current_room_schema=initial_room_schema_with_dynamic_desc, # Pass schema with dynamic desc
-        original_command=f"unlock {' '.join(args_list)}", 
-        command_verb="unlock", args=list(args_list) 
+        current_room_schema=initial_room_schema_with_dynamic_desc,  # Pass schema with dynamic desc
+        original_command=f"unlock {' '.join(args_list)}",
+        command_verb="unlock",
+        args=list(args_list),
     )
     response_schema_from_http = await http_interaction_parser.handle_unlock(cmd_context)
-    
+
     # Prepare final room data for WS response, ensuring it has dynamic description
-    final_room_orm_for_response = crud.crud_room.get_room_by_id(db, current_room_orm.id) # Re-fetch
+    final_room_orm_for_response = crud.crud_room.get_room_by_id(
+        db, current_room_orm.id
+    )  # Re-fetch
     if final_room_orm_for_response:
         final_dynamic_desc = get_dynamic_room_description(final_room_orm_for_response)
-        final_room_data_dict = schemas.RoomInDB.from_orm(final_room_orm_for_response).model_dump()
+        final_room_data_dict = schemas.RoomInDB.from_orm(
+            final_room_orm_for_response
+        ).model_dump()
         final_room_data_dict["description"] = final_dynamic_desc
         final_room_schema_for_ws_response = schemas.RoomInDB(**final_room_data_dict)
-    else: # Fallback
+    else:  # Fallback
         final_room_schema_for_ws_response = initial_room_schema_with_dynamic_desc
-
 
     if response_schema_from_http.message_to_player:
         await combat.send_combat_log(
-            player.id, 
-            [response_schema_from_http.message_to_player], 
-            room_data=final_room_schema_for_ws_response # Use schema with dynamic desc
+            player.id,
+            [response_schema_from_http.message_to_player],
+            room_data=final_room_schema_for_ws_response,  # Use schema with dynamic desc
         )
 
 
@@ -532,7 +710,7 @@ async def handle_ws_search_examine(
     player: models.Player,
     current_char_state: models.Character,
     current_room_orm: models.Room,
-    args_list: Sequence[str] 
+    args_list: Sequence[str],
 ):
     initial_dynamic_desc = get_dynamic_room_description(current_room_orm)
     initial_room_data_dict = schemas.RoomInDB.from_orm(current_room_orm).model_dump()
@@ -540,39 +718,43 @@ async def handle_ws_search_examine(
     initial_room_schema_with_dynamic_desc = schemas.RoomInDB(**initial_room_data_dict)
 
     cmd_context = CommandContext(
-        db=db, active_character=current_char_state,
+        db=db,
+        active_character=current_char_state,
         current_room_orm=current_room_orm,
         current_room_schema=initial_room_schema_with_dynamic_desc,
-        original_command=f"search {' '.join(args_list)}", 
-        command_verb="search",  
-        args=list(args_list) 
+        original_command=f"search {' '.join(args_list)}",
+        command_verb="search",
+        args=list(args_list),
     )
     response_schema_from_http = await http_interaction_parser.handle_search(cmd_context)
-    
-    final_room_orm_for_response = crud.crud_room.get_room_by_id(db, current_room_orm.id) 
+
+    final_room_orm_for_response = crud.crud_room.get_room_by_id(db, current_room_orm.id)
     if final_room_orm_for_response:
         final_dynamic_desc = get_dynamic_room_description(final_room_orm_for_response)
-        final_room_data_dict = schemas.RoomInDB.from_orm(final_room_orm_for_response).model_dump()
+        final_room_data_dict = schemas.RoomInDB.from_orm(
+            final_room_orm_for_response
+        ).model_dump()
         final_room_data_dict["description"] = final_dynamic_desc
         final_room_schema_for_ws_response = schemas.RoomInDB(**final_room_data_dict)
     else:
         final_room_schema_for_ws_response = initial_room_schema_with_dynamic_desc
-        
+
     if response_schema_from_http.message_to_player:
         await combat.send_combat_log(
-            player.id, 
-            [response_schema_from_http.message_to_player], 
-            room_data=final_room_schema_for_ws_response
+            player.id,
+            [response_schema_from_http.message_to_player],
+            room_data=final_room_schema_for_ws_response,
         )
+
 
 async def handle_ws_contextual_interactable(
     db: Session,
     player: models.Player,
     current_char_state: models.Character,
     current_room_orm: models.Room,
-    verb: str, 
-    args_list: Sequence[str], 
-    interactable_schema: schemas.InteractableDetail 
+    verb: str,
+    args_list: Sequence[str],
+    interactable_schema: schemas.InteractableDetail,
 ):
     initial_dynamic_desc = get_dynamic_room_description(current_room_orm)
     initial_room_data_dict = schemas.RoomInDB.from_orm(current_room_orm).model_dump()
@@ -580,49 +762,68 @@ async def handle_ws_contextual_interactable(
     initial_room_schema_with_dynamic_desc = schemas.RoomInDB(**initial_room_data_dict)
 
     cmd_context = CommandContext(
-        db=db, active_character=current_char_state,
+        db=db,
+        active_character=current_char_state,
         current_room_orm=current_room_orm,
-        current_room_schema=initial_room_schema_with_dynamic_desc, 
+        current_room_schema=initial_room_schema_with_dynamic_desc,
         original_command=f"{verb} {' '.join(args_list)}",
-        command_verb=verb, args=list(args_list) 
+        command_verb=verb,
+        args=list(args_list),
     )
-    
-    response_schema_from_http = await http_interaction_parser.handle_contextual_interactable_action(cmd_context, interactable_schema)
-    
+
+    response_schema_from_http = (
+        await http_interaction_parser.handle_contextual_interactable_action(
+            cmd_context, interactable_schema
+        )
+    )
+
     # Re-fetch the current room ORM to ensure its 'exits' are up-to-date after any commits in HTTP parser
-    final_response_room_orm = crud.crud_room.get_room_by_id(db, current_room_orm.id) 
-    
+    final_response_room_orm = crud.crud_room.get_room_by_id(db, current_room_orm.id)
+
     if final_response_room_orm:
-        dynamic_desc_for_response = get_dynamic_room_description(final_response_room_orm)
-        response_room_data_dict = schemas.RoomInDB.from_orm(final_response_room_orm).model_dump()
+        dynamic_desc_for_response = get_dynamic_room_description(
+            final_response_room_orm
+        )
+        response_room_data_dict = schemas.RoomInDB.from_orm(
+            final_response_room_orm
+        ).model_dump()
         response_room_data_dict["description"] = dynamic_desc_for_response
-        response_room_schema_with_dynamic_desc = schemas.RoomInDB(**response_room_data_dict)
-    else: 
+        response_room_schema_with_dynamic_desc = schemas.RoomInDB(
+            **response_room_data_dict
+        )
+    else:
         # Fallback if room somehow vanished
-        logger.warning(f"Room {current_room_orm.id} not found after contextual interactable. Using initial schema for dynamic desc.")
-        dynamic_desc_for_response = get_dynamic_room_description(current_room_orm) # Use potentially stale ORM
-        fallback_dict = initial_room_schema_with_dynamic_desc.model_dump() # Should already have a dynamic desc
+        logger.warning(
+            f"Room {current_room_orm.id} not found after contextual interactable. Using initial schema for dynamic desc."
+        )
+        dynamic_desc_for_response = get_dynamic_room_description(
+            current_room_orm
+        )  # Use potentially stale ORM
+        fallback_dict = (
+            initial_room_schema_with_dynamic_desc.model_dump()
+        )  # Should already have a dynamic desc
         # Ensure it's using the most recent dynamic description based on potentially stale ORM
-        fallback_dict["description"] = dynamic_desc_for_response 
+        fallback_dict["description"] = dynamic_desc_for_response
         response_room_schema_with_dynamic_desc = schemas.RoomInDB(**fallback_dict)
 
     if response_schema_from_http.message_to_player:
         await combat.send_combat_log(
-            player.id, 
-            [response_schema_from_http.message_to_player], 
-            room_data=response_room_schema_with_dynamic_desc 
+            player.id,
+            [response_schema_from_http.message_to_player],
+            room_data=response_room_schema_with_dynamic_desc,
         )
+
 
 async def handle_ws_use_ooc_skill(
     db: Session,
     player: models.Player,
     current_char_state: models.Character,
-    current_room_orm: models.Room, 
-    selected_skill_template: models.SkillTemplate, 
-    target_identifier: Optional[str] 
+    current_room_orm: models.Room,
+    selected_skill_template: models.SkillTemplate,
+    target_identifier: Optional[str],
 ):
     current_room_id_for_broadcast = current_room_orm.id
-    
+
     # Initial room schema for log, with dynamic description
     initial_dynamic_desc = get_dynamic_room_description(current_room_orm)
     initial_room_data_dict = schemas.RoomInDB.from_orm(current_room_orm).model_dump()
@@ -635,29 +836,50 @@ async def handle_ws_use_ooc_skill(
         if target_identifier and target_identifier.lower() not in ["none", "self"]:
             resolved_target_for_effect = target_identifier
         else:
-            await combat.send_combat_log(player.id, [f"Which direction do you want to use '{selected_skill_template.name}' on?"], room_data=current_room_schema_for_log)
+            await combat.send_combat_log(
+                player.id,
+                [
+                    f"Which direction do you want to use '{selected_skill_template.name}' on?"
+                ],
+                room_data=current_room_schema_for_log,
+            )
             return
     elif selected_skill_template.target_type in ["SELF", "NONE"]:
-        resolved_target_for_effect = None 
+        resolved_target_for_effect = None
     else:
-        await combat.send_combat_log(player.id, [f"Skill '{selected_skill_template.name}' has an OOC target type ('{selected_skill_template.target_type}') not yet handled for direct use."], room_data=current_room_schema_for_log)
+        await combat.send_combat_log(
+            player.id,
+            [
+                f"Skill '{selected_skill_template.name}' has an OOC target type ('{selected_skill_template.target_type}') not yet handled for direct use."
+            ],
+            room_data=current_room_schema_for_log,
+        )
         return
 
-    skill_log_messages, action_taken_by_skill, char_after_ooc_skill_attempt = await combat.resolve_skill_effect(
-        db, current_char_state, selected_skill_template, resolved_target_for_effect, 
-        player.id, current_room_id_for_broadcast
+    skill_log_messages, action_taken_by_skill, char_after_ooc_skill_attempt = (
+        await combat.resolve_skill_effect(
+            db,
+            current_char_state,
+            selected_skill_template,
+            resolved_target_for_effect,
+            player.id,
+            current_room_id_for_broadcast,
+        )
     )
-    
-    final_room_schema_for_response = current_room_schema_for_log # Start with initial
-    if action_taken_by_skill:
-        if char_after_ooc_skill_attempt: db.add(char_after_ooc_skill_attempt)
-        db.commit()
-        
-        if char_after_ooc_skill_attempt: 
-            db.refresh(char_after_ooc_skill_attempt)
-            current_char_state = char_after_ooc_skill_attempt 
 
-        refreshed_room_orm = crud.crud_room.get_room_by_id(db, current_room_id_for_broadcast)
+    final_room_schema_for_response = current_room_schema_for_log  # Start with initial
+    if action_taken_by_skill:
+        if char_after_ooc_skill_attempt:
+            db.add(char_after_ooc_skill_attempt)
+        db.commit()
+
+        if char_after_ooc_skill_attempt:
+            db.refresh(char_after_ooc_skill_attempt)
+            current_char_state = char_after_ooc_skill_attempt
+
+        refreshed_room_orm = crud.crud_room.get_room_by_id(
+            db, current_room_id_for_broadcast
+        )
         if refreshed_room_orm:
             # Generate dynamic description for the updated room state
             final_dynamic_desc = get_dynamic_room_description(refreshed_room_orm)
@@ -665,17 +887,28 @@ async def handle_ws_use_ooc_skill(
             final_room_dict["description"] = final_dynamic_desc
             final_room_schema_for_response = schemas.RoomInDB(**final_room_dict)
         else:
-            logger.warning(f"Room {current_room_id_for_broadcast} not found after OOC skill. Using initial schema for log.")
+            logger.warning(
+                f"Room {current_room_id_for_broadcast} not found after OOC skill. Using initial schema for log."
+            )
             # final_room_schema_for_response remains the initial one
-    
+
     xp_for_next = crud.crud_character.get_xp_for_level(current_char_state.level + 1)
     vitals_payload = {
-        "current_hp": current_char_state.current_health, "max_hp": current_char_state.max_health,
-        "current_mp": current_char_state.current_mana, "max_mp": current_char_state.max_mana,
+        "current_hp": current_char_state.current_health,
+        "max_hp": current_char_state.max_health,
+        "current_mp": current_char_state.current_mana,
+        "max_mp": current_char_state.max_mana,
         "current_xp": current_char_state.experience_points,
-        "next_level_xp": int(xp_for_next) if xp_for_next != float('inf') else -1,
+        "next_level_xp": int(xp_for_next) if xp_for_next != float("inf") else -1,
         "level": current_char_state.level,
-        "platinum": current_char_state.platinum_coins, "gold": current_char_state.gold_coins,
-        "silver": current_char_state.silver_coins, "copper": current_char_state.copper_coins
+        "platinum": current_char_state.platinum_coins,
+        "gold": current_char_state.gold_coins,
+        "silver": current_char_state.silver_coins,
+        "copper": current_char_state.copper_coins,
     }
-    await combat.send_combat_log(player.id, skill_log_messages, room_data=final_room_schema_for_response, character_vitals=vitals_payload)
+    await combat.send_combat_log(
+        player.id,
+        skill_log_messages,
+        room_data=final_room_schema_for_response,
+        character_vitals=vitals_payload,
+    )

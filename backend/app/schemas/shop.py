@@ -1,7 +1,7 @@
 from typing import List, Optional
-from pydantic import BaseModel
 
 from app import schemas
+from pydantic import BaseModel
 
 
 class StatComparison(BaseModel):
@@ -15,11 +15,13 @@ class StatComparison(BaseModel):
     armor_class: Optional[int] = None
     # Add any other stats you want to compare, like mana, health, etc.
 
-class ShopItemDetail(schemas.Item): # Extends the existing Item schema
+
+class ShopItemDetail(schemas.Item):  # Extends the existing Item schema
     comparison_stats: Optional[StatComparison] = None
     equipped_item_name: Optional[str] = None
 
+
 class ShopListingPayload(BaseModel):
-    type: str = "shop_listing" # Critical for the frontend to identify this payload
+    type: str = "shop_listing"  # Critical for the frontend to identify this payload
     merchant_name: str
     items: List[ShopItemDetail]

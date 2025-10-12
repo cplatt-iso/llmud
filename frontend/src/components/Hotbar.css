@@ -9,8 +9,9 @@
 }
 
 .hotbar-slot {
-    flex-grow: 1;
-    height: 40px;
+    flex: 0 0 60px;
+    width: 60px;
+    height: 60px;
     border: 1px solid #444;
     background-color: #1a1a1a;
     position: relative;
@@ -23,7 +24,7 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    padding: 0 4px;
+    padding: 2px;
 }
 
 .hotbar-slot:hover {
@@ -42,4 +43,40 @@
 .slot-content {
     color: #00aaaa;
     font-weight: bold;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+}
+
+.hotbar-icon {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+    image-rendering: crisp-edges;
+}
+
+.hotbar-text {
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.hotbar-bookend {
+    height: 80px;
+    object-fit: contain;
+    image-rendering: crisp-edges;
+    position: relative;
+    z-index: 10;
+    background-color: black;
+}
+
+.hotbar-bookend-left {
+    margin-right: -10px;
+}
+
+.hotbar-bookend-right {
+    margin-left: -10px;
 }

@@ -1,9 +1,11 @@
 # backend/app/db/session.py
-import time
 import logging
+import time
 from typing import Generator
+
 from sqlalchemy import create_engine, exc
 from sqlalchemy.orm import sessionmaker
+
 from ..core.config import settings
 
 # Logger for this module
@@ -18,7 +20,8 @@ engine = None
 SessionLocal = sessionmaker(autocommit=False, autoflush=False)
 
 MAX_RETRIES = 10
-RETRY_DELAY = 5 # seconds
+RETRY_DELAY = 5  # seconds
+
 
 def create_db_engine_with_retries():
     """
@@ -28,12 +31,16 @@ def create_db_engine_with_retries():
     for attempt in range(MAX_RETRIES):
         try:
             assert settings.DATABASE_URL is not None, "DATABASE_URL cannot be None"
-            created_engine = create_engine(str(settings.DATABASE_URL), pool_pre_ping=True)
+            created_engine = create_engine(
+                str(settings.DATABASE_URL), pool_pre_ping=True
+            )
             with created_engine.connect() as connection:
                 logger.info("Database connection successful during creation.")
                 return created_engine
         except exc.OperationalError as e:
-            logger.warning(f"Database connection attempt {attempt + 1}/{MAX_RETRIES} failed: {e}")
+            logger.warning(
+                f"Database connection attempt {attempt + 1}/{MAX_RETRIES} failed: {e}"
+            )
             if attempt < MAX_RETRIES - 1:
                 logger.warning(f"Retrying in {RETRY_DELAY} seconds...")
                 time.sleep(RETRY_DELAY)
@@ -44,7 +51,7 @@ def create_db_engine_with_retries():
     # This line should ideally not be reached, but as a fallback:
     # --- FIX IS HERE ---
     # This simpler raise statement accomplishes the same goal without upsetting Pylance.
-    raise exc.OperationalError("Could not connect to database after multiple retries.") # type: ignore
+    raise exc.OperationalError("Could not connect to database after multiple retries.")  # type: ignore
 
 
 def get_db() -> Generator:
@@ -55,8 +62,10 @@ def get_db() -> Generator:
     """
     global engine
     if engine is None:
-        raise RuntimeError("Database engine has not been initialized. The application lifespan manager may have failed.")
-    
+        raise RuntimeError(
+            "Database engine has not been initialized. The application lifespan manager may have failed."
+        )
+
     # We create a new session and bind it to our globally managed engine
     db = SessionLocal(bind=engine)
     try:

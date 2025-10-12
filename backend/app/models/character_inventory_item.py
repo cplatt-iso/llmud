@@ -2,7 +2,7 @@
 import uuid
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import ForeignKey, Integer, Boolean, String
+from sqlalchemy import Boolean, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,25 +29,42 @@ class CharacterInventoryItem(Base):
     # If Item.stackable is true, one row with quantity > 1.
     # Let's give this table its own UUID PK for simplicity in referencing a specific *instance* in inventory.
 
-    id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, comment="Unique ID for this specific instance of an item in a character's inventory")
-    
-    character_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("characters.id"), index=True, nullable=False)
-    item_id: Mapped[uuid.UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("items.id"), index=True, nullable=False)
-    
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        comment="Unique ID for this specific instance of an item in a character's inventory",
+    )
+
+    character_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("characters.id"), index=True, nullable=False
+    )
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("items.id"), index=True, nullable=False
+    )
+
     quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    
+
     # Indicates if this specific inventory item instance is currently equipped
-    equipped: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
-    
+    equipped: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, index=True
+    )
+
     # If equipped, this specifies which of the character's equipment slots it occupies.
     # This must be one of the keys from models.item.EQUIPMENT_SLOTS.
     # Necessary for items that can fit into more than one type of slot (e.g. generic 'ring' item into 'finger_1' or 'finger_2')
     # or to distinguish main_hand vs off_hand for identical weapons.
-    equipped_slot: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, comment="Actual character slot occupied if equipped, e.g. 'finger_1'")
+    equipped_slot: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="Actual character slot occupied if equipped, e.g. 'finger_1'",
+    )
 
     # Relationships
     character: Mapped["Character"] = relationship(back_populates="inventory_items")
-    item: Mapped["Item"] = relationship() # No back_populates needed if Item doesn't need to know all its inventory entries directly
+    item: Mapped["Item"] = (
+        relationship()
+    )  # No back_populates needed if Item doesn't need to know all its inventory entries directly
 
     def __repr__(self) -> str:
         return f"<CharInvItem(id={self.id}, char_id='{self.character_id}', item_id='{self.item_id}', qty={self.quantity}, equipped={self.equipped}, slot='{self.equipped_slot}')>"

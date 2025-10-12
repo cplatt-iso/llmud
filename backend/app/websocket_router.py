@@ -1,45 +1,48 @@
 # backend/app/websocket_router.py
 
-import uuid
-from typing import Optional, Any, Generator, List
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query, status
-from sqlalchemy.orm import Session
-from jose import JWTError, jwt
 import logging
+import uuid
+from typing import Optional
 
-from app.core.config import settings
-from app.db.session import get_db # <<< USE THE ONE TRUE DB GETTER
 from app import crud, models, schemas
-from app.websocket_manager import connection_manager
+from app.api.v1.endpoints.command import execute_command_logic
+from app.commands.command_args import CommandContext
+from app.core.config import settings
+from app.db.session import get_db  # <<< USE THE ONE TRUE DB GETTER
 from app.game_logic import combat
 from app.game_state import is_character_resting, set_character_resting_status
-from app.commands.command_args import CommandContext
-
-from app.api.v1.endpoints.command import execute_command_logic
+from app.websocket_manager import connection_manager
 from app.ws_command_parsers import (
-    handle_ws_flee,
     handle_ws_attack,
-    handle_ws_use_combat_skill,
-    handle_ws_rest,
-    handle_ws_movement,
-    handle_ws_unlock,
-    handle_ws_use_item,
     handle_ws_buy,
-    handle_ws_sell,
+    handle_ws_flee,
     handle_ws_list,
-    handle_ws_use_item_or_skill
+    handle_ws_movement,
+    handle_ws_rest,
+    handle_ws_sell,
+    handle_ws_unlock,
+    handle_ws_use_item_or_skill,
 )
-from app.ws_command_parsers.ws_interaction_parser import _send_inventory_update_to_player
-
+from app.ws_command_parsers.ws_interaction_parser import (
+    _send_inventory_update_to_player,
+)
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
+from jose import JWTError, jwt
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-async def get_player_from_token(token: Optional[str], db: Session) -> Optional[models.Player]:
+
+async def get_player_from_token(
+    token: Optional[str], db: Session
+) -> Optional[models.Player]:
     if not token:
         return None
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
         player_id_str: Optional[str] = payload.get("sub")
         if not player_id_str:
             return None
@@ -48,11 +51,14 @@ async def get_player_from_token(token: Optional[str], db: Session) -> Optional[m
     except (JWTError, ValueError):
         return None
 
+
 @router.websocket("/ws")
 async def websocket_game_endpoint(
     websocket: WebSocket,
     token: str = Query(..., description="Player's JWT authentication token"),
-    character_id: uuid.UUID = Query(..., description="UUID of the character connecting")
+    character_id: uuid.UUID = Query(
+        ..., description="UUID of the character connecting"
+    ),
 ):
     player: Optional[models.Player] = None
     character_orm: Optional[models.Character] = None
@@ -62,23 +68,39 @@ async def websocket_game_endpoint(
         player = await get_player_from_token(token, db_conn_init)
         if not player:
             logger.warning(f"WS Connect: Invalid token provided.")
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid authentication token")
+            await websocket.close(
+                code=status.WS_1008_POLICY_VIOLATION,
+                reason="Invalid authentication token",
+            )
             return
 
-        fetched_char = crud.crud_character.get_character(db_conn_init, character_id=character_id)
+        fetched_char = crud.crud_character.get_character(
+            db_conn_init, character_id=character_id
+        )
         if not fetched_char or fetched_char.player_id != player.id:
-            logger.warning(f"WS Connect: Invalid char_id: {character_id} for player: {player.id}")
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid character ID or not owned by player")
+            logger.warning(
+                f"WS Connect: Invalid char_id: {character_id} for player: {player.id}"
+            )
+            await websocket.close(
+                code=status.WS_1008_POLICY_VIOLATION,
+                reason="Invalid character ID or not owned by player",
+            )
             return
         character_orm = fetched_char
 
     await connection_manager.connect(websocket, player.id, character_orm.id)
-    logger.info(f"Player {player.username} ({player.id}) | Character {character_orm.name} ({character_orm.id}) connected via WebSocket.")
+    logger.info(
+        f"Player {player.username} ({player.id}) | Character {character_orm.name} ({character_orm.id}) connected via WebSocket."
+    )
 
-    initial_messages = [f"Welcome {character_orm.name}! You are connected via WebSocket."]
+    initial_messages = [
+        f"Welcome {character_orm.name}! You are connected via WebSocket."
+    ]
     initial_room_schema: Optional[schemas.RoomInDB] = None
     with next(get_db()) as db_welcome:
-        initial_room_orm = crud.crud_room.get_room_by_id(db_welcome, room_id=character_orm.current_room_id)
+        initial_room_orm = crud.crud_room.get_room_by_id(
+            db_welcome, room_id=character_orm.current_room_id
+        )
         if initial_room_orm:
             initial_room_schema = schemas.RoomInDB.from_orm(initial_room_orm)
 
@@ -86,17 +108,27 @@ async def websocket_game_endpoint(
     welcome_payload = {
         "type": "welcome_package",
         "log": initial_messages,
-        "room_data": initial_room_schema.model_dump(exclude_none=True) if initial_room_schema else None,
+        "room_data": (
+            initial_room_schema.model_dump(exclude_none=True)
+            if initial_room_schema
+            else None
+        ),
         "character_vitals": {
-            "current_hp": character_orm.current_health, "max_hp": character_orm.max_health,
-            "current_mp": character_orm.current_mana, "max_mp": character_orm.max_mana,
+            "current_hp": character_orm.current_health,
+            "max_hp": character_orm.max_health,
+            "current_mp": character_orm.current_mana,
+            "max_mp": character_orm.max_mana,
             "current_xp": character_orm.experience_points,
-            "next_level_xp": int(xp_for_next_level) if xp_for_next_level != float('inf') else -1,
+            "next_level_xp": (
+                int(xp_for_next_level) if xp_for_next_level != float("inf") else -1
+            ),
             "level": character_orm.level,
-            "platinum": character_orm.platinum_coins, "gold": character_orm.gold_coins,
-            "silver": character_orm.silver_coins, "copper": character_orm.copper_coins
+            "platinum": character_orm.platinum_coins,
+            "gold": character_orm.gold_coins,
+            "silver": character_orm.silver_coins,
+            "copper": character_orm.copper_coins,
         },
-        "hotbar": character_orm.hotbar or {str(i): None for i in range(1, 11)}
+        "hotbar": character_orm.hotbar or {str(i): None for i in range(1, 11)},
     }
     await connection_manager.send_personal_message(welcome_payload, player.id)
 
@@ -111,65 +143,141 @@ async def websocket_game_endpoint(
 
             with next(get_db()) as db_loop:
                 fresh_player = crud.crud_player.get_player(db_loop, player_id=player.id)
-                current_char_state = crud.crud_character.get_character(db_loop, character_id=character_orm.id)
+                current_char_state = crud.crud_character.get_character(
+                    db_loop, character_id=character_orm.id
+                )
                 response: Optional[schemas.CommandResponse] = None
 
                 if not current_char_state or not fresh_player:
-                    logger.error(f"WS Loop: State lost for char_id: {character_orm.id} or player_id: {player.id}.")
-                    await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="Character or Player state lost in loop")
+                    logger.error(
+                        f"WS Loop: State lost for char_id: {character_orm.id} or player_id: {player.id}."
+                    )
+                    await websocket.close(
+                        code=status.WS_1011_INTERNAL_ERROR,
+                        reason="Character or Player state lost in loop",
+                    )
                     break
 
-                current_room_orm = crud.crud_room.get_room_by_id(db_loop, current_char_state.current_room_id)
+                current_room_orm = crud.crud_room.get_room_by_id(
+                    db_loop, current_char_state.current_room_id
+                )
                 if not current_room_orm:
-                    logger.error(f"WS Loop: Character {current_char_state.name} in invalid room {current_char_state.current_room_id}.")
-                    await combat.send_combat_log(fresh_player.id, ["Error: Your current location is unstable."])
+                    logger.error(
+                        f"WS Loop: Character {current_char_state.name} in invalid room {current_char_state.current_room_id}."
+                    )
+                    await combat.send_combat_log(
+                        fresh_player.id, ["Error: Your current location is unstable."]
+                    )
                     continue
 
                 verb = command_text.split(" ", 1)[0].lower()
-                args_list = command_text.split(" ", 1)[1].split() if " " in command_text else []
+                args_list = (
+                    command_text.split(" ", 1)[1].split() if " " in command_text else []
+                )
                 args_str = " ".join(args_list)
 
-                if verb and verb not in ["rest", "look", "l"] and is_character_resting(current_char_state.id):
+                if (
+                    verb
+                    and verb not in ["rest", "look", "l"]
+                    and is_character_resting(current_char_state.id)
+                ):
                     set_character_resting_status(current_char_state.id, False)
                     await combat.send_combat_log(fresh_player.id, ["You stop resting."])
 
                 combat_verbs = {"attack", "atk", "kill", "k", "flee"}
-                movement_verbs = {"n", "north", "s", "south", "e", "east", "w", "west", "u", "up", "d", "down", "go"}
+                movement_verbs = {
+                    "n",
+                    "north",
+                    "s",
+                    "south",
+                    "e",
+                    "east",
+                    "w",
+                    "west",
+                    "u",
+                    "up",
+                    "d",
+                    "down",
+                    "go",
+                }
                 state_verbs = {"rest"}
                 # interaction_verbs = {"use", "quaff", "drink"}
-                shop_verbs = {"list","buy","sell"}
+                shop_verbs = {"list", "buy", "sell"}
 
                 if verb == "use":
                     # The 'use' command is special. Let a dedicated handler figure it out.
-                    await handle_ws_use_item_or_skill(db_loop, fresh_player, current_char_state, args_str)
+                    await handle_ws_use_item_or_skill(
+                        db_loop, fresh_player, current_char_state, args_str
+                    )
 
                 elif verb in combat_verbs:
                     # Logic for other combat verbs remains
                     if verb in {"attack", "atk", "kill", "k"}:
-                        await handle_ws_attack(db_loop, fresh_player, current_char_state, current_room_orm, args_str)
+                        await handle_ws_attack(
+                            db_loop,
+                            fresh_player,
+                            current_char_state,
+                            current_room_orm,
+                            args_str,
+                        )
                     elif verb == "flee":
-                        await handle_ws_flee(db_loop, fresh_player, current_char_state, schemas.RoomInDB.from_orm(current_room_orm), args_str)
-                
+                        await handle_ws_flee(
+                            db_loop,
+                            fresh_player,
+                            current_char_state,
+                            schemas.RoomInDB.from_orm(current_room_orm),
+                            args_str,
+                        )
+
                 elif verb in movement_verbs:
-                    await handle_ws_movement(db_loop, fresh_player, current_char_state, schemas.RoomInDB.from_orm(current_room_orm), verb, args_str)
-                
+                    await handle_ws_movement(
+                        db_loop,
+                        fresh_player,
+                        current_char_state,
+                        schemas.RoomInDB.from_orm(current_room_orm),
+                        verb,
+                        args_str,
+                    )
+
                 elif verb in state_verbs:
                     if verb == "rest":
-                        await handle_ws_rest(db_loop, fresh_player, current_char_state, current_room_orm)
-                
+                        await handle_ws_rest(
+                            db_loop, fresh_player, current_char_state, current_room_orm
+                        )
+
                 elif verb in shop_verbs:
-                   if verb == "list":
-                        await handle_ws_list(db_loop, fresh_player, current_char_state, current_room_orm)
-                   elif verb == "buy":
-                        await handle_ws_buy(db_loop, fresh_player, current_char_state, current_room_orm, args_str)
-                   elif verb == "sell":
-                        await handle_ws_sell(db_loop, fresh_player, current_char_state, current_room_orm, args_str) 
+                    if verb == "list":
+                        await handle_ws_list(
+                            db_loop, fresh_player, current_char_state, current_room_orm
+                        )
+                    elif verb == "buy":
+                        await handle_ws_buy(
+                            db_loop,
+                            fresh_player,
+                            current_char_state,
+                            current_room_orm,
+                            args_str,
+                        )
+                    elif verb == "sell":
+                        await handle_ws_sell(
+                            db_loop,
+                            fresh_player,
+                            current_char_state,
+                            current_room_orm,
+                            args_str,
+                        )
 
                 elif verb == "unlock":
                     # Handle the 'unlock' command
-                    await handle_ws_unlock(db_loop, fresh_player, current_char_state, current_room_orm, args_str)                  
+                    await handle_ws_unlock(
+                        db_loop,
+                        fresh_player,
+                        current_char_state,
+                        current_room_orm,
+                        args_str,
+                    )
 
-                else: # Fallback to the HTTP-style command processor for everything else (look, say, inv, etc.)
+                else:  # Fallback to the HTTP-style command processor for everything else (look, say, inv, etc.)
                     context = CommandContext(
                         db=db_loop,
                         active_character=current_char_state,
@@ -177,48 +285,89 @@ async def websocket_game_endpoint(
                         current_room_schema=schemas.RoomInDB.from_orm(current_room_orm),
                         original_command=command_text,
                         command_verb=verb,
-                        args=args_list
+                        args=args_list,
                     )
                     response = await execute_command_logic(context)
                     if response.special_payload:
-                        await connection_manager.send_personal_message(response.special_payload, fresh_player.id)
+                        await connection_manager.send_personal_message(
+                            response.special_payload, fresh_player.id
+                        )
                     if response.message_to_player:
                         log_payload = {
                             "type": "combat_update",
                             "log": [response.message_to_player],
-                            "room_data": response.room_data.model_dump(exclude_none=True) if response.room_data else None,
-                            "combat_over": response.combat_over
+                            "room_data": (
+                                response.room_data.model_dump(exclude_none=True)
+                                if response.room_data
+                                else None
+                            ),
+                            "combat_over": response.combat_over,
                         }
-                        await connection_manager.send_personal_message(log_payload, fresh_player.id)
+                        await connection_manager.send_personal_message(
+                            log_payload, fresh_player.id
+                        )
 
                 try:
                     db_loop.commit()
-                    logger.debug(f"WS Router: DB commit successful for command '{command_text}' by {current_char_state.name}")
+                    logger.debug(
+                        f"WS Router: DB commit successful for command '{command_text}' by {current_char_state.name}"
+                    )
 
                     if response and response.location_update:
                         update_info = response.location_update
                         connection_manager.update_character_location(
                             character_id=update_info.character_id,
-                            room_id=update_info.new_room_id
+                            room_id=update_info.new_room_id,
                         )
-                        logger.debug(f"Cache updated for {update_info.character_id} to room {update_info.new_room_id}")
+                        logger.debug(
+                            f"Cache updated for {update_info.character_id} to room {update_info.new_room_id}"
+                        )
 
                     # The rest of the post-commit logic
-                    inventory_modifying_verbs = ["giveme", "equip", "eq", "unequip", "uneq", "get", "take", "buy", "sell", "drop"]
+                    inventory_modifying_verbs = [
+                        "giveme",
+                        "equip",
+                        "eq",
+                        "unequip",
+                        "uneq",
+                        "get",
+                        "take",
+                        "buy",
+                        "sell",
+                        "drop",
+                    ]
                     if verb in inventory_modifying_verbs:
-                       refreshed_char_for_push = crud.crud_character.get_character(db_loop, character_id=current_char_state.id)
-                       if refreshed_char_for_push:
-                           await _send_inventory_update_to_player(db_loop, refreshed_char_for_push)
+                        refreshed_char_for_push = crud.crud_character.get_character(
+                            db_loop, character_id=current_char_state.id
+                        )
+                        if refreshed_char_for_push:
+                            await _send_inventory_update_to_player(
+                                db_loop, refreshed_char_for_push
+                            )
                 except Exception as e_commit:
                     db_loop.rollback()
-                    logger.error(f"WS Router: DB commit failed for command '{command_text}': {e_commit}", exc_info=True)
-                    await combat.send_combat_log(fresh_player.id, ["A glitch in the matrix occurred. Your last action may not have saved."])
+                    logger.error(
+                        f"WS Router: DB commit failed for command '{command_text}': {e_commit}",
+                        exc_info=True,
+                    )
+                    await combat.send_combat_log(
+                        fresh_player.id,
+                        [
+                            "A glitch in the matrix occurred. Your last action may not have saved."
+                        ],
+                    )
 
     except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected for Player {player.id if player else 'N/A'}")
+        logger.info(
+            f"WebSocket disconnected for Player {player.id if player else 'N/A'}"
+        )
         if player and player.id:
-            await connection_manager.full_player_disconnect(player.id, reason_key="connection_lost")
+            await connection_manager.full_player_disconnect(
+                player.id, reason_key="connection_lost"
+            )
     except Exception as e:
         logger.error(f"Critical Error in WebSocket handler: {e}", exc_info=True)
         if player and player.id:
-            await connection_manager.full_player_disconnect(player.id, reason_key="connection_lost")
+            await connection_manager.full_player_disconnect(
+                player.id, reason_key="connection_lost"
+            )

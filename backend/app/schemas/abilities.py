@@ -1,6 +1,8 @@
 # backend/app/schemas/abilities.py
-from pydantic import BaseModel, Field
 from typing import List
+
+from pydantic import BaseModel
+
 
 class AbilityDetail(BaseModel):
     name: str
@@ -8,6 +10,7 @@ class AbilityDetail(BaseModel):
     level_required: int
     has_learned: bool
     skill_id_tag: str
+
 
 class CharacterAbilitiesResponse(BaseModel):
     skills: List[AbilityDetail]
