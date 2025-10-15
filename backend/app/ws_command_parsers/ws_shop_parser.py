@@ -3,8 +3,14 @@ import logging
 from collections import defaultdict
 from typing import Dict, List, Optional
 
-from app import websocket_manager  # ADD THIS LINE
-from app import crud, models, schemas
+from sqlalchemy.orm import Session
+
+from app import (
+    crud,
+    models,
+    schemas,
+    websocket_manager,  # ADD THIS LINE
+)
 from app.game_logic import combat
 from app.schemas.shop import (  # ADD THIS LINE
     ShopItemDetail,
@@ -14,7 +20,6 @@ from app.schemas.shop import (  # ADD THIS LINE
 from app.ws_command_parsers.ws_interaction_parser import (
     _send_inventory_update_to_player,
 )
-from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -112,43 +117,67 @@ async def handle_ws_list(
             # Check if the player has an item in that slot
             equipped_item = equipped_items_by_slot.get(item_template.slot)
 
-            if equipped_item:
-                equipped_item_name = equipped_item.name
-                shop_item_props = item_template.properties or {}
-                equipped_item_props = equipped_item.properties or {}
+            # Always do comparison - if nothing equipped, compare against 0
+            equipped_item_name = equipped_item.name if equipped_item else "(Empty)"
+            shop_item_props = item_template.properties or {}
+            equipped_item_props = equipped_item.properties if equipped_item else {}
 
-                # Calculate differences for relevant stats
-                stat_diff_payload = {}
+            # Calculate differences for relevant stats
+            stat_diff_payload = {}
 
-                # Armor Class
-                ac_shop = shop_item_props.get("armor_class_bonus", 0)
-                ac_equipped = equipped_item_props.get("armor_class_bonus", 0)
-                if ac_shop - ac_equipped != 0:
-                    stat_diff_payload["armor_class"] = ac_shop - ac_equipped
+            # Armor Class
+            ac_shop = shop_item_props.get("armor_class_bonus", 0)
+            ac_equipped = equipped_item_props.get("armor_class_bonus", 0) if equipped_item_props else 0
+            if ac_shop - ac_equipped != 0:
+                stat_diff_payload["armor_class"] = ac_shop - ac_equipped
 
-                # Stat Modifiers (e.g., strength, dexterity)
-                shop_mods = shop_item_props.get("modifiers", {})
-                equipped_mods = equipped_item_props.get("modifiers", {})
+            # Stat Modifiers (e.g., strength, dexterity)
+            shop_mods = shop_item_props.get("modifiers", {})
+            equipped_mods = equipped_item_props.get("modifiers", {}) if equipped_item_props else {}
 
-                str_shop = shop_mods.get("strength", 0)
-                str_equipped = equipped_mods.get("strength", 0)
-                if str_shop - str_equipped != 0:
-                    stat_diff_payload["strength"] = str_shop - str_equipped
+            str_shop = shop_mods.get("strength", 0)
+            str_equipped = equipped_mods.get("strength", 0)
+            if str_shop - str_equipped != 0:
+                stat_diff_payload["strength"] = str_shop - str_equipped
 
-                dex_shop = shop_mods.get("dexterity", 0)
-                dex_equipped = equipped_mods.get("dexterity", 0)
-                if dex_shop - dex_equipped != 0:
-                    stat_diff_payload["dexterity"] = dex_shop - dex_equipped
+            dex_shop = shop_mods.get("dexterity", 0)
+            dex_equipped = equipped_mods.get("dexterity", 0)
+            if dex_shop - dex_equipped != 0:
+                stat_diff_payload["dexterity"] = dex_shop - dex_equipped
 
-                # ... Add other stat comparisons here, following the pattern:
-                # stat_shop = shop_item_props.get("stat_name", 0) or shop_mods.get("stat_name",0)
-                # stat_equipped = equipped_item_props.get("stat_name", 0) or equipped_mods.get("stat_name",0)
-                # if stat_shop - stat_equipped != 0:
-                #     stat_diff_payload["stat_key_in_StatComparison_model"] = stat_shop - stat_equipped
+            # Constitution
+            con_shop = shop_mods.get("constitution", 0)
+            con_equipped = equipped_mods.get("constitution", 0)
+            if con_shop - con_equipped != 0:
+                stat_diff_payload["constitution"] = con_shop - con_equipped
 
-                # If there are any non-zero differences, create the StatComparison object
-                if stat_diff_payload:
-                    comparison_data = StatComparison(**stat_diff_payload)
+            # Intelligence
+            int_shop = shop_mods.get("intelligence", 0)
+            int_equipped = equipped_mods.get("intelligence", 0)
+            if int_shop - int_equipped != 0:
+                stat_diff_payload["intelligence"] = int_shop - int_equipped
+
+            # Wisdom
+            wis_shop = shop_mods.get("wisdom", 0)
+            wis_equipped = equipped_mods.get("wisdom", 0)
+            if wis_shop - wis_equipped != 0:
+                stat_diff_payload["wisdom"] = wis_shop - wis_equipped
+
+            # Charisma
+            cha_shop = shop_mods.get("charisma", 0)
+            cha_equipped = equipped_mods.get("charisma", 0)
+            if cha_shop - cha_equipped != 0:
+                stat_diff_payload["charisma"] = cha_shop - cha_equipped
+
+            # Luck
+            luck_shop = shop_mods.get("luck", 0)
+            luck_equipped = equipped_mods.get("luck", 0)
+            if luck_shop - luck_equipped != 0:
+                stat_diff_payload["luck"] = luck_shop - luck_equipped
+
+            # If there are any non-zero differences, create the StatComparison object
+            if stat_diff_payload:
+                comparison_data = StatComparison(**stat_diff_payload)
                 # Otherwise, comparison_data remains None
 
         # Create the detailed shop item schema

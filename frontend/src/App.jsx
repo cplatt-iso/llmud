@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-// import { Tooltip } from 'react-tooltip'; // <-- NO LONGER NEEDED HERE
+import { Tooltip } from 'react-tooltip';
 import useGameStore from './state/gameStore';
 import GameLayout from './components/GameLayout';
 import LoginScreen from './components/LoginScreen';
@@ -41,10 +41,16 @@ function App() {
     }
   }
 
-  // We no longer need to render the global tooltip here.
   return (
     <>
       {renderSessionState()}
+      <Tooltip
+        id="global-item-tooltip"
+        className="item-tooltip-main"
+        opacity={1}
+        delayShow={100}
+        delayHide={50}
+      />
     </>
   )
 }

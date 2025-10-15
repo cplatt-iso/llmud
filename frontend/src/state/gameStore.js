@@ -121,8 +121,8 @@ const useGameStore = create(
       const token = get().token;
       if (!token) return;
       try {
-        const charDetails = await apiService.fetchCharacterDetails(token);
-        set({ characterStats: charDetails });
+        const scoreDetails = await apiService.fetchDetailedScoreSheet(token);
+        set({ characterStats: scoreDetails });
       } catch (error) {
         console.error("Failed to fetch score sheet:", error);
         get().addLogLine("! Could not retrieve character score sheet.");
@@ -186,11 +186,32 @@ const useGameStore = create(
     },
 
     logout: () => {
-        set(state => {
-            state.combatState.isInCombat = payload.is_in_combat;
-            state.combatState.targets = payload.targets;
-            state.combatState.currentTargetId = payload.current_target_id;
-        });
+      // Disconnect WebSocket if connected
+      const { webSocketService } = require('../services/webSocketService');
+      webSocketService.disconnect();
+      
+      // Reset to initial state
+      set({
+        sessionState: 'LOGGED_OUT',
+        token: null,
+        characterId: null,
+        characterName: '',
+        characterClass: '',
+        characterLevel: 1,
+        characterList: [],
+        logLines: [createLogLine('<span class="system-message-inline">You have been logged out.</span>')],
+        hasUnreadChatMessages: false,
+        vitals: { hp: { current: 100, max: 100 }, mp: { current: 50, max: 50 }, xp: { current: 0, max: 100 }, platinum: 0, gold: 0, silver: 0, copper: 0 },
+        mapData: null,
+        currentRoomId: null,
+        activeTab: 'Terminal',
+        characterStats: null,
+        inventory: null,
+        abilities: null,
+        whoListData: null,
+        hotbar: {},
+        combatState: { isInCombat: false, targets: [], currentTargetId: null },
+      });
     },
   }))
 );

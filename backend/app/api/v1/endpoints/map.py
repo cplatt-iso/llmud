@@ -2,11 +2,12 @@
 import uuid  # Ensure uuid is imported
 from typing import Any, Dict  # Added Dict
 
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
 from app import crud, models, schemas
 from app.api.dependencies import get_current_active_character
 from app.db.session import get_db
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 
 # from app.schemas.common_structures import ExitDetail # Not directly needed here anymore with simplified exits
 
@@ -39,17 +40,17 @@ def get_map_data_for_current_level(
 
     map_rooms_data: list[schemas.MapRoomData] = []
     for room_orm in rooms_on_level_orm:
-        # Process exits for MapRoomData: extract only target_room_id as a string
-        simple_exits_for_map: Dict[str, str] = {}
+        # Process exits for MapRoomData: include target_room_id and is_locked status
+        exits_for_map: Dict[str, schemas.MapExitData] = {}
         if room_orm.exits:
             for direction, exit_detail_dict in room_orm.exits.items():
                 if (
                     isinstance(exit_detail_dict, dict)
                     and "target_room_id" in exit_detail_dict
                 ):
-                    # Ensure target_room_id is a string for the MapRoomData schema
-                    simple_exits_for_map[direction] = str(
-                        exit_detail_dict["target_room_id"]
+                    exits_for_map[direction] = schemas.MapExitData(
+                        target_room_id=str(exit_detail_dict["target_room_id"]),
+                        is_locked=exit_detail_dict.get("is_locked", False)
                     )
                 # else: Malformed exit data in DB, maybe log a warning
 
@@ -59,7 +60,7 @@ def get_map_data_for_current_level(
                 x=room_orm.x,
                 y=room_orm.y,
                 name=room_orm.name,
-                exits=simple_exits_for_map,  # Pass the simplified exits dict
+                exits=exits_for_map,  # Pass the exit data with lock status
                 is_current_room=(room_orm.id == active_character.current_room_id),
                 is_visited=True,
                 room_type=room_orm.room_type,

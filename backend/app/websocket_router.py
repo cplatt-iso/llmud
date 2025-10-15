@@ -4,6 +4,10 @@ import logging
 import uuid
 from typing import Optional
 
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
+from jose import JWTError, jwt
+from sqlalchemy.orm import Session
+
 from app import crud, models, schemas
 from app.api.v1.endpoints.command import execute_command_logic
 from app.commands.command_args import CommandContext
@@ -17,6 +21,7 @@ from app.ws_command_parsers import (
     handle_ws_buy,
     handle_ws_flee,
     handle_ws_list,
+    handle_ws_look,
     handle_ws_movement,
     handle_ws_rest,
     handle_ws_sell,
@@ -26,9 +31,6 @@ from app.ws_command_parsers import (
 from app.ws_command_parsers.ws_interaction_parser import (
     _send_inventory_update_to_player,
 )
-from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
-from jose import JWTError, jwt
-from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -131,6 +133,13 @@ async def websocket_game_endpoint(
         "hotbar": character_orm.hotbar or {str(i): None for i in range(1, 11)},
     }
     await connection_manager.send_personal_message(welcome_payload, player.id)
+
+    # Automatically send room description on initial connection
+    with next(get_db()) as db_initial_look:
+        if initial_room_orm:  # We already have this from earlier
+            await handle_ws_look(
+                db_initial_look, player, character_orm, initial_room_orm, ""
+            )
 
     try:
         while True:
@@ -274,7 +283,7 @@ async def websocket_game_endpoint(
                         fresh_player,
                         current_char_state,
                         current_room_orm,
-                        args_str,
+                        args_list,
                     )
 
                 else:  # Fallback to the HTTP-style command processor for everything else (look, say, inv, etc.)

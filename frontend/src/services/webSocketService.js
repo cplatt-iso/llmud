@@ -129,15 +129,21 @@ const handleMessage = (event) => {
 const handleClose = (event) => {
     console.log("WebSocket connection closed:", event.code, event.reason);
     socket = null;
-    const { addLogLine } = getState();
+    const { addLogLine, logout } = getState();
     const closeMessage = `! Game server connection closed. (Code: ${event.code} ${event.reason || ''})`.trim();
     addLogLine(`<span class="system-message-inline">${closeMessage}</span>`, 'html');
+    
+    // Log the player out after a brief delay to let them see the message
+    setTimeout(() => {
+        logout();
+    }, 1500);
 };
 
 const handleError = (event) => {
     console.error("WebSocket error observed:", event);
     const { addLogLine } = getState();
     addLogLine('<span class="system-message-inline">! WebSocket connection error.</span>', 'html');
+    // Note: handleClose will also be called after an error, so logout will happen there
 };
 
 export const webSocketService = {

@@ -190,6 +190,15 @@
     "weight": 0.2, "value": 25, "stackable": false, "max_stack_size": 1
   },
   {
+    "name": "Crude Goblin Key",
+    "description": "A roughly-forged iron key, likely fashioned by goblin hands. It's covered in grime and smells faintly of cave mold. The Bone-Gnawer must have used this to secure the cave entrance.",
+    "item_type": "key",
+    "rarity": "uncommon",
+    "slot": null,
+    "properties": { "item_tag": "crude_goblin_key" },
+    "weight": 0.3, "value": 15, "stackable": false, "max_stack_size": 1
+  },
+  {
     "name": "Wolf's Head Key",
     "description": "A heavy iron key with its head shaped like a snarling wolf. It feels cold to the touch and seems important for progressing into the nearby woods.",
     "item_type": "key",

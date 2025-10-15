@@ -61,6 +61,13 @@ export const apiService = {
         if (!response.ok) throw new Error('Failed to fetch character details');
         return response.json();
     },
+    fetchDetailedScoreSheet: async (token) => {
+        const response = await fetch(`${API_BASE_URL}/character/me/score`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to fetch score sheet');
+        return response.json();
+    },
     fetchInventory: async (token) => {
         const response = await fetch(`${API_BASE_URL}/inventory/mine`, {
             headers: { 'Authorization': `Bearer ${token}` },

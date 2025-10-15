@@ -65,18 +65,19 @@
 }
 
 .hotbar-bookend {
-    height: 80px;
+    height: 70px;
     object-fit: contain;
     image-rendering: crisp-edges;
     position: relative;
     z-index: 10;
     background-color: black;
+    opacity: 0.8;
 }
 
 .hotbar-bookend-left {
-    margin-right: -10px;
+    margin-right: 5px;
 }
 
 .hotbar-bookend-right {
-    margin-left: -10px;
+    margin-left: 5px;
 }

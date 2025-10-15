@@ -2,7 +2,12 @@
 
 # Make the Pydantic models from room.py available directly under the schemas package
 from .abilities import AbilityDetail
-from .character import Character, CharacterCreate
+from .character import (
+    AttributeWithModifier,
+    Character,
+    CharacterCreate,
+    DetailedScoreSheet,
+)
 from .character_class_template import (
     CharacterClassTemplate,
     CharacterClassTemplateCreate,
@@ -25,7 +30,7 @@ from .item import (  # <<< ADDED
     ItemUpdate,
     RoomItemInstanceInDB,
 )
-from .map import MapLevelDataResponse, MapRoomData
+from .map import MapExitData, MapLevelDataResponse, MapRoomData
 from .mob import MobTemplate, MobTemplateCreate, MobTemplateUpdate
 from .mob_spawn_definition import (
     MobSpawnDefinition,
@@ -41,11 +46,13 @@ from .who import WhoListEntry
 
 __all__ = [
     "AbilityDetail",
+    "AttributeWithModifier",
     "Character",
     "CharacterClassTemplate",
     "CharacterClassTemplateCreate",
     "CharacterClassTemplateUpdate",
     "CharacterCreate",
+    "DetailedScoreSheet",
     "CharacterInventoryDisplay",
     "CharacterInventoryItem",
     "CharacterInventoryItemBase",
@@ -63,6 +70,7 @@ __all__ = [
     "ItemInDB",
     "ItemUpdate",
     "LocationUpdate",
+    "MapExitData",
     "MapLevelDataResponse",
     "MapRoomData",
     "MobSpawnDefinition",

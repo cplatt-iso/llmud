@@ -59,46 +59,46 @@ const getIconForItemType = (item) => {
 const ItemName = React.memo(function ItemName({ item }) {
   if (!item) return null;
 
-  const renderTooltipContent = () => {
-    // ... renderTooltipContent function is unchanged ...
-    return (
-      <div className="item-tooltip-content">
-        {item.description && <p className="desc">{item.description}</p>}
-        {item.properties && Object.keys(item.properties).length > 0 && (
-          <div className="props">
-            {Object.entries(item.properties).map(([key, value]) => (
-              <p key={key} className="prop-line">
-                <span className="prop-key">{formatPropertyName(key)}:</span>
-                <span className="prop-value">{String(value)}</span>
-              </p>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const tooltipId = `item-tooltip-${item.id}`;
   const itemIcon = getIconForItemType(item); // Get the icon for the current item
 
+  // Build tooltip content as data attributes (react-tooltip will render it)
+  const tooltipContent = () => {
+    const parts = [];
+    if (item.description) {
+      parts.push(item.description);
+    }
+    if (item.properties && Object.keys(item.properties).length > 0) {
+      const propLines = Object.entries(item.properties)
+        .map(([key, value]) => `${formatPropertyName(key)}: ${String(value)}`)
+        .join('\n');
+      parts.push(propLines);
+    }
+    return parts.join('\n\n');
+  };
+
   return (
-    <>
-      <span
-        className={`item-name-container rarity-${item.rarity || 'common'}`}
-        data-tooltip-id={tooltipId}
-      >
-        {/* ### THE CHANGE IS HERE ### */}
-        {/* We add the icon with a bit of spacing right before the name */}
-        <span className="item-icon">{itemIcon}</span>
-        <span className="item-text">{item.name}</span>
-      </span>
-      <Tooltip
-        id={tooltipId}
-        render={renderTooltipContent}
-        className="item-tooltip-main"
-        opacity={1}
-      />
-    </>
+    <span
+      className={`item-name-container rarity-${item.rarity || 'common'}`}
+      data-tooltip-id="global-item-tooltip"
+      data-tooltip-html={`
+        <div class="item-tooltip-content">
+          ${item.description ? `<p class="desc">${item.description}</p>` : ''}
+          ${item.properties && Object.keys(item.properties).length > 0 ? `
+            <div class="props">
+              ${Object.entries(item.properties).map(([key, value]) => `
+                <p class="prop-line">
+                  <span class="prop-key">${formatPropertyName(key)}:</span>
+                  <span class="prop-value">${String(value)}</span>
+                </p>
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>
+      `}
+    >
+      <span className="item-icon">{itemIcon}</span>
+      <span className="item-text">{item.name}</span>
+    </span>
   );
 });
 

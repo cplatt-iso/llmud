@@ -6,7 +6,9 @@ import useGameStore from '../state/gameStore';
 const TILE_SIZE = 24;
 const CURRENT_ROOM_COLOR = 'rgba(255, 255, 0, 0.7)';
 const DEFAULT_ROOM_COLOR = 'rgba(0, 128, 0, 0.3)';
+const SHOP_ROOM_COLOR = 'rgba(255, 215, 0, 0.4)'; // Gold tint for shops
 const CONNECTION_LINE_COLOR = 'rgba(0, 192, 0, 0.6)';
+const LOCKED_CONNECTION_COLOR = 'rgba(255, 0, 0, 0.8)'; // Red for locked exits
 
 function Map() {
   // Global state from Zustand
@@ -128,9 +130,10 @@ function Map() {
           <g id="map-content-group">
             {/* Draw connections */}
             {transformedRooms.map(room =>
-              Object.values(room.exits).map(exitInfo => {
+              Object.entries(room.exits).map(([direction, exitInfo]) => {
                 const targetRoom = transformedRooms.find(r => r.id === exitInfo.target_room_id);
                 if (!targetRoom) return null;
+                const isLocked = exitInfo.is_locked || false;
                 return (
                   <line
                     key={`${room.id}-${targetRoom.id}`}
@@ -138,25 +141,54 @@ function Map() {
                     y1={room.drawY * TILE_SIZE + TILE_SIZE / 2}
                     x2={targetRoom.x * TILE_SIZE + TILE_SIZE / 2}
                     y2={targetRoom.drawY * TILE_SIZE + TILE_SIZE / 2}
-                    stroke={CONNECTION_LINE_COLOR}
-                    strokeWidth="1"
+                    stroke={isLocked ? LOCKED_CONNECTION_COLOR : CONNECTION_LINE_COLOR}
+                    strokeWidth={isLocked ? "2" : "1"}
+                    strokeDasharray={isLocked ? "3,3" : "none"}
                   />
                 );
               })
             )}
             {/* Draw rooms */}
-            {transformedRooms.map(room => (
-              <rect
-                key={room.id}
-                x={room.x * TILE_SIZE}
-                y={room.drawY * TILE_SIZE}
-                width={TILE_SIZE}
-                height={TILE_SIZE}
-                fill={room.id === currentRoomId ? CURRENT_ROOM_COLOR : DEFAULT_ROOM_COLOR}
-                stroke="rgba(0,50,0,0.8)"
-                strokeWidth="1"
-              />
-            ))}
+            {transformedRooms.map(room => {
+              const isShop = room.room_type === 'shop';
+              const isCurrent = room.id === currentRoomId;
+              let fillColor = DEFAULT_ROOM_COLOR;
+              
+              if (isCurrent) {
+                fillColor = CURRENT_ROOM_COLOR;
+              } else if (isShop) {
+                fillColor = SHOP_ROOM_COLOR;
+              }
+              
+              return (
+                <g key={room.id}>
+                  <rect
+                    x={room.x * TILE_SIZE}
+                    y={room.drawY * TILE_SIZE}
+                    width={TILE_SIZE}
+                    height={TILE_SIZE}
+                    fill={fillColor}
+                    stroke="rgba(0,50,0,0.8)"
+                    strokeWidth="1"
+                  />
+                  {/* Add $ symbol for shop rooms */}
+                  {isShop && !isCurrent && (
+                    <text
+                      x={room.x * TILE_SIZE + TILE_SIZE / 2}
+                      y={room.drawY * TILE_SIZE + TILE_SIZE / 2 + 4}
+                      textAnchor="middle"
+                      fontSize="14"
+                      fontWeight="bold"
+                      fill="#FFD700"
+                      stroke="#000"
+                      strokeWidth="0.5"
+                    >
+                      $
+                    </text>
+                  )}
+                </g>
+              );
+            })}
           </g>
         </svg>
       </div>

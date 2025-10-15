@@ -4,8 +4,20 @@ import ItemName from './ItemName';
 const StatComparison = ({ stats }) => {
   if (!stats) return null;
 
-  const entries = Object.entries(stats).filter(([, value]) => value !== 0);
+  const entries = Object.entries(stats).filter(([, value]) => value !== null && value !== undefined && value !== 0);
   if (entries.length === 0) return null;
+
+  // Stat name abbreviations
+  const statAbbreviations = {
+    'STRENGTH': 'STR',
+    'DEXTERITY': 'DEX',
+    'CONSTITUTION': 'CON',
+    'INTELLIGENCE': 'INT',
+    'WISDOM': 'WIS',
+    'CHARISMA': 'CHA',
+    'ARMOR_CLASS': 'AC',
+    'LUCK': 'LCK'
+  };
 
   return (
     <span className="stat-comparison">
@@ -14,7 +26,8 @@ const StatComparison = ({ stats }) => {
         const isGood = value > 0;
         const sign = value > 0 ? '+' : '';
         const className = isGood ? 'stat-good' : 'stat-bad';
-        const statName = key.replace(/_/g, ' ').toUpperCase();
+        const fullStatName = key.replace(/_/g, ' ').toUpperCase();
+        const statName = statAbbreviations[key.toUpperCase()] || fullStatName;
         return (
           <React.Fragment key={key}>
             <span className={className}>{`${sign}${value} ${statName}`}</span>

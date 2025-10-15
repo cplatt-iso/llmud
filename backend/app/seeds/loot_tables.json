@@ -92,7 +92,7 @@
     { "item_ref": "Basic Healing Draught", "chance": 50, "min_qty": 1, "max_qty": 1 }
   ],
   "goblin_pass_gatekeeper_loot": [
-    { "item_ref": "Wolf's Head Key", "chance": 100, "min_qty": 1, "max_qty": 1 },
+    { "item_ref": "Crude Goblin Key", "chance": 100, "min_qty": 1, "max_qty": 1 },
     { "item_ref": "Studded Leather Jerkin", "chance": 15, "min_qty": 1, "max_qty": 1 },
     { "item_ref": "Basic Healing Draught", "chance": 75, "min_qty": 1, "max_qty": 2 }
   ]

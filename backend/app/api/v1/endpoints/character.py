@@ -3,10 +3,11 @@ import logging
 import uuid
 from typing import Any, List  # Ensure List and Any are imported
 
-from app.schemas.abilities import CharacterAbilitiesResponse
-from app.websocket_manager import connection_manager  # Import connection_manager
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+
+from app.schemas.abilities import CharacterAbilitiesResponse
+from app.websocket_manager import connection_manager  # Import connection_manager
 
 from .... import crud, models, schemas
 
@@ -133,6 +134,78 @@ def get_current_active_character_details(
     Retrieve the full details for the currently selected character in the session.
     """
     return active_character
+
+
+@router.get("/me/score", response_model=schemas.DetailedScoreSheet)
+def get_detailed_score_sheet(
+    *,
+    active_character: models.Character = Depends(get_current_active_character),
+) -> Any:
+    """
+    Retrieve detailed score sheet with modifiers and combat stats.
+    """
+    effective_stats = active_character.calculate_combat_stats()
+    
+    # Calculate XP progress
+    current_level_xp = crud.crud_character.get_xp_for_level(active_character.level)
+    next_level_xp_value = crud.crud_character.get_xp_for_level(active_character.level + 1)
+    
+    if next_level_xp_value == float("inf"):
+        next_level_xp = -1
+        xp_needed = 0
+        xp_progress = 0
+    else:
+        next_level_xp = int(next_level_xp_value)
+        xp_needed = next_level_xp - int(current_level_xp)
+        xp_progress = active_character.experience_points - int(current_level_xp)
+    
+    return schemas.DetailedScoreSheet(
+        name=active_character.name,
+        class_name=active_character.class_name,
+        level=active_character.level,
+        current_xp=active_character.experience_points,
+        next_level_xp=next_level_xp,
+        xp_progress=xp_progress,
+        xp_needed=xp_needed,
+        current_hp=active_character.current_health,
+        max_hp=active_character.max_health,
+        current_mp=active_character.current_mana,
+        max_mp=active_character.max_mana,
+        strength=schemas.AttributeWithModifier(
+            value=active_character.strength,
+            modifier=active_character.get_attribute_modifier('strength')
+        ),
+        dexterity=schemas.AttributeWithModifier(
+            value=active_character.dexterity,
+            modifier=active_character.get_attribute_modifier('dexterity')
+        ),
+        constitution=schemas.AttributeWithModifier(
+            value=active_character.constitution,
+            modifier=active_character.get_attribute_modifier('constitution')
+        ),
+        intelligence=schemas.AttributeWithModifier(
+            value=active_character.intelligence,
+            modifier=active_character.get_attribute_modifier('intelligence')
+        ),
+        wisdom=schemas.AttributeWithModifier(
+            value=active_character.wisdom,
+            modifier=active_character.get_attribute_modifier('wisdom')
+        ),
+        charisma=schemas.AttributeWithModifier(
+            value=active_character.charisma,
+            modifier=active_character.get_attribute_modifier('charisma')
+        ),
+        luck=schemas.AttributeWithModifier(
+            value=active_character.luck,
+            modifier=active_character.get_attribute_modifier('luck')
+        ),
+        armor_class=effective_stats['effective_ac'],
+        attack_bonus=effective_stats['attack_bonus'],
+        damage_dice=effective_stats['damage_dice'],
+        damage_bonus=effective_stats['damage_bonus'],
+        primary_attack_attribute=effective_stats['primary_attribute_for_attack'].capitalize(),
+        active_effects=[]  # Placeholder for future implementation
+    )
 
 
 @router.get("/me/inventory", response_model=schemas.CharacterInventoryDisplay)

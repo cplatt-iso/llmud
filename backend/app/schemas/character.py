@@ -97,3 +97,50 @@ class Character(CharacterInDBBase):
 # Properties stored in DB
 class CharacterInDB(CharacterInDBBase):
     pass
+
+
+# Detailed score sheet with modifiers and calculated stats
+class AttributeWithModifier(BaseModel):
+    value: int
+    modifier: int
+
+
+class DetailedScoreSheet(BaseModel):
+    # Basic Info
+    name: str
+    class_name: str
+    level: int
+    
+    # Experience
+    current_xp: int
+    next_level_xp: int  # -1 for max level
+    xp_progress: int  # XP gained in current level
+    xp_needed: int  # XP needed for next level (from start of current level)
+    
+    # Vitals
+    current_hp: int
+    max_hp: int
+    current_mp: int
+    max_mp: int
+    
+    # Attributes with modifiers
+    strength: AttributeWithModifier
+    dexterity: AttributeWithModifier
+    constitution: AttributeWithModifier
+    intelligence: AttributeWithModifier
+    wisdom: AttributeWithModifier
+    charisma: AttributeWithModifier
+    luck: AttributeWithModifier
+    
+    # Effective Combat Stats
+    armor_class: int
+    attack_bonus: int
+    damage_dice: str
+    damage_bonus: int
+    primary_attack_attribute: str
+    
+    # Active Effects (placeholder for future implementation)
+    active_effects: List[str] = []
+    
+    class Config:
+        from_attributes = True

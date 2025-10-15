@@ -10,12 +10,17 @@ from .room import (  # We'll use the existing RoomInDB for individual room detai
 )
 
 
+class MapExitData(BaseModel):
+    target_room_id: str
+    is_locked: bool = False
+
+
 class MapRoomData(BaseModel):
     id: uuid.UUID
     x: int
     y: int
     name: Optional[str] = None  # Optional: for tooltips or labels
-    exits: Optional[Dict[str, str]] = Field(default_factory=dict)
+    exits: Optional[Dict[str, MapExitData]] = Field(default_factory=dict)
     is_current_room: bool = False
     is_visited: bool = True  # For now, all fetched rooms are considered visited
     room_type: RoomTypeEnum
